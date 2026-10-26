@@ -27,10 +27,19 @@ public sealed record MediaSnapshot(
     }
 }
 
-/// <summary>Tracks the current Windows media session (Spotify, browsers, etc.) via GSMTC.</summary>
+/// <summary>
+/// Tracks the current Windows media session (Spotify, browsers, etc.) via GSMTC. Apps that never publish
+/// one (Photos, some players, browsers with media keys disabled) are picked up from their audio output.
+/// </summary>
 public sealed class MediaService(Dispatcher ui)
 {
     public static readonly Color DefaultAccent = Color.FromRgb(0x0A, 0x84, 0xFF);
+
+    // Calls, not music.
+    static readonly HashSet<string> Ignored = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ms-teams", "Teams", "Zoom", "slack", "CiscoCollabHost", "webexhost", "msedgewebview2",
+    };
 
     GlobalSystemMediaTransportControlsSessionManager? _manager;
     GlobalSystemMediaTransportControlsSession? _session;
@@ -39,10 +48,18 @@ public sealed class MediaService(Dispatcher ui)
     Color _accent = DefaultAccent;
     int _version;
 
+    MediaSnapshot? _smtc, _fallback, _published;
+    DispatcherTimer? _audioTimer;
+    int _heardPid, _heardTicks;
+    DateTime _lastHeard, _resolvedAt;
+    bool _resolving, _sampling;
+
     public event Action<MediaSnapshot?>? Changed;
 
     public async Task StartAsync()
     {
+        _audioTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => SampleAudio(), ui);
+        _audioTimer.Start();
         try { _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); }
         catch { return; }
         _manager.CurrentSessionChanged += (_, _) => ui.InvokeAsync(Attach);
@@ -58,7 +75,7 @@ public sealed class MediaService(Dispatcher ui)
             _session.PlaybackInfoChanged -= OnPlaybackInfo;
             _session.TimelinePropertiesChanged -= OnTimeline;
         }
-        try { _session = _manager?.GetCurrentSession(); } catch { _session = null; }
+        _session = PickSession();
         if (_session != null)
         {
             _session.MediaPropertiesChanged += OnMediaProperties;
@@ -68,8 +85,20 @@ public sealed class MediaService(Dispatcher ui)
         Refresh();
     }
 
+    // The "current" session can be a paused tab while another app plays; prefer whichever is playing.
+    GlobalSystemMediaTransportControlsSession? PickSession()
+    {
+        try
+        {
+            var playing = _manager?.GetSessions().FirstOrDefault(s =>
+                s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
+            return playing ?? _manager?.GetCurrentSession();
+        }
+        catch { return null; }
+    }
+
     void OnMediaProperties(GlobalSystemMediaTransportControlsSession s, MediaPropertiesChangedEventArgs e) => ui.InvokeAsync(Refresh);
-    void OnPlaybackInfo(GlobalSystemMediaTransportControlsSession s, PlaybackInfoChangedEventArgs e) => ui.InvokeAsync(Refresh);
+    void OnPlaybackInfo(GlobalSystemMediaTransportControlsSession s, PlaybackInfoChangedEventArgs e) => ui.InvokeAsync(Attach);
     void OnTimeline(GlobalSystemMediaTransportControlsSession s, TimelinePropertiesChangedEventArgs e) => ui.InvokeAsync(Refresh);
 
     async void Refresh()
@@ -79,7 +108,130 @@ public sealed class MediaService(Dispatcher ui)
         try { snapshot = await BuildAsync(); }
         catch { snapshot = null; }
         if (version != _version) return;
-        Changed?.Invoke(snapshot);
+        _smtc = snapshot;
+        Publish(force: true);
+    }
+
+    void Publish(bool force = false)
+    {
+        var effective = _smtc?.IsPlaying == true ? _smtc : _fallback ?? _smtc;
+        if (!force && ReferenceEquals(effective, _published)) return;
+        _published = effective;
+        Changed?.Invoke(effective);
+    }
+
+    async void SampleAudio()
+    {
+        if (_smtc?.IsPlaying == true)
+        {
+            _heardTicks = 0;
+            if (_fallback != null) { _fallback = null; Publish(); }
+            return;
+        }
+        if (_sampling) return;
+
+        // Core Audio session interfaces don't marshal to the STA UI thread; sample on an MTA worker.
+        _sampling = true;
+        List<AudioActivity.Source> sources;
+        try { sources = await Task.Run(() => AudioActivity.Sample()); }
+        finally { _sampling = false; }
+
+        var source = sources.FirstOrDefault(s => !Ignored.Contains(s.ProcessName));
+        var now = DateTime.Now;
+        if (source != null)
+        {
+            _heardTicks = source.ProcessId == _heardPid ? _heardTicks + 1 : 1;
+            _heardPid = source.ProcessId;
+            _lastHeard = now;
+            // Two seconds in a row, so notification sounds don't count as music; re-read the title now and then.
+            if (_heardTicks >= 2 && !_resolving && (_fallback == null || now - _resolvedAt > TimeSpan.FromSeconds(3)))
+                ResolveFallback(source);
+        }
+        else if (_fallback != null && now - _lastHeard > TimeSpan.FromSeconds(4))
+        {
+            _heardTicks = 0;
+            _fallback = null;
+            Publish();
+        }
+    }
+
+    async void ResolveFallback(AudioActivity.Source source)
+    {
+        _resolving = true;
+        try
+        {
+            var snapshot = await Task.Run(() => BuildFallback(source));
+            _resolvedAt = DateTime.Now;
+            if (_smtc?.IsPlaying == true || DateTime.Now - _lastHeard > TimeSpan.FromSeconds(4)) return;
+            if (_fallback == null || _fallback.Title != snapshot.Title || _fallback.Artist != snapshot.Artist)
+            {
+                _fallback = snapshot;
+                Publish();
+            }
+        }
+        catch { }
+        finally { _resolving = false; }
+    }
+
+    static string AppName(AudioActivity.Source source)
+    {
+        try
+        {
+            var description = System.Diagnostics.Process.GetProcessById(source.ProcessId).MainModule?.FileVersionInfo.FileDescription;
+            if (!string.IsNullOrWhiteSpace(description)) return description.Trim();
+        }
+        catch { }
+        return source.ProcessName;
+    }
+
+    static string WindowTitle(AudioActivity.Source source, string app)
+    {
+        var title = Native.WindowTitle(source.ProcessId).Trim();
+        foreach (var separator in new[] { " - ", " – ", " — " })
+        {
+            var cut = title.LastIndexOf(separator, StringComparison.Ordinal);
+            if (cut > 0 && title[(cut + separator.Length)..].Trim() is { } tail
+                && (app.Contains(tail, StringComparison.OrdinalIgnoreCase) || tail.Contains(source.ProcessName, StringComparison.OrdinalIgnoreCase)))
+            {
+                title = title[..cut].Trim();
+                break;
+            }
+        }
+        return title;
+    }
+
+    static MediaSnapshot BuildFallback(AudioActivity.Source source)
+    {
+        var app = AppName(source);
+        var title = BrowserTabs.IsBrowser(source.ProcessName)
+            ? BrowserTabs.PlayingTabTitle(source.ProcessName) ?? ""
+            : WindowTitle(source, app);
+        foreach (var site in new[] { " - YouTube Music", " - YouTube", " | Spotify", " - Spotify" })
+            if (title.EndsWith(site, StringComparison.OrdinalIgnoreCase)) title = title[..^site.Length].Trim();
+
+        // "Song • Artist" (Spotify Web, YouTube Music) carries its own artist.
+        var artist = app;
+        var dot = title.IndexOf(" • ", StringComparison.Ordinal);
+        if (dot > 0)
+        {
+            artist = title[(dot + 3)..].Trim();
+            title = title[..dot].Trim();
+        }
+        if (string.IsNullOrEmpty(title) || title.Equals(app, StringComparison.OrdinalIgnoreCase))
+        {
+            title = app;
+            artist = "";
+        }
+
+        BitmapSource? icon = null;
+        try
+        {
+            if (System.Diagnostics.Process.GetProcessById(source.ProcessId).MainModule?.FileName is { } exe)
+                icon = Native.ShellIcon(exe) as BitmapSource;
+        }
+        catch { }
+        return new MediaSnapshot(title, artist, icon, icon != null ? ColorUtil.Accent(icon) : DefaultAccent,
+            true, TimeSpan.Zero, TimeSpan.Zero, DateTimeOffset.Now);
     }
 
     async Task<MediaSnapshot?> BuildAsync()
@@ -134,7 +286,23 @@ public sealed class MediaService(Dispatcher ui)
         catch { return null; }
     }
 
-    public async void PlayPause() { try { if (_session != null) await _session.TryTogglePlayPauseAsync(); } catch { } }
-    public async void Next() { try { if (_session != null) await _session.TrySkipNextAsync(); } catch { } }
-    public async void Previous() { try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { } }
+    bool UsingFallback => _published != null && ReferenceEquals(_published, _fallback);
+
+    public async void PlayPause()
+    {
+        if (UsingFallback) { Native.PressKey(Native.VK_MEDIA_PLAY_PAUSE); return; }
+        try { if (_session != null) await _session.TryTogglePlayPauseAsync(); } catch { }
+    }
+
+    public async void Next()
+    {
+        if (UsingFallback) { Native.PressKey(Native.VK_MEDIA_NEXT_TRACK); return; }
+        try { if (_session != null) await _session.TrySkipNextAsync(); } catch { }
+    }
+
+    public async void Previous()
+    {
+        if (UsingFallback) { Native.PressKey(Native.VK_MEDIA_PREV_TRACK); return; }
+        try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { }
+    }
 }

@@ -46,6 +46,56 @@ static class Native
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
+    delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+
+    [DllImport("user32.dll")]
+    static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern int GetWindowText(IntPtr hwnd, System.Text.StringBuilder text, int max);
+
+    public static List<IntPtr> TopLevelWindows(int processId)
+    {
+        var windows = new List<IntPtr>();
+        EnumWindows((hwnd, _) =>
+        {
+            if (IsWindowVisible(hwnd) && GetWindowThreadProcessId(hwnd, out var pid) != 0 && pid == processId) windows.Add(hwnd);
+            return true;
+        }, IntPtr.Zero);
+        return windows;
+    }
+
+    /// <summary>Longest title among the visible top-level windows of a process.</summary>
+    public static string WindowTitle(int processId)
+    {
+        var best = "";
+        var buffer = new System.Text.StringBuilder(512);
+        foreach (var hwnd in TopLevelWindows(processId))
+        {
+            buffer.Clear();
+            GetWindowText(hwnd, buffer, buffer.Capacity);
+            if (buffer.Length > best.Length) best = buffer.ToString();
+        }
+        return best;
+    }
+
+    [DllImport("user32.dll")]
+    static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+
+    public const byte VK_MEDIA_NEXT_TRACK = 0xB0, VK_MEDIA_PREV_TRACK = 0xB1, VK_MEDIA_PLAY_PAUSE = 0xB3;
+
+    public static void PressKey(byte key)
+    {
+        keybd_event(key, 0, 0, UIntPtr.Zero);
+        keybd_event(key, 0, 2, UIntPtr.Zero);
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 
