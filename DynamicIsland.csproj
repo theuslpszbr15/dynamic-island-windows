@@ -12,7 +12,10 @@
     <AssemblyName>DynamicIsland</AssemblyName>
     <StartupObject>DynamicIsland.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <ApplicationIcon>Assets\DynamicIsland.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>Dynamic Island</Product>
+    <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
@@ -21,6 +24,10 @@
     <Using Include="System.IO" />
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\DynamicIsland.ico" LogicalName="DynamicIsland.ico" />
   </ItemGroup>
 
 </Project>

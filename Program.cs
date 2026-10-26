@@ -18,8 +18,28 @@ public static class Program
             return devApp.Run();
         }
 
+        if (args.Length > 0 && args[0] == "--uninstall")
+        {
+            Installer.Uninstall();
+            return 0;
+        }
+
+        if (args.Length > 0 && args[0] == "--install")
+        {
+            var exe = Installer.Install();
+            App.RefreshCopilotHooks(exe);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "--replace") { UseShellExecute = true });
+            return 0;
+        }
+
         using var mutex = new Mutex(true, @"Local\DynamicIsland.SingleInstance", out var isFirst);
-        if (!isFirst) return 0;
+        if (!isFirst)
+        {
+            // Relaunched by the installer: wait for the old copy to exit.
+            if (!args.Contains("--replace")) return 0;
+            try { if (!mutex.WaitOne(TimeSpan.FromSeconds(15))) return 0; }
+            catch (AbandonedMutexException) { }
+        }
 
         var app = new App();
         app.InitializeComponent();

@@ -12,16 +12,17 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using DynamicIsland.Services;
+using WinForms = System.Windows.Forms;
 
 namespace DynamicIsland;
 
 public partial class IslandWindow : Window
 {
-    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert }
-    enum CompactKind { Clock, Media, Agent }
+    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy }
+    enum CompactKind { Clock, Media, Timer, Agent }
 
-    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes"];
+    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4;
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
 
@@ -30,7 +31,10 @@ public partial class IslandWindow : Window
     readonly VolumeService _volume;
     readonly BatteryService _battery;
     readonly AgentHub _hub;
+    readonly NotificationService _notifications;
     readonly SystemMonitor _monitor = new();
+    PrivacyState _privacy = PrivacyState.None;
+    WinForms.Screen? _screen;
 
     readonly Spring _w = new(132), _h = new(34);
     bool _animating;
@@ -47,9 +51,9 @@ public partial class IslandWindow : Window
     string? _trackKey;
     IntPtr _hwnd;
 
-    readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer;
+    readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
-    readonly Border[] _dots = new Border[4];
+    readonly Border[] _dots = new Border[5];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
     Point _pressPoint;
@@ -66,7 +70,8 @@ public partial class IslandWindow : Window
         _volume = new VolumeService(Dispatcher);
         _battery = new BatteryService(Dispatcher);
         _hub = new AgentHub(Dispatcher);
-        _page = Math.Clamp(settings.LastPage, 0, 3);
+        _notifications = new NotificationService(Dispatcher);
+        _page = Math.Clamp(settings.LastPage, 0, 4);
 
         _transientTimer = MakeTimer(1, () => { _transientTimer!.Stop(); _transient = Transient.None; Retarget(); });
         _hoverTimer = MakeTimer(0.2, CloseTick);
@@ -75,6 +80,8 @@ public partial class IslandWindow : Window
         _liveTimer = MakeTimer(0.5, LiveTick);
         _guardTimer = MakeTimer(2, GuardTick);
         _dragTimer = MakeTimer(0.25, DragTick);
+        _watchTimer = MakeTimer(0.75, WatchTick);
+        _countdownTimer = MakeTimer(0.25, CountdownTick);
 
         FilesList.ItemsSource = Files;
         AgentsList.ItemsSource = Agents;
@@ -84,6 +91,7 @@ public partial class IslandWindow : Window
         BuildEq(CompactEq, 4, 14);
         BuildEq(NowEq, 4, 16);
         BuildDots();
+        BuildTimerPresets();
         _cpu = AddMeter("CPU");
         _ram = AddMeter("Memória");
         _disk = AddMeter("Disco");
@@ -93,9 +101,12 @@ public partial class IslandWindow : Window
         _volume.Changed += OnVolume;
         _battery.Changed += OnBattery;
         _hub.MessageReceived += OnAgent;
+        _notifications.Received += OnNotification;
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
+        // WPF applies Windows' suggested rect on a cross-DPI move; put the island back where it belongs.
+        DpiChanged += (_, _) => Dispatcher.InvokeAsync(PositionWindow, DispatcherPriority.Background);
     }
 
     DispatcherTimer MakeTimer(double seconds, Action tick)
@@ -135,11 +146,13 @@ public partial class IslandWindow : Window
         if (SnapshotMode) return;
         _guardTimer.Start();
         _pollTimer.Start();
+        _watchTimer.Start();
 
         _volume.Start();
         _battery.Start();
         _hub.Start();
         await _media.StartAsync();
+        if (_settings.ShowNotifications) await _notifications.StartAsync();
 
         await Task.Delay(1500);
         _ready = true;
@@ -147,15 +160,57 @@ public partial class IslandWindow : Window
 
     void OnDisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(PositionWindow);
 
-    void PositionWindow()
+    WinForms.Screen TargetScreen()
     {
-        Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
-        Top = 0;
+        if (_settings.Monitor == "active")
+        {
+            var foreground = Native.GetForegroundWindow();
+            return foreground != IntPtr.Zero && foreground != _hwnd
+                ? WinForms.Screen.FromHandle(foreground)
+                : _screen ?? WinForms.Screen.PrimaryScreen!;
+        }
+        return WinForms.Screen.AllScreens.FirstOrDefault(s => s.DeviceName == _settings.Monitor) ?? WinForms.Screen.PrimaryScreen!;
+    }
+
+    // The process is Per-Monitor V2 aware, so screen bounds are physical pixels and the window size
+    // has to be scaled by the target monitor's DPI.
+    public void PositionWindow()
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        var screen = TargetScreen();
+        _screen = screen;
+        var b = screen.Bounds;
+        var r = IslandRect(Native.MonitorScale(b.X + b.Width / 2, b.Y + b.Height / 2));
+        Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, Native.SWP_NOACTIVATE);
+    }
+
+    Native.RECT IslandRect(double scale)
+    {
+        // Not Width/Height: WPF overwrites them with Windows' suggested rect after a DPI change.
+        const double designWidth = 560, designHeight = 250;
+        var b = (_screen ?? WinForms.Screen.PrimaryScreen!).Bounds;
+        int w = (int)Math.Round(designWidth * scale), h = (int)Math.Round(designHeight * scale);
+        var left = b.X + (b.Width - w) / 2;
+        return new Native.RECT { Left = left, Top = b.Y, Right = left + w, Bottom = b.Y + h };
+    }
+
+    void WatchTick()
+    {
+        if (_settings.Monitor == "active" && !_expanded && !_hover && TargetScreen().DeviceName != _screen?.DeviceName)
+            PositionWindow();
+        OnPrivacy(PrivacyMonitor.Read());
+    }
+
+    public async void ApplyNotifications()
+    {
+        if (_settings.ShowNotifications) await _notifications.StartAsync();
+        else _notifications.Stop();
     }
 
     public void Teardown()
     {
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+        _notifications.Stop();
         _hub.Dispose();
         _volume.Dispose();
         Close();
@@ -173,13 +228,14 @@ public partial class IslandWindow : Window
 
     // Discreet idle: nothing urgent on screen, so shrink to a slim handle hugging the top edge.
     bool IsHandle => !_expanded && _transient == Transient.None && _settings.DiscreetIdle
-                     && !Agents.Any(a => a.IsActive);
+                     && !Agents.Any(a => a.IsActive) && !TimerActive;
 
     // ───────────────────────── sizing & animation ─────────────────────────
 
     CompactKind Kind()
     {
         if (Agents.Any(a => a.IsActive)) return CompactKind.Agent;
+        if (TimerActive) return CompactKind.Timer;
         if (_mediaSnap?.IsPlaying == true) return CompactKind.Media;
         return CompactKind.Clock;
     }
@@ -190,9 +246,11 @@ public partial class IslandWindow : Window
         switch (_transient)
         {
             case Transient.Volume:
-            case Transient.Battery: return new(300, 40);
+            case Transient.Battery:
+            case Transient.Privacy: return new(300, 40);
             case Transient.NowPlaying: return new(360, 62);
-            case Transient.AgentAlert: return new(400, 78);
+            case Transient.AgentAlert:
+            case Transient.Notification: return new(400, 78);
         }
         if (IsHandle) return new(110, 8);
         var h = CompactHeight;
@@ -201,6 +259,7 @@ public partial class IslandWindow : Window
         {
             CompactKind.Agent => new(290 + extra, h),
             CompactKind.Media => new(220 + extra, h),
+            CompactKind.Timer => new(150 + extra, h),
             _ => new(132 + extra, h),
         };
     }
@@ -247,6 +306,7 @@ public partial class IslandWindow : Window
         Island.Width = w;
         Island.Height = h;
         IslandHost.Margin = new Thickness(0, Math.Max(0, _top.Value), 0, 0);
+        PrivacyDots.Margin = new Thickness(0, Math.Max(0, (Math.Min(h, CompactHeight) - 7) / 2), 0, 0);
         var flatTop = IsNotch || _top.Value < 2;
         var r = flatTop ? Math.Min(h / 2, 24) : Math.Min(h / 2, 34);
         IslandBg.CornerRadius = flatTop ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
@@ -271,11 +331,14 @@ public partial class IslandWindow : Window
         BatteryPanel.Visibility = Vis(_transient == Transient.Battery);
         NowPlayingPanel.Visibility = Vis(_transient == Transient.NowPlaying);
         AlertPanel.Visibility = Vis(_transient == Transient.AgentAlert);
+        NotifyPanel.Visibility = Vis(_transient == Transient.Notification);
+        PrivacyPanel.Visibility = Vis(_transient == Transient.Privacy);
 
         var kind = Kind();
         CompactClock.Visibility = Vis(kind == CompactKind.Clock);
         CompactMedia.Visibility = Vis(kind == CompactKind.Media);
         CompactAgent.Visibility = Vis(kind == CompactKind.Agent);
+        CompactTimer.Visibility = Vis(kind == CompactKind.Timer);
         if (kind == CompactKind.Agent) UpdateCompactAgent();
         if ((kind == CompactKind.Agent) != _compactPulsing)
         {
@@ -287,6 +350,7 @@ public partial class IslandWindow : Window
     Color? HandleColor() => Kind() switch
     {
         CompactKind.Agent => AgentSession.Working,
+        CompactKind.Timer => AgentSession.Waiting,
         CompactKind.Media => _mediaSnap?.Accent,
         _ => null,
     };
@@ -339,7 +403,7 @@ public partial class IslandWindow : Window
     static int Priority(Transient t) => t switch
     {
         Transient.AgentAlert => 3,
-        Transient.Battery => 2,
+        Transient.Battery or Transient.Notification or Transient.Privacy => 2,
         _ => 1,
     };
 
@@ -418,12 +482,25 @@ public partial class IslandWindow : Window
     void Island_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_expanded) return;
+        if (_transient == Transient.Notification)
+        {
+            _transientTimer.Stop();
+            _transient = Transient.None;
+            Retarget();
+            return;
+        }
         int? page = _transient switch
         {
             Transient.AgentAlert => PageAgents,
             Transient.NowPlaying => PageMedia,
-            Transient.Battery => PageSystem,
-            _ => Kind() switch { CompactKind.Agent => PageAgents, CompactKind.Media => PageMedia, _ => null },
+            Transient.Battery or Transient.Privacy => PageSystem,
+            _ => Kind() switch
+            {
+                CompactKind.Agent => PageAgents,
+                CompactKind.Timer => PageTimer,
+                CompactKind.Media => PageMedia,
+                _ => null,
+            },
         };
         SetExpanded(true, page);
     }
@@ -467,13 +544,13 @@ public partial class IslandWindow : Window
 
     // ───────────────────────── pages ─────────────────────────
 
-    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage];
+    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage];
 
     void ShowPage(int index, int direction)
     {
-        _page = ((index % 4) + 4) % 4;
-        _settings.LastPage = _page;
         var pages = Pages;
+        _page = ((index % pages.Length) + pages.Length) % pages.Length;
+        _settings.LastPage = _page;
         for (var i = 0; i < pages.Length; i++)
         {
             var page = pages[i];
@@ -514,6 +591,7 @@ public partial class IslandWindow : Window
             case PageSystem: SampleSystem(); break;
             case PageFiles: FilesEmpty.Visibility = Vis(Files.Count == 0); break;
             case PageAgents: AgentsEmpty.Visibility = Vis(Agents.Count == 0); break;
+            case PageTimer: UpdateTimerUi(); break;
         }
     }
 
@@ -790,14 +868,19 @@ public partial class IslandWindow : Window
         Retarget();
     }
 
-    void ShowAlert(AgentSession session, string glyph, string title)
+    void ShowAlert(AgentSession session, string glyph, string title) =>
+        ShowAlert(session.OrbBrush, glyph, title,
+            string.IsNullOrEmpty(session.Project) ? session.Detail : $"{session.Project} — {session.Detail}",
+            session.State == "waiting", session.State == "waiting" ? 8 : 3.5);
+
+    void ShowAlert(Brush orb, string glyph, string title, string detail, bool pulse, double seconds)
     {
-        AlertOrb.Fill = session.OrbBrush;
+        AlertOrb.Fill = orb;
         AlertGlyph.Text = glyph;
         AlertTitle.Text = title;
-        AlertDetail.Text = string.IsNullOrEmpty(session.Project) ? session.Detail : $"{session.Project} — {session.Detail}";
-        Pulse((ScaleTransform)AlertOrb.RenderTransform, session.State == "waiting");
-        ShowTransient(Transient.AgentAlert, session.State == "waiting" ? 8 : 3.5);
+        AlertDetail.Text = detail;
+        Pulse((ScaleTransform)AlertOrb.RenderTransform, pulse);
+        ShowTransient(Transient.AgentAlert, seconds);
     }
 
     void UpdateCompactAgent()

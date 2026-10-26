@@ -44,6 +44,35 @@
             <Setter Property="Background" Value="#FF3A3A3C" />
         </Style>
 
+        <Style x:Key="Chip" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#1FFFFFFF" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="17" Padding="14,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.8" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <DataTemplate x:Key="FileTemplate" DataType="{x:Type local:FileItem}">
             <Grid x:Name="Tile" Width="76" Margin="0,0,4,0" Background="Transparent" Cursor="Hand" ToolTip="{Binding Path}"
                   MouseLeftButtonDown="FileTile_MouseDown" MouseMove="FileTile_MouseMove" MouseLeftButtonUp="FileTile_MouseUp">
@@ -86,6 +115,9 @@
 
     <Grid x:Name="Root">
         <StackPanel x:Name="IslandHost" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
+            <!-- Mirrors the privacy dots' width so the island stays centred -->
+            <Border x:Name="PrivacySpacer" Width="0" />
+
             <Path x:Name="EarLeft" Width="14" Height="14" VerticalAlignment="Top" Fill="Black" Visibility="Collapsed"
                   Data="M0,0 H14 V14 A14,14 0 0 0 0,0 Z" />
 
@@ -133,6 +165,17 @@
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                         </Grid>
+
+                        <Grid x:Name="CompactTimer" Visibility="Collapsed">
+                            <Grid Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <Ellipse Stroke="#45FF9F0A" StrokeThickness="2.5" />
+                                <Path x:Name="CompactTimerArc" Stroke="#FFFF9F0A" StrokeThickness="2.5"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Grid>
+                            <TextBlock x:Name="CompactTimerText" FontSize="13.5" FontWeight="SemiBold" Foreground="#FFFF9F0A"
+                                       Typography.NumeralAlignment="Tabular"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" />
+                        </Grid>
                     </Grid>
 
                     <!-- ===== Transient activities ===== -->
@@ -159,6 +202,30 @@
                             <TextBlock x:Name="BatteryIcon" FontFamily="{StaticResource Icons}" FontSize="15" VerticalAlignment="Center" />
                             <TextBlock x:Name="BatteryText" FontSize="12.5" FontWeight="SemiBold" Margin="28,0,0,0" VerticalAlignment="Center" />
                             <TextBlock x:Name="BatteryPct" FontSize="12.5" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid x:Name="PrivacyPanel" Height="40" VerticalAlignment="Top" Margin="16,0,18,0" Visibility="Collapsed">
+                            <TextBlock x:Name="PrivacyIcon" FontFamily="{StaticResource Icons}" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock x:Name="PrivacyText" FontSize="12.5" FontWeight="SemiBold" Margin="28,0,0,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="PrivacyApp" FontSize="12.5" Foreground="{StaticResource Muted}" MaxWidth="110"
+                                       TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid x:Name="NotifyPanel" Height="78" VerticalAlignment="Top" Margin="16,0,20,0" Visibility="Collapsed">
+                            <Border x:Name="NotifyLogo" Width="38" Height="38" CornerRadius="10" Background="#FF2C2C2E"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <TextBlock x:Name="NotifyGlyph" FontFamily="{StaticResource Icons}" Text="&#xEA8F;" FontSize="16"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Margin="52,0,0,0" VerticalAlignment="Center">
+                                <Grid>
+                                    <TextBlock x:Name="NotifyTitle" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,70,0" />
+                                    <TextBlock x:Name="NotifyApp" FontSize="11" Foreground="{StaticResource Muted}" MaxWidth="70"
+                                               TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock x:Name="NotifyBody" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                           TextTrimming="CharacterEllipsis" MaxHeight="34" Margin="0,1,0,0" />
+                            </StackPanel>
                         </Grid>
 
                         <Grid x:Name="NowPlayingPanel" Height="62" VerticalAlignment="Top" Margin="10,0,16,0" Visibility="Collapsed">
@@ -314,6 +381,43 @@
                                                    Foreground="{StaticResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
                                 </Grid>
+
+                                <!-- Timer -->
+                                <Grid x:Name="TimerPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
+                                        <TranslateTransform />
+                                    </Grid.RenderTransform>
+                                    <StackPanel x:Name="TimerIdle" VerticalAlignment="Center">
+                                        <TextBlock Text="Quanto tempo?" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                        <TextBlock Text="A contagem fica na ilha e ela avisa quando acabar" FontSize="11.5"
+                                                   Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,2,0,14" />
+                                        <StackPanel x:Name="TimerPresets" Orientation="Horizontal" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <Grid x:Name="TimerRunning" Visibility="Collapsed">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="TimerBig" FontSize="46" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular" Margin="0,-6,0,0" />
+                                            <TextBlock x:Name="TimerCaption" FontSize="12" Foreground="{StaticResource Muted}" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource IconButton}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
+                                                    FontWeight="SemiBold" Content="+1" ToolTip="Mais 1 minuto" Click="TimerAdd_Click" />
+                                            <Button x:Name="TimerPauseButton" Style="{StaticResource IconButton}" Content="&#xE769;" FontSize="20"
+                                                    Width="50" Height="38" Margin="6,0" Click="TimerPause_Click" />
+                                            <Button Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Parar" Click="TimerStop_Click" />
+                                        </StackPanel>
+                                        <Border Grid.Row="1" Height="5" CornerRadius="2.5" Background="{StaticResource Track}" ClipToBounds="True" Margin="0,0,0,4">
+                                            <Border Background="#FFFF9F0A" CornerRadius="2.5" RenderTransformOrigin="0,0.5">
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform x:Name="TimerProgressScale" ScaleX="0" />
+                                                </Border.RenderTransform>
+                                            </Border>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
                             </Grid>
 
                             <StackPanel x:Name="Dots" Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -324,6 +428,12 @@
 
             <Path x:Name="EarRight" Width="14" Height="14" VerticalAlignment="Top" Fill="Black" Visibility="Collapsed"
                   Data="M14,0 H0 V14 A14,14 0 0 1 14,0 Z" />
+
+            <!-- Microphone / camera in use -->
+            <StackPanel x:Name="PrivacyDots" Orientation="Horizontal" VerticalAlignment="Top" IsHitTestVisible="False">
+                <Ellipse x:Name="MicDot" Width="7" Height="7" Margin="6,0,0,0" Fill="#FFFF9F0A" Visibility="Collapsed" />
+                <Ellipse x:Name="CamDot" Width="7" Height="7" Margin="6,0,0,0" Fill="#FF30D158" Visibility="Collapsed" />
+            </StackPanel>
         </StackPanel>
     </Grid>
 </Window>

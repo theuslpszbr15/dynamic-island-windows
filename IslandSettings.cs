@@ -12,6 +12,10 @@ public sealed class IslandSettings
     public List<string> TrayFiles { get; set; } = [];
     public int LastPage { get; set; }
     public bool DiscreetIdle { get; set; } = true;
+    /// <summary>"primary", "active" (follows the focused window) or a monitor device name.</summary>
+    public string Monitor { get; set; } = "primary";
+    public bool ShowNotifications { get; set; } = true;
+    public int TimerMinutes { get; set; } = 25;
 
     [JsonIgnore] public bool ReadOnly { get; init; }
 
@@ -63,10 +67,19 @@ public static class StartupRegistration
         }
     }
 
-    public static void Set(bool enabled)
+    public static string? Command
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+            return key?.GetValue(ValueName) as string;
+        }
+    }
+
+    public static void Set(bool enabled, string? exe = null)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-        if (enabled) key.SetValue(ValueName, $"\"{Environment.ProcessPath}\"");
+        if (enabled) key.SetValue(ValueName, $"\"{exe ?? Environment.ProcessPath}\"");
         else key.DeleteValue(ValueName, false);
     }
 }

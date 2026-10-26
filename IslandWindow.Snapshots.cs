@@ -90,6 +90,29 @@ public partial class IslandWindow
         ApplyShape();
         await Shot("13-discreet-handle");
 
+        _settings.Shape = IslandShape.Pill;
+        ApplyShape();
+        SetExpanded(true, PageTimer);
+        await Shot("14-timer-presets");
+        StartTimer(25);
+        _timerEnd = DateTime.Now + TimeSpan.FromSeconds(18 * 60 + 42);
+        await Shot("15-expanded-timer");
+        SetExpanded(false);
+        await Shot("16-compact-timer");
+        StopTimer();
+
+        OnNotification(new IslandNotification("Slack", "Gabriel Paiva", "Bora testar a ilha nova hoje? Ficou muito boa", null));
+        await Shot("17-notification");
+        _transient = Transient.None;
+        OnPrivacy(new PrivacyState(["Teams"], []));
+        await Shot("18-microphone");
+        _transient = Transient.None;
+        Retarget();
+        OnPrivacy(new PrivacyState(["Teams"], ["Teams"]));
+        _transient = Transient.None;
+        Retarget();
+        await Shot("19-privacy-dots");
+
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),
             $"managed={GC.GetTotalMemory(true) / 1048576.0:0.0}MB heap={info.HeapSizeBytes / 1048576.0:0.0}MB " +

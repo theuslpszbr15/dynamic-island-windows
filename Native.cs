@@ -43,6 +43,25 @@ static class Native
     [DllImport("shell32.dll")]
     public static extern int SHQueryUserNotificationState(out int state);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll")]
+    static extern IntPtr MonitorFromPoint(POINT point, uint flags);
+
+    [DllImport("shcore.dll")]
+    static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
+
+    /// <summary>Effective DPI scale (1.0 = 96 dpi) of the monitor containing the given physical point.</summary>
+    public static double MonitorScale(int x, int y)
+    {
+        var monitor = MonitorFromPoint(new POINT { X = x, Y = y }, 2);
+        return GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1;
+    }
+
     [DllImport("kernel32.dll")]
     public static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
 

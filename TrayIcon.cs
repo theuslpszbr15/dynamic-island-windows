@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using WinForms = System.Windows.Forms;
 
 namespace DynamicIsland;
@@ -19,17 +18,33 @@ sealed class TrayIcon : IDisposable
         var startup = new WinForms.ToolStripMenuItem("Iniciar com o Windows", null, (_, _) => app.ToggleStartup());
         var copilot = new WinForms.ToolStripMenuItem("Conectar Copilot (VS Code)", null, (_, _) => app.ToggleCopilotHooks());
         var hooks = new WinForms.ToolStripMenuItem("Copiar hooks do Claude Code", null, (_, _) => app.CopyClaudeHooks());
+        var monitor = new WinForms.ToolStripMenuItem("Monitor");
+        var notifications = new WinForms.ToolStripMenuItem("Mostrar notificações do Windows", null, (_, _) => app.ToggleNotifications());
+        var install = new WinForms.ToolStripMenuItem("Instalar no computador", null, (_, _) =>
+        {
+            if (Services.Installer.IsInstalled) app.Uninstall();
+            else app.Install();
+        });
         var exit = new WinForms.ToolStripMenuItem("Sair", null, (_, _) => app.Quit());
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.AddRange([shape, discreet, startup, new WinForms.ToolStripSeparator(), copilot, hooks, new WinForms.ToolStripSeparator(), exit]);
+        menu.Items.AddRange([shape, discreet, monitor, notifications, startup, new WinForms.ToolStripSeparator(),
+            copilot, hooks, new WinForms.ToolStripSeparator(), install, exit]);
         menu.Opening += (_, _) =>
         {
             copilot.Checked = App.CopilotConnected;
             discreet.Checked = app.Settings.DiscreetIdle;
+            notifications.Checked = app.Settings.ShowNotifications;
             pill.Checked = app.Settings.Shape == IslandShape.Pill;
             notch.Checked = app.Settings.Shape == IslandShape.Notch;
             startup.Checked = StartupRegistration.IsEnabled;
+            install.Text = Services.Installer.IsInstalled ? "Desinstalar" : "Instalar no computador";
+            monitor.DropDownItems.Clear();
+            foreach (var (id, label) in App.MonitorChoices())
+                monitor.DropDownItems.Add(new WinForms.ToolStripMenuItem(label, null, (_, _) => app.SetMonitor(id))
+                {
+                    Checked = app.Settings.Monitor == id,
+                });
         };
 
         _image = CreateIcon();
@@ -47,21 +62,8 @@ sealed class TrayIcon : IDisposable
 
     static Icon CreateIcon()
     {
-        using var bmp = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var path = new GraphicsPath();
-            var r = new RectangleF(2, 9, 28, 14);
-            path.AddArc(r.X, r.Y, r.Height, r.Height, 90, 180);
-            path.AddArc(r.Right - r.Height, r.Y, r.Height, r.Height, 270, 180);
-            path.CloseFigure();
-            g.FillPath(Brushes.Black, path);
-            using var pen = new Pen(Color.FromArgb(230, 255, 255, 255), 2f);
-            g.DrawPath(pen, path);
-            g.FillEllipse(new SolidBrush(Color.FromArgb(10, 132, 255)), 21, 13, 6, 6);
-        }
-        return Icon.FromHandle(bmp.GetHicon());
+        using var stream = typeof(TrayIcon).Assembly.GetManifestResourceStream("DynamicIsland.ico")!;
+        return new Icon(stream, WinForms.SystemInformation.SmallIconSize);
     }
 
     public void Dispose()
