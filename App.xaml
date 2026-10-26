@@ -1,0 +1,10 @@
+<Application x:Class="DynamicIsland.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+        <SolidColorBrush x:Key="Muted" Color="#FF8E8E93" />
+        <SolidColorBrush x:Key="Track" Color="#2EFFFFFF" />
+    </Application.Resources>
+</Application>
