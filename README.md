@@ -8,7 +8,7 @@ de arquivos e o que seus agentes de IA (Copilot no VS Code, Claude Code) estão 
 atrapalhar: os cliques passam por ela.
 
 <p align="center">
-  <img src="docs/demo.gif" width="800" alt="Animação mostrando como a Dynamic Island funciona">
+  <img src="docs/demo.gif" width="640" alt="Animação mostrando como a Dynamic Island funciona">
 </p>
 
 ## Baixar
