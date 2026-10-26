@@ -428,6 +428,8 @@ public partial class IslandWindow : Window
         var local = Root.PointFromScreen(new Point(cursor.X, cursor.Y));
         var bounds = Island.TransformToAncestor(Root).TransformBounds(new Rect(Island.RenderSize));
         bounds.Inflate(IsHandle ? 10 : 2, IsHandle ? 4 : 2);
+        // The island hangs from the screen edge: a cursor pushed against the top must still count as over it.
+        bounds.Union(new Point(bounds.X, 0));
         var over = !_hiddenFullscreen && bounds.Contains(local);
         var button = Native.IsMouseButtonDown();
         var now = DateTime.Now;
