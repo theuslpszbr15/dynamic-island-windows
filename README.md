@@ -5,8 +5,7 @@ Mostra música, volume, bateria, sistema, uma bandeja de arquivos e o que seus a
 (Copilot no VS Code, Claude Code) estão fazendo — sem atrapalhar: os cliques passam por ela.
 
 <p align="center">
-  <a href="docs/demo.mp4"><img src="docs/img/video-poster.png" width="640" alt="Vídeo: como funciona (26 s)"></a><br>
-  <a href="docs/demo.mp4"><b>▶ Ver o vídeo de 26 s mostrando como funciona</b></a>
+  <img src="docs/demo.gif" width="800" alt="Animação mostrando como a Dynamic Island funciona">
 </p>
 
 ## O que ela faz
