@@ -16,7 +16,7 @@ sealed class TrayIcon : IDisposable
         shape.DropDownItems.AddRange([pill, notch]);
         var discreet = new WinForms.ToolStripMenuItem("Recolher quando ocioso", null, (_, _) => app.ToggleDiscreet());
         var theme = new WinForms.ToolStripMenuItem("Tema");
-        var pet = new WinForms.ToolStripMenuItem("Bichinho (Pipoca)", null, (_, _) => app.TogglePet());
+        var pet = new WinForms.ToolStripMenuItem("Mascote");
         var startup = new WinForms.ToolStripMenuItem("Iniciar com o Windows", null, (_, _) => app.ToggleStartup());
         var copilot = new WinForms.ToolStripMenuItem("Conectar Copilot (VS Code)", null, (_, _) => app.ToggleCopilotHooks());
         var hooks = new WinForms.ToolStripMenuItem("Copiar hooks do Claude Code", null, (_, _) => app.CopyClaudeHooks());
@@ -36,7 +36,12 @@ sealed class TrayIcon : IDisposable
         {
             copilot.Checked = App.CopilotConnected;
             discreet.Checked = app.Settings.DiscreetIdle;
-            pet.Checked = app.Settings.Pet;
+            pet.DropDownItems.Clear();
+            foreach (var (species, label) in App.Mascots)
+                pet.DropDownItems.Add(new WinForms.ToolStripMenuItem(label, null, (_, _) => app.SetMascot(species))
+                {
+                    Checked = app.Settings.Mascot == species,
+                });
             theme.DropDownItems.Clear();
             foreach (var (name, _) in IslandThemes.All)
                 theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, null, (_, _) => app.SetTheme(name))

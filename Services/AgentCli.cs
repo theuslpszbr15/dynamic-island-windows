@@ -65,7 +65,67 @@ public static class AgentCli
         RecordLastHook(agent, hookEvent);
         if (state == null) return null;
 
-        return new AgentMessage(DisplayName(agent), Str(root, "session_id"), state, Clip(detail), Str(root, "cwd"));
+        string? step = null, file = null, diff = null;
+        if (hookEvent is "PreToolUse" or "PostToolUse")
+        {
+            var input = root.TryGetProperty("tool_input", out var i) ? i : default;
+            (step, file, diff) = Inspect(Str(root, "tool_name"), input);
+        }
+        else if (hookEvent == "UserPromptSubmit") step = "think";
+
+        return new AgentMessage(DisplayName(agent), Str(root, "session_id"), state, Clip(detail), Str(root, "cwd"), step, file, diff);
+    }
+
+    // What kind of step a tool is, which file it touches and, for edits, a short "-old / +new" diff.
+    static (string? Step, string? File, string? Diff) Inspect(string? tool, JsonElement input)
+    {
+        string? Arg(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object ? Str(e, name) : null;
+        var path = Arg(input, "file_path") ?? Arg(input, "filePath") ?? Arg(input, "path") ?? Arg(input, "notebook_path");
+        var edit = input;
+        if (input.ValueKind == JsonValueKind.Object && input.TryGetProperty("replacements", out var list)
+            && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0)
+        {
+            edit = list[0];
+            path ??= Arg(edit, "filePath");
+        }
+        if (input.ValueKind == JsonValueKind.Object && input.TryGetProperty("edits", out var edits)
+            && edits.ValueKind == JsonValueKind.Array && edits.GetArrayLength() > 0)
+            edit = edits[0];
+
+        var step = tool switch
+        {
+            "Bash" or "PowerShell" or "bash" or "powershell" or "run_in_terminal" or "send_to_terminal" => "run",
+            "Edit" or "MultiEdit" or "Write" or "NotebookEdit" or "edit" or "create" or "apply_patch"
+                or "replace_string_in_file" or "multi_replace_string_in_file" or "create_file" or "edit_notebook_file" => "edit",
+            "Read" or "view" or "read_file" or "list_dir" => "read",
+            "Grep" or "grep" or "rg" or "grep_search" or "Glob" or "glob" or "file_search" or "semantic_search" => "search",
+            "WebFetch" or "web_fetch" or "fetch_webpage" or "WebSearch" or "web_search" => "web",
+            "Task" or "Agent" or "task" or "runSubagent" => "task",
+            _ => "think",
+        };
+
+        string? diff = null;
+        if (step == "edit")
+        {
+            var before = Arg(edit, "old_string") ?? Arg(edit, "oldString") ?? Arg(edit, "old_str") ?? "";
+            var after = Arg(edit, "new_string") ?? Arg(edit, "newString") ?? Arg(edit, "new_str") ?? Arg(input, "content") ?? "";
+            diff = Diff(before, after);
+        }
+        return (step, path, diff);
+    }
+
+    /// <summary>The changed lines only (common first/last lines dropped), at most 4 removed and 5 added.</summary>
+    static string? Diff(string before, string after)
+    {
+        var a = before.ReplaceLineEndings("\n").Split('\n').ToList();
+        var b = after.ReplaceLineEndings("\n").Split('\n').ToList();
+        if (before.Length == 0) a.Clear();
+        while (a.Count > 0 && b.Count > 0 && a[0] == b[0]) { a.RemoveAt(0); b.RemoveAt(0); }
+        while (a.Count > 0 && b.Count > 0 && a[^1] == b[^1]) { a.RemoveAt(a.Count - 1); b.RemoveAt(b.Count - 1); }
+        if (a.Count == 0 && b.Count == 0) return null;
+        static string Line(char sign, string text) => sign + (text.Length > 90 ? text[..89] + "…" : text).TrimEnd();
+        var lines = a.Take(4).Select(l => Line('-', l)).Concat(b.Take(5).Select(l => Line('+', l)));
+        return string.Join('\n', lines);
     }
 
     // Event name + time only (no prompt/tool content), to check whether hooks are firing.

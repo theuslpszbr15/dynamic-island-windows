@@ -17,7 +17,7 @@ public sealed class IslandSettings
     public string Monitor { get; set; } = "primary";
     public bool ShowNotifications { get; set; } = true;
     public int TimerMinutes { get; set; } = 25;
-    public bool Pet { get; set; } = true;
+    public PetSpecies Mascot { get; set; } = PetSpecies.Coco;
     public string Theme { get; set; } = IslandThemes.Default;
 
     [JsonIgnore] public bool ReadOnly { get; init; }
@@ -59,10 +59,13 @@ public sealed class IslandSettings
 public static class IslandThemes
 {
     public const string Default = "Obsidiana";
+    public const string Glass = "Vidro (desfocado)";
 
     // Deep tones only, so the island's white text and the album/agent colours keep their contrast.
+    // Glass is a translucent tint over a real blur of what is behind the island.
     public static readonly (string Name, Color Color)[] All =
     [
+        (Glass, Color.FromArgb(0x9E, 0x18, 0x18, 0x1C)),
         ("Obsidiana", Color.FromRgb(0x00, 0x00, 0x00)),
         ("Grafite", Color.FromRgb(0x1C, 0x1C, 0x1E)),
         ("Ardósia", Color.FromRgb(0x1E, 0x25, 0x33)),

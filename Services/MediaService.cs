@@ -14,7 +14,8 @@ public sealed record MediaSnapshot(
     bool IsPlaying,
     TimeSpan Position,
     TimeSpan Duration,
-    DateTimeOffset LastUpdated)
+    DateTimeOffset LastUpdated,
+    string? Source = null)
 {
     public TimeSpan PositionNow()
     {
@@ -231,7 +232,25 @@ public sealed class MediaService(Dispatcher ui)
         }
         catch { }
         return new MediaSnapshot(title, artist, icon, icon != null ? ColorUtil.Accent(icon) : DefaultAccent,
-            true, TimeSpan.Zero, TimeSpan.Zero, DateTimeOffset.Now);
+            true, TimeSpan.Zero, TimeSpan.Zero, DateTimeOffset.Now, app);
+    }
+
+    // "Spotify.exe", "Chrome", "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic" -> a name people know.
+    static string SourceName(string? appId)
+    {
+        if (string.IsNullOrEmpty(appId)) return "";
+        var name = appId.Split('!')[0];
+        if (name.Contains('_')) name = name.Split('_')[0];
+        name = name.Split('.', '\\').LastOrDefault(p => p.Length > 0 && !p.Equals("exe", StringComparison.OrdinalIgnoreCase)) ?? name;
+        return name.ToLowerInvariant() switch
+        {
+            "zunemusic" or "mediaplayer" => "Media Player",
+            "msedge" => "Edge",
+            "chrome" => "Chrome",
+            "spotify" => "Spotify",
+            "firefox" => "Firefox",
+            _ => name,
+        };
     }
 
     async Task<MediaSnapshot?> BuildAsync()
@@ -260,7 +279,8 @@ public sealed class MediaService(Dispatcher ui)
             playback?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
             timeline.Position,
             timeline.EndTime - timeline.StartTime,
-            timeline.LastUpdatedTime);
+            timeline.LastUpdatedTime,
+            SourceName(session.SourceAppUserModelId));
     }
 
     static async Task<BitmapSource?> LoadArtAsync(IRandomAccessStreamReference? thumbnail)

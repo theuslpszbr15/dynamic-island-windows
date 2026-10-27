@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:DynamicIsland"
-        Title="Dynamic Island" Width="560" Height="250"
+        Title="Dynamic Island" Width="640" Height="290"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" ShowActivated="False"
         UseLayoutRounding="True" FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="White"
@@ -43,6 +43,83 @@
             <Setter Property="Height" Value="18" />
             <Setter Property="Background" Value="#FF3A3A3C" />
         </Style>
+
+        <Style x:Key="RoundButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Background" Value="#1CFFFFFF" />
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="99">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#4DFFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="StepTemplate" DataType="{x:Type local:AgentStep}">
+            <Grid Height="18">
+                <Grid x:Name="Done" Width="13" Height="13" HorizontalAlignment="Left">
+                    <Ellipse Fill="#FF30D158" />
+                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="7.5" FontWeight="Bold" Foreground="Black"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+                <Path x:Name="Spin" Width="13" Height="13" HorizontalAlignment="Left" Visibility="Collapsed" Stroke="White" StrokeThickness="1.7"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M6.5,1.2 A5.3,5.3 0 1 1 1.2,6.5" RenderTransformOrigin="0.5,0.5">
+                    <Path.RenderTransform>
+                        <RotateTransform />
+                    </Path.RenderTransform>
+                    <Path.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard Timeline.DesiredFrameRate="30">
+                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                     From="0" To="360" Duration="0:0:0.9" RepeatBehavior="Forever" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Path.Triggers>
+                </Path>
+                <TextBlock x:Name="Label" Text="{Binding Label}" FontSize="12" Margin="21,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                    <Setter TargetName="Done" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Spin" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Label" Property="Foreground" Value="White" />
+                    <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="DiffLineTemplate" DataType="{x:Type local:DiffLine}">
+            <Border x:Name="Bg" Background="#2EFF453A" Padding="6,1.5" Margin="0,0,0,1" CornerRadius="3">
+                <DockPanel>
+                    <TextBlock x:Name="Sign" Text="{Binding Sign}" Width="13" Foreground="#FFFF6B6B" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" />
+                    <TextBlock x:Name="Line" Text="{Binding Text}" Foreground="#FFFFA8A8" TextDecorations="Strikethrough" FontFamily="Cascadia Mono, Consolas"
+                               FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Added}" Value="True">
+                    <Setter TargetName="Bg" Property="Background" Value="#2630D158" />
+                    <Setter TargetName="Sign" Property="Foreground" Value="#FF30D158" />
+                    <Setter TargetName="Line" Property="Foreground" Value="#FFC4F5D0" />
+                    <Setter TargetName="Line" Property="TextDecorations" Value="{x:Null}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
         <Style x:Key="Chip" TargetType="Button">
             <Setter Property="Foreground" Value="White" />
@@ -94,13 +171,15 @@
         </DataTemplate>
 
         <DataTemplate x:Key="AgentTemplate" DataType="{x:Type local:AgentSession}">
-            <Grid Height="34" Margin="0,0,0,5">
+            <Grid Height="34" Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="28" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Ellipse Width="10" Height="10" Fill="{Binding OrbBrush}" VerticalAlignment="Center" HorizontalAlignment="Left" />
+                <Viewbox Width="21" Height="21" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <local:PetView Active="False" TintColor="{Binding StateColor}" />
+                </Viewbox>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
@@ -126,6 +205,7 @@
                   PreviewMouseWheel="Island_PreviewMouseWheel"
                   DragEnter="Island_DragOver" DragOver="Island_DragOver" DragLeave="Island_DragLeave" Drop="Island_Drop">
 
+                <Border x:Name="GlassFill" Visibility="Collapsed" />
                 <Border x:Name="IslandBg" Background="Black" CornerRadius="17">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="20" ShadowDepth="3" Direction="270" Opacity="0.45" Color="Black" RenderingBias="Performance" />
@@ -305,29 +385,38 @@
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
                                             <TextBlock x:Name="MediaTitle" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock x:Name="MediaArtist" Grid.Row="1" FontSize="12.5" Foreground="{StaticResource Muted}"
-                                                       TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                                            <StackPanel Grid.Row="1" Margin="0,1,0,0">
+                                                <TextBlock x:Name="MediaArtist" FontSize="12.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="MediaSource" FontSize="11.5" Foreground="#80FFFFFF" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
                                             <Grid Grid.Row="2" VerticalAlignment="Center">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock x:Name="MediaPos" FontSize="10.5" Foreground="{StaticResource Muted}" MinWidth="30" />
-                                                <Border Grid.Column="1" Height="5" CornerRadius="2.5" Background="{StaticResource Track}" Margin="6,0" ClipToBounds="True">
-                                                    <Border x:Name="MediaProgress" Background="White" CornerRadius="2.5" RenderTransformOrigin="0,0.5">
-                                                        <Border.RenderTransform>
-                                                            <ScaleTransform x:Name="MediaProgressScale" ScaleX="0" />
-                                                        </Border.RenderTransform>
+                                                <TextBlock x:Name="MediaPos" FontSize="10.5" Foreground="{StaticResource Muted}" MinWidth="30" VerticalAlignment="Center" />
+                                                <Grid x:Name="MediaTrack" Grid.Column="1" Height="12" Margin="6,0">
+                                                    <Border Height="4" CornerRadius="2" Background="{StaticResource Track}" ClipToBounds="True">
+                                                        <Border x:Name="MediaProgress" Background="White" CornerRadius="2" RenderTransformOrigin="0,0.5">
+                                                            <Border.RenderTransform>
+                                                                <ScaleTransform x:Name="MediaProgressScale" ScaleX="0" />
+                                                            </Border.RenderTransform>
+                                                        </Border>
                                                     </Border>
-                                                </Border>
-                                                <TextBlock x:Name="MediaDur" Grid.Column="2" FontSize="10.5" Foreground="{StaticResource Muted}" MinWidth="30" TextAlignment="Right" />
+                                                    <Ellipse x:Name="MediaKnob" Width="11" Height="11" Fill="White" HorizontalAlignment="Left">
+                                                        <Ellipse.RenderTransform>
+                                                            <TranslateTransform x:Name="MediaKnobShift" X="-5.5" />
+                                                        </Ellipse.RenderTransform>
+                                                    </Ellipse>
+                                                </Grid>
+                                                <TextBlock x:Name="MediaDur" Grid.Column="2" FontSize="10.5" Foreground="{StaticResource Muted}" MinWidth="30" TextAlignment="Right" VerticalAlignment="Center" />
                                             </Grid>
                                             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
-                                                <Button Style="{StaticResource IconButton}" Content="&#xE892;" Click="Prev_Click" />
-                                                <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Content="&#xE768;" FontSize="22"
-                                                        Width="50" Height="38" Margin="6,0" Click="Play_Click" />
-                                                <Button Style="{StaticResource IconButton}" Content="&#xE893;" Click="Next_Click" />
+                                                <Button Style="{StaticResource RoundButton}" Content="&#xE892;" Click="Prev_Click" />
+                                                <Button x:Name="PlayButton" Style="{StaticResource RoundButton}" Content="&#xE768;" FontSize="18"
+                                                        Width="42" Height="42" Margin="14,0" Click="Play_Click" />
+                                                <Button Style="{StaticResource RoundButton}" Content="&#xE893;" Click="Next_Click" />
                                             </StackPanel>
                                         </Grid>
                                     </Grid>
@@ -380,7 +469,45 @@
                                     <Grid.RenderTransform>
                                         <TranslateTransform />
                                     </Grid.RenderTransform>
-                                    <ItemsControl x:Name="AgentsList" ItemTemplate="{StaticResource AgentTemplate}" />
+                                    <Grid x:Name="AgentDetail">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="138" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <Grid HorizontalAlignment="Left">
+                                                <Viewbox Width="46" Height="46">
+                                                    <local:PetView x:Name="AgentPet" />
+                                                </Viewbox>
+                                                <Border x:Name="AgentBadge" Width="15" Height="15" CornerRadius="7.5" Background="#FF0A84FF" BorderBrush="Black"
+                                                        BorderThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-3,-1,0,0">
+                                                    <TextBlock Text="•••" FontSize="6" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock x:Name="AgentProject" FontSize="14.5" FontWeight="SemiBold" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="AgentName" FontSize="11.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                                            <ItemsControl x:Name="AgentSteps" Margin="0,6,0,0" ItemTemplate="{StaticResource StepTemplate}" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" CornerRadius="12" Background="#C80B0B0D" BorderBrush="#14FFFFFF" BorderThickness="1" Padding="10,8">
+                                            <Grid>
+                                                <Grid x:Name="DiffCard" Visibility="Collapsed">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
+                                                    <Border HorizontalAlignment="Left" Background="#1AFFFFFF" CornerRadius="6" Padding="7,3,9,3" Margin="0,0,0,7">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE943;" FontSize="11" Foreground="#FF5AC8FA" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DiffFile" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                                            <Ellipse Width="6" Height="6" Fill="#FFFF9F0A" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <ItemsControl x:Name="DiffList" Grid.Row="1" ItemTemplate="{StaticResource DiffLineTemplate}" ClipToBounds="True" />
+                                                </Grid>
+                                                <ItemsControl x:Name="AgentsList" ItemTemplate="{StaticResource AgentTemplate}" />
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
                                     <StackPanel x:Name="AgentsEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE99A;" FontSize="26" Foreground="#66FFFFFF" HorizontalAlignment="Center" />
                                         <TextBlock Text="Nenhum agente ativo" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />

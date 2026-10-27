@@ -135,9 +135,17 @@ public partial class App : Application
         _window.ApplyShape();
     }
 
-    public void TogglePet()
+    public static readonly (PetSpecies Species, string Label)[] Mascots =
+    [
+        (PetSpecies.Coco, "Coco (o nosso)"),
+        (PetSpecies.Pipoca, "Pipoca (gatinho)"),
+        (PetSpecies.Bu, "Bu (fantasminha)"),
+        (PetSpecies.None, "Nenhum"),
+    ];
+
+    public void SetMascot(PetSpecies species)
     {
-        Settings.Pet = !Settings.Pet;
+        Settings.Mascot = species;
         Settings.Save();
         _window.ApplyShape();
     }
@@ -264,7 +272,10 @@ public partial class App : Application
         foreach (var (name, _) in IslandThemes.All)
             themes.Items.Add(Item(name, () => SetTheme(name), Settings.Theme == name));
         menu.Items.Add(themes);
-        menu.Items.Add(Item("Bichinho (Pipoca)", TogglePet, Settings.Pet));
+        var mascots = new MenuItem { Header = "Mascote" };
+        foreach (var (species, label) in Mascots)
+            mascots.Items.Add(Item(label, () => SetMascot(species), Settings.Mascot == species));
+        menu.Items.Add(mascots);
         var monitors = new MenuItem { Header = "Monitor" };
         foreach (var (id, label) in MonitorChoices())
             monitors.Items.Add(Item(label, () => SetMonitor(id), Settings.Monitor == id));

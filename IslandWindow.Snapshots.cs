@@ -57,6 +57,7 @@ public partial class IslandWindow
 
         // Real end-to-end path: hook process -> named pipe -> island.
         _hub.Start();
+        await Task.Delay(300);
         async Task Hook(string json)
         {
             var psi = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, "hook claude")
@@ -70,13 +71,18 @@ public partial class IslandWindow
             await process.WaitForExitAsync();
         }
 
-        await Hook("""{"hook_event_name":"PreToolUse","session_id":"s1","cwd":"C:\\dev\\dynamic-island","tool_name":"Edit","tool_input":{"file_path":"C:\\dev\\dynamic-island\\IslandWindow.xaml.cs"}}""");
-        OnAgent(new AgentMessage("Codex", "s2", "working", "$ npm test", @"C:\dev\api"));
+        await Hook("""{"hook_event_name":"PostToolUse","session_id":"s1","cwd":"C:\\dev\\dynamic-island","tool_name":"Read","tool_input":{"file_path":"C:\\dev\\dynamic-island\\IslandWindow.xaml.cs"}}""");
+        await Hook("""{"hook_event_name":"PreToolUse","session_id":"s1","cwd":"C:\\dev\\dynamic-island","tool_name":"Edit","tool_input":{"file_path":"C:\\dev\\dynamic-island\\IslandWindow.xaml.cs","old_string":"if (_expanded) return ExpandedSize;\n    var h = CompactHeight;","new_string":"if (_expanded) return ExpandedFor(_page);\n    var h = CompactHeight;"}}""");
+        OnAgent(new AgentMessage("Codex", "s2", "working", "$ npm test", @"C:\dev\api", "run"));
         await Shot("08-compact-agent");
         await Hook("""{"hook_event_name":"Notification","session_id":"s1","cwd":"C:\\dev\\dynamic-island","message":"Claude needs your permission to use Bash"}""");
         await Shot("09-agent-alert");
         SetExpanded(true, PageAgents);
         await Shot("10-expanded-agents");
+        OnAgent(new AgentMessage("Codex", "s2", "end", null, null));
+        await Hook("""{"hook_event_name":"PostToolUse","session_id":"s1","cwd":"C:\\dev\\dynamic-island","tool_name":"Edit","tool_input":{"file_path":"C:\\dev\\dynamic-island\\IslandWindow.xaml.cs","old_string":"if (_expanded) return ExpandedSize;\n    var h = CompactHeight;","new_string":"if (_expanded) return ExpandedFor(_page);\n    var h = CompactHeight;"}}""");
+        RefreshPage();
+        await Shot("10b-agent-detail");
         SetExpanded(false);
 
         _settings.Shape = IslandShape.Notch;
@@ -137,6 +143,36 @@ public partial class IslandWindow
         _settings.Theme = "Oceano";
         ApplyShape();
         await Shot("23-theme-oceano-dance");
+
+        _settings.Theme = IslandThemes.Default;
+        _mediaSnap = null;
+        Agents.Clear();
+        foreach (var (species, name) in new[] { (PetSpecies.Coco, "coco"), (PetSpecies.Pipoca, "pipoca"), (PetSpecies.Bu, "bu") })
+        {
+            _settings.Mascot = species;
+            ApplyShape();
+            await Shot("25-mascot-" + name);
+        }
+        _settings.Mascot = PetSpecies.Coco;
+        ApplyShape();
+        OnPetDizzy();
+        await Shot("24-dizzy-card");
+
+        // Glass blurs whatever is really on screen behind the island.
+        _transient = Transient.None;
+        _settings.Theme = IslandThemes.Glass;
+        ApplyShape();
+        OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
+            TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now, "Spotify"));
+        _transient = Transient.None;
+        SetExpanded(true, PageMedia);
+        await Task.Delay(600);
+        CaptureGlass(true);
+        await Shot("26-glass-media");
+        SetExpanded(false);
+        await Task.Delay(600);
+        CaptureGlass(true);
+        await Shot("27-glass-compact");
 
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),

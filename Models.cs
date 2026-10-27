@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
@@ -92,8 +93,73 @@ public sealed class AgentSession : INotifyPropertyChanged
 
     public void Tick() => Raise(nameof(Elapsed));
 
+    public ObservableCollection<AgentStep> Steps { get; } = [];
+    public string FileName { get; private set; } = "";
+    public IReadOnlyList<DiffLine> DiffLines { get; private set; } = [];
+    public bool HasDiff => DiffLines.Count > 0;
+
+    /// <summary>Keeps the last few step kinds (Read, Edit, Terminal…) and the latest edit's diff.</summary>
+    public void Record(string? step, string? file, string? diff)
+    {
+        if (State == "done") step = "done";
+        if (step != null)
+        {
+            var last = Steps.LastOrDefault();
+            if (last?.Kind == "done" && step != "done") Steps.Clear();
+            last = Steps.LastOrDefault();
+            if (last?.Kind != step)
+            {
+                if (last != null) last.IsCurrent = false;
+                Steps.Add(new AgentStep(step) { IsCurrent = step != "done" });
+                while (Steps.Count > 4) Steps.RemoveAt(0);
+            }
+        }
+        if (step == "edit" && !string.IsNullOrEmpty(file))
+        {
+            FileName = System.IO.Path.GetFileName(file);
+            DiffLines = diff?.Split('\n').Where(l => l.Length > 0).Select(l => new DiffLine(l[1..], l[0] == '+')).ToList() ?? [];
+        }
+        Raise(null);
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
     void Raise([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+public sealed record DiffLine(string Text, bool Added)
+{
+    public string Sign => Added ? "+" : "−";
+}
+
+public sealed class AgentStep(string kind) : INotifyPropertyChanged
+{
+    bool _current;
+
+    public string Kind { get; } = kind;
+
+    public string Label => Kind switch
+    {
+        "read" => "Leitura",
+        "edit" => "Edição",
+        "run" => "Terminal",
+        "search" => "Busca",
+        "web" => "Web",
+        "task" => "Subagente",
+        "done" => "Concluído",
+        _ => "Pensando",
+    };
+
+    public bool IsCurrent
+    {
+        get => _current;
+        set
+        {
+            _current = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsCurrent)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 /// <summary>Damped spring used to animate the island's size.</summary>

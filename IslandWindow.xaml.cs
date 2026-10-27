@@ -102,6 +102,7 @@ public partial class IslandWindow : Window
         _battery.Changed += OnBattery;
         _hub.MessageReceived += OnAgent;
         _notifications.Received += OnNotification;
+        CompactPet.Dizzied += OnPetDizzy;
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -187,7 +188,7 @@ public partial class IslandWindow : Window
     Native.RECT IslandRect(double scale)
     {
         // Not Width/Height: WPF overwrites them with Windows' suggested rect after a DPI change.
-        const double designWidth = 560, designHeight = 250;
+        const double designWidth = 640, designHeight = 290;
         var b = (_screen ?? WinForms.Screen.PrimaryScreen!).Bounds;
         int w = (int)Math.Round(designWidth * scale), h = (int)Math.Round(designHeight * scale);
         var left = b.X + (b.Width - w) / 2;
@@ -211,6 +212,7 @@ public partial class IslandWindow : Window
     {
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _notifications.Stop();
+        _glassTimer?.Stop();
         _hub.Dispose();
         _volume.Dispose();
         Close();
@@ -243,7 +245,7 @@ public partial class IslandWindow : Window
 
     Size TargetSize()
     {
-        if (_expanded) return ExpandedSize;
+        if (_expanded) return ExpandedFor(_page);
         switch (_transient)
         {
             case Transient.Volume:
@@ -265,6 +267,8 @@ public partial class IslandWindow : Window
             _ => new(132 + extra + PetExtraWidth(kind), h),
         };
     }
+
+    static Size ExpandedFor(int page) => page == PageAgents ? new(560, 236) : ExpandedSize;
 
     void Retarget()
     {
@@ -315,6 +319,8 @@ public partial class IslandWindow : Window
         IslandContent.Clip = flatTop
             ? new RectangleGeometry(new Rect(0, -r, w, h + r), r, r)
             : new RectangleGeometry(new Rect(0, 0, w, h), r, r);
+        GlassFill.CornerRadius = IslandBg.CornerRadius;
+        if (Glass) CaptureGlass();
     }
 
     void UpdateLayers()
@@ -583,6 +589,10 @@ public partial class IslandWindow : Window
             page.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240)));
         }
         PageTitle.Text = PageTitles[_page];
+        var size = ExpandedFor(_page);
+        ExpandedView.Width = size.Width;
+        ExpandedView.Height = size.Height;
+        if (_expanded) Retarget();
         for (var i = 0; i < _dots.Length; i++)
         {
             var active = i == _page;
@@ -602,7 +612,7 @@ public partial class IslandWindow : Window
             case PageMedia: UpdateMediaUi(); break;
             case PageSystem: SampleSystem(); break;
             case PageFiles: FilesEmpty.Visibility = Vis(Files.Count == 0); break;
-            case PageAgents: AgentsEmpty.Visibility = Vis(Agents.Count == 0); break;
+            case PageAgents: UpdateAgentDetail(); break;
             case PageTimer: UpdateTimerUi(); break;
         }
     }
@@ -707,6 +717,7 @@ public partial class IslandWindow : Window
 
         MediaTitle.Text = m.Title;
         MediaArtist.Text = m.Artist;
+        MediaSource.Text = string.IsNullOrEmpty(m.Source) ? "" : "Tocando no " + m.Source;
         MediaArt.Background = m.Art != null
             ? new ImageBrush(m.Art) { Stretch = Stretch.UniformToFill }
             : new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E));
@@ -734,6 +745,8 @@ public partial class IslandWindow : Window
         MediaPos.Text = hasTimeline ? Format(position) : "";
         MediaDur.Text = hasTimeline ? "-" + Format(m.Duration - position) : "";
         MediaProgressScale.ScaleX = hasTimeline ? position / m.Duration : 0;
+        MediaKnob.Visibility = Vis(hasTimeline);
+        MediaKnobShift.X = MediaProgressScale.ScaleX * MediaTrack.ActualWidth - 5.5;
     }
 
     static string Format(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
@@ -873,6 +886,7 @@ public partial class IslandWindow : Window
             }
             var wasWaiting = session.State == "waiting";
             session.Update(m.State, m.Detail);
+            session.Record(m.Step, m.File, m.Diff);
 
             if (m.State == "waiting" && !wasWaiting) ShowAlert(session, "\uEA8F", $"{session.Agent} precisa de você");
             else if (m.State == "done")

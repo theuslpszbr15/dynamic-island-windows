@@ -9,9 +9,12 @@ using Path = System.Windows.Shapes.Path;
 
 namespace DynamicIsland;
 
+public enum PetSpecies { None, Coco, Pipoca, Bu }
+
 /// <summary>
-/// Pipoca, the island's little cat. Drawn from shapes on a 24×24 canvas (scale it with a Viewbox);
-/// a base mood follows what the island shows, short reactions play on top of it.
+/// The island's mascot, drawn from shapes on a 24×24 canvas (scale it with a Viewbox). Coco (the island's own
+/// little coconut), Pipoca (a cat) and Bu (a ghost) share one face; a base mood follows what the island shows
+/// and short reactions play on top of it.
 /// </summary>
 public sealed class PetView : Canvas
 {
@@ -20,20 +23,49 @@ public sealed class PetView : Canvas
     public static readonly Color Cream = Color.FromRgb(0xF4, 0xEF, 0xE6);
     static readonly Brush Ink = Frozen(Color.FromRgb(0x1C, 0x1C, 0x1E));
     static readonly Brush Pink = Frozen(Color.FromRgb(0xFF, 0x8F, 0xA3));
+    static readonly Brush Leaf = Frozen(Color.FromRgb(0x30, 0xC8, 0x5A));
+    static readonly Brush LeafLight = Frozen(Color.FromRgb(0x62, 0xE0, 0x7E));
     static readonly Random Rng = new();
 
     /// <summary>No random blinks (deterministic snapshots).</summary>
     public static bool Still { get; set; }
 
+    /// <summary>Raised when three quick pokes make it dizzy.</summary>
+    public event Action? Dizzied;
+
+    /// <summary>The mascot every PetView shows (the island's, the agent list's...).</summary>
+    public static PetSpecies DefaultSpecies { get; private set; } = PetSpecies.Coco;
+    static event Action? SpeciesChanged;
+
+    public static void SetDefaultSpecies(PetSpecies species)
+    {
+        if (species == PetSpecies.None || species == DefaultSpecies) return;
+        DefaultSpecies = species;
+        SpeciesChanged?.Invoke();
+    }
+
+    public static readonly DependencyProperty TintColorProperty = DependencyProperty.Register(
+        nameof(TintColor), typeof(Color), typeof(PetView),
+        new PropertyMetadata(Colors.Transparent, (d, e) => ((PetView)d).Tint((Color)e.NewValue is { A: > 0 } c ? c : null)));
+
+    /// <summary>Bindable tint; transparent means the natural colour.</summary>
+    public Color TintColor
+    {
+        get => (Color)GetValue(TintColorProperty);
+        set => SetValue(TintColorProperty, value);
+    }
+
     readonly SolidColorBrush _fill = new(Cream);
     readonly TranslateTransform _hop = new(), _look = new();
     readonly RotateTransform _tilt = new(0, 12, 20);
     readonly ScaleTransform _squash = new(1, 1, 12, 23.5), _blink = new(1, 1, 12, 13.6), _eyeSize = new(1, 1, 12, 13.6);
-    readonly Ellipse _eyeL, _eyeR;
+    readonly Canvas _shell = new() { Width = 24, Height = 24 };
+    readonly Canvas _eyes;
     readonly Path _happyEyes, _closedEyes, _annoyedEyes, _dizzyEyes;
     readonly TextBlock _z;
     readonly DispatcherTimer _blinkTimer, _reactionTimer;
 
+    PetSpecies _species = PetSpecies.None;
     Mood _base = Mood.Idle, _shown = Mood.Idle;
     bool _active = true;
     int _pokes;
@@ -44,7 +76,6 @@ public sealed class PetView : Canvas
         Width = Height = 24;
         Cursor = Cursors.Hand;
         Background = Brushes.Transparent;
-        RenderTransformOrigin = new Point(0.5, 1);
 
         var body = new Canvas { Width = 24, Height = 24 };
         var bodyTransforms = new TransformGroup();
@@ -53,39 +84,27 @@ public sealed class PetView : Canvas
         bodyTransforms.Children.Add(_hop);
         body.RenderTransform = bodyTransforms;
         Children.Add(body);
-
-        // ears first so the head covers their base
-        foreach (var ear in new[] { "M3.4,10 L4.4,2.2 L10,7.2 Z", "M20.6,10 L19.6,2.2 L14,7.2 Z" })
-            body.Children.Add(new Path
-            {
-                Data = Geometry.Parse(ear),
-                Fill = _fill,
-                Stroke = _fill,
-                StrokeThickness = 1.6,
-                StrokeLineJoin = PenLineJoin.Round,
-            });
-        body.Children.Add(Place(new Ellipse { Width = 21, Height = 17, Fill = _fill }, 1.5, 6.5));
-        body.Children.Add(Place(new Ellipse { Width = 2.6, Height = 1.5, Fill = Pink, Opacity = 0.6 }, 4.3, 16.6));
-        body.Children.Add(Place(new Ellipse { Width = 2.6, Height = 1.5, Fill = Pink, Opacity = 0.6 }, 17.1, 16.6));
-        body.Children.Add(new Path { Data = Geometry.Parse("M11.25,16.3 L12.75,16.3 L12,17.15 Z"), Fill = Pink });
-        body.Children.Add(Stroke("M10.2,17.6 Q11.1,18.7 12,17.6 Q12.9,18.7 13.8,17.6", 0.9));
+        body.Children.Add(_shell);
 
         var face = new Canvas { Width = 24, Height = 24, RenderTransform = _look };
         body.Children.Add(face);
-        var eyes = new Canvas { Width = 24, Height = 24 };
+        _eyes = new Canvas { Width = 24, Height = 24 };
         var eyeTransforms = new TransformGroup();
         eyeTransforms.Children.Add(_eyeSize);
         eyeTransforms.Children.Add(_blink);
-        eyes.RenderTransform = eyeTransforms;
-        face.Children.Add(eyes);
-        _eyeL = Place(new Ellipse { Width = 2.7, Height = 3.5, Fill = Ink }, 6.9, 11.85);
-        _eyeR = Place(new Ellipse { Width = 2.7, Height = 3.5, Fill = Ink }, 14.4, 11.85);
-        eyes.Children.Add(_eyeL);
-        eyes.Children.Add(_eyeR);
+        _eyes.RenderTransform = eyeTransforms;
+        face.Children.Add(_eyes);
+        foreach (var x in new[] { 6.9, 14.4 })
+        {
+            _eyes.Children.Add(Place(new Ellipse { Width = 2.8, Height = 3.6, Fill = Ink }, x, 11.8));
+            _eyes.Children.Add(Place(new Ellipse { Width = 1.0, Height = 1.0, Fill = Brushes.White }, x + 0.45, 12.35));
+        }
         face.Children.Add(_happyEyes = Stroke("M6.8,14.4 Q8.25,12.1 9.7,14.4 M14.3,14.4 Q15.75,12.1 17.2,14.4", 1.4));
         face.Children.Add(_closedEyes = Stroke("M6.9,13.9 Q8.25,14.9 9.6,13.9 M14.4,13.9 Q15.75,14.9 17.1,13.9", 1.2));
         face.Children.Add(_annoyedEyes = Stroke("M7,12.3 L9.5,13.7 L7,15.1 M17,12.3 L14.5,13.7 L17,15.1", 1.3));
-        face.Children.Add(_dizzyEyes = Stroke("M7,12.4 L9.5,15 M9.5,12.4 L7,15 M14.5,12.4 L17,15 M17,12.4 L14.5,15", 1.2));
+        face.Children.Add(_dizzyEyes = Stroke(
+            "M8.5,13.7 A0.25,0.25 0 1 1 8.0,13.7 A0.5,0.5 0 1 1 9.0,13.7 A1.0,1.0 0 1 1 7.0,13.7 A1.4,1.4 0 1 1 9.8,13.7 " +
+            "M16.0,13.7 A0.25,0.25 0 1 1 15.5,13.7 A0.5,0.5 0 1 1 16.5,13.7 A1.0,1.0 0 1 1 14.5,13.7 A1.4,1.4 0 1 1 17.3,13.7", 0.6));
 
         _z = new TextBlock { Text = "z", FontSize = 7, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Opacity = 0, RenderTransform = new TranslateTransform() };
         Children.Add(Place(_z, 19, -1));
@@ -103,7 +122,57 @@ public sealed class PetView : Canvas
             Poke();
             e.Handled = true;
         };
+        Species = DefaultSpecies;
+        void Sync() => Species = DefaultSpecies;
+        Loaded += (_, _) =>
+        {
+            SpeciesChanged -= Sync;
+            SpeciesChanged += Sync;
+            Sync();
+        };
+        Unloaded += (_, _) => SpeciesChanged -= Sync;
         Show(Mood.Idle);
+    }
+
+    public PetSpecies Species
+    {
+        get => _species;
+        set
+        {
+            if (_species == value || value == PetSpecies.None) return;
+            _species = value;
+            _shell.Children.Clear();
+            switch (value)
+            {
+                case PetSpecies.Coco:
+                    _shell.Children.Add(Fill("M12,6.2 C18.6,6.2 22.4,10.3 22.4,15.3 C22.4,20.5 18,23.5 12,23.5 C6,23.5 1.6,20.5 1.6,15.3 C1.6,10.3 5.4,6.2 12,6.2 Z", _fill));
+                    _shell.Children.Add(new Path { Data = Geometry.Parse("M12,6.7 Q12.1,4.9 12.8,3.6"), Stroke = Leaf, StrokeThickness = 1.1, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
+                    _shell.Children.Add(Fill("M12.6,4.3 C10.7,2.3 8.4,2.6 7.6,3.4 C9.2,5.0 11.2,5.1 12.6,4.3 Z", Leaf));
+                    _shell.Children.Add(Fill("M12.8,3.7 C14.1,1.4 16.6,0.9 17.7,1.6 C16.7,3.5 14.6,4.3 12.8,3.7 Z", LeafLight));
+                    AddCheeks();
+                    _shell.Children.Add(Stroke("M10.7,17.5 Q12,18.8 13.3,17.5", 0.95));
+                    break;
+                case PetSpecies.Pipoca:
+                    foreach (var ear in new[] { "M3.4,10 L4.4,2.2 L10,7.2 Z", "M20.6,10 L19.6,2.2 L14,7.2 Z" })
+                        _shell.Children.Add(new Path { Data = Geometry.Parse(ear), Fill = _fill, Stroke = _fill, StrokeThickness = 1.6, StrokeLineJoin = PenLineJoin.Round });
+                    _shell.Children.Add(Place(new Ellipse { Width = 21, Height = 17, Fill = _fill }, 1.5, 6.5));
+                    AddCheeks();
+                    _shell.Children.Add(Fill("M11.25,16.3 L12.75,16.3 L12,17.15 Z", Pink));
+                    _shell.Children.Add(Stroke("M10.2,17.6 Q11.1,18.7 12,17.6 Q12.9,18.7 13.8,17.6", 0.9));
+                    break;
+                case PetSpecies.Bu:
+                    _shell.Children.Add(Fill("M3,23.2 L3,13 C3,7.5 7,4.4 12,4.4 C17,4.4 21,7.5 21,13 L21,23.2 Q19.5,21.3 18,23.2 Q16.5,21.3 15,23.2 Q13.5,21.3 12,23.2 Q10.5,21.3 9,23.2 Q7.5,21.3 6,23.2 Q4.5,21.3 3,23.2 Z", _fill));
+                    AddCheeks();
+                    _shell.Children.Add(Place(new Ellipse { Width = 1.7, Height = 2.1, Fill = Ink }, 11.15, 16.9));
+                    break;
+            }
+        }
+    }
+
+    void AddCheeks()
+    {
+        _shell.Children.Add(Place(new Ellipse { Width = 2.6, Height = 1.5, Fill = Pink, Opacity = 0.6 }, 4.3, 16.6));
+        _shell.Children.Add(Place(new Ellipse { Width = 2.6, Height = 1.5, Fill = Pink, Opacity = 0.6 }, 17.1, 16.6));
     }
 
     static T Place<T>(T element, double x, double y) where T : UIElement
@@ -112,6 +181,8 @@ public sealed class PetView : Canvas
         SetTop(element, y);
         return element;
     }
+
+    static Path Fill(string data, Brush brush) => new() { Data = Geometry.Parse(data), Fill = brush };
 
     static Path Stroke(string data, double thickness) => new()
     {
@@ -189,7 +260,8 @@ public sealed class PetView : Canvas
         if (_pokes >= 3)
         {
             _pokes = 0;
-            React(Mood.Dizzy, 2.6);
+            React(Mood.Dizzy, 3);
+            Dizzied?.Invoke();
         }
         else React(Mood.Annoyed, 1.2);
     }
@@ -207,7 +279,7 @@ public sealed class PetView : Canvas
             Mood.Dizzy => "dizzy",
             _ => "open",
         };
-        _eyeL.Visibility = _eyeR.Visibility = eyes == "open" ? Visibility.Visible : Visibility.Hidden;
+        _eyes.Visibility = eyes == "open" ? Visibility.Visible : Visibility.Hidden;
         _happyEyes.Visibility = eyes == "happy" ? Visibility.Visible : Visibility.Hidden;
         _closedEyes.Visibility = eyes == "closed" ? Visibility.Visible : Visibility.Hidden;
         _annoyedEyes.Visibility = eyes == "annoyed" ? Visibility.Visible : Visibility.Hidden;
@@ -234,6 +306,8 @@ public sealed class PetView : Canvas
         {
             case Mood.Idle:
                 if (!Still) _blinkTimer.Start();
+                // the ghost never quite touches the ground
+                if (_species == PetSpecies.Bu) Loop(_hop, TranslateTransform.YProperty, 0, -1.4, 1.1);
                 break;
             case Mood.Dance:
                 Loop(_hop, TranslateTransform.YProperty, 0, -2.6, 0.24);
