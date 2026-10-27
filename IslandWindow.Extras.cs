@@ -32,6 +32,7 @@ public partial class IslandWindow
     readonly List<Approval> _approvals = [];
     Action? _infoAction;
     bool _userHidden, _extrasStarted;
+    DateTime? _unhideAt;
     bool? _caps, _num;
 
     IReadOnlyList<LyricLine>? _lyrics;
@@ -101,20 +102,25 @@ public partial class IslandWindow
 
     // ───────────────────────── hotkeys ─────────────────────────
 
+    public bool UserHidden => _userHidden;
+
+    /// <summary>Hides everything (popups included) until shown again, or for a while.</summary>
+    public void SetUserHidden(bool hidden, TimeSpan? duration = null)
+    {
+        _userHidden = hidden;
+        _unhideAt = hidden && duration is { } d ? DateTime.Now + d : null;
+        if (hidden) SetExpanded(false);
+        GuardTick();
+    }
+
     void OnHotkey(int id)
     {
         if (id == HotkeyHide)
         {
-            _userHidden = !_userHidden;
-            if (_userHidden) SetExpanded(false);
-            GuardTick();
+            SetUserHidden(!_userHidden);
             return;
         }
-        if (_userHidden)
-        {
-            _userHidden = false;
-            GuardTick();
-        }
+        if (_userHidden) SetUserHidden(false);
         var page = id switch
         {
             HotkeyMedia => PageMedia,

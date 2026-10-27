@@ -49,6 +49,8 @@ atrapalhar: os cliques passam por ela.
 - **Vários monitores:** fica na tela principal, numa tela escolhida ou segue a janela ativa (respeita a escala de cada monitor).
 - Some sozinha com app em tela cheia e não rouba o foco.
 - **Atalhos:** `Ctrl+Alt+D` esconde/mostra a ilha, `Ctrl+Alt+M` mídia, `Ctrl+Alt+T` timer, `Ctrl+Alt+A` agentes, `Ctrl+Alt+C` agenda.
+- **Esconder:** `Ctrl+Alt+D`, clique no ícone da bandeja ou *Esconder por 1 hora* no menu. Escondida, nada aparece (nem avisos).
+- **Vídeos não incomodam:** YouTube, Netflix, Prime Video, Twitch… não abrem aviso nem deixam a pílula aberta (dá para ligar em *Mostrar na ilha → Vídeos*).
 - **Atualizações:** avisa quando sai uma versão nova aqui no GitHub e se atualiza com um clique (o arquivo é conferido pelo SHA-256 da release).
 
 ## Configurações

@@ -25,8 +25,11 @@ sealed class TrayIcon : IDisposable
         var lyrics = new WinForms.ToolStripMenuItem("Letra da música (LRCLIB)", null, (_, _) => app.ToggleLyrics());
         var clipboard = new WinForms.ToolStripMenuItem("O que foi copiado", null, (_, _) => app.ToggleClipboard());
         var lockKeys = new WinForms.ToolStripMenuItem("Caps Lock / Num Lock", null, (_, _) => app.ToggleLockKeys());
+        var videos = new WinForms.ToolStripMenuItem("Vídeos (YouTube, Netflix…)", null, (_, _) => app.ToggleQuietVideos());
         var shows = new WinForms.ToolStripMenuItem("Mostrar na ilha");
-        shows.DropDownItems.AddRange([notifications, lyrics, clipboard, lockKeys]);
+        shows.DropDownItems.AddRange([notifications, lyrics, clipboard, lockKeys, videos]);
+        var hide = new WinForms.ToolStripMenuItem("Esconder a ilha", null, (_, _) => app.ToggleHidden()) { ShortcutKeyDisplayString = "Ctrl+Alt+D" };
+        var hideHour = new WinForms.ToolStripMenuItem("Esconder por 1 hora", null, (_, _) => app.HideFor(TimeSpan.FromHours(1)));
         var outfit = new WinForms.ToolStripMenuItem("Roupinha do mascote");
         var desktopPet = new WinForms.ToolStripMenuItem("Mascote na área de trabalho", null, (_, _) => app.ToggleDesktopPet());
         var recap = new WinForms.ToolStripMenuItem("Resumo da semana", null, (_, _) => app.ShowRecap());
@@ -43,10 +46,12 @@ sealed class TrayIcon : IDisposable
         var exit = new WinForms.ToolStripMenuItem("Sair", null, (_, _) => app.Quit());
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.AddRange([shape, theme, pet, outfit, desktopPet, discreet, monitor, shows, recap, startup, new WinForms.ToolStripSeparator(),
+        menu.Items.AddRange([hide, hideHour, new WinForms.ToolStripSeparator(), shape, theme, pet, outfit, desktopPet, discreet, monitor, shows, recap, startup, new WinForms.ToolStripSeparator(),
             copilot, hooks, new WinForms.ToolStripSeparator(), update, install, exit]);
         menu.Opening += (_, _) =>
         {
+            hide.Checked = app.IslandHidden;
+            videos.Checked = !app.Settings.QuietVideos;
             copilot.Checked = App.CopilotConnected;
             discreet.Checked = app.Settings.DiscreetIdle;
             lyrics.Checked = app.Settings.ShowLyrics;
@@ -92,6 +97,11 @@ sealed class TrayIcon : IDisposable
             Text = "Dynamic Island",
             ContextMenuStrip = menu,
             Visible = true,
+        };
+        // left click: hide / show the island
+        _icon.MouseClick += (_, e) =>
+        {
+            if (e.Button == WinForms.MouseButtons.Left) app.ToggleHidden();
         };
     }
 

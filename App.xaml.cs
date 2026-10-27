@@ -37,6 +37,7 @@ public partial class App : Application
 
         Settings = IslandSettings.Load();
         PetView.SetDefaultOutfit(Settings.Outfit);
+        ListenForQuit();
         _window = new IslandWindow(Settings);
         _window.Show();
         _tray = new TrayIcon(this);
@@ -51,6 +52,13 @@ public partial class App : Application
             if (Settings.CheckUpdates) CheckForUpdates(false);
         };
         updates.Start();
+    }
+
+    // Lets a new version being installed close this one cleanly.
+    void ListenForQuit()
+    {
+        var quit = new EventWaitHandle(false, EventResetMode.AutoReset, Installer.QuitEventName);
+        ThreadPool.RegisterWaitForSingleObject(quit, (_, _) => Dispatcher.BeginInvoke(new Action(Quit)), null, Timeout.Infinite, true);
     }
 
     public DesktopPetWindow? DesktopPet { get; private set; }
@@ -92,6 +100,23 @@ public partial class App : Application
     {
         Settings.ShowLockKeys = !Settings.ShowLockKeys;
         Settings.Save();
+    }
+
+    public void ToggleQuietVideos()
+    {
+        Settings.QuietVideos = !Settings.QuietVideos;
+        Settings.Save();
+        _window.ApplyShape();
+    }
+
+    public bool IslandHidden => _window.UserHidden;
+
+    public void ToggleHidden() => _window.SetUserHidden(!_window.UserHidden);
+
+    public void HideFor(TimeSpan duration)
+    {
+        _window.SetUserHidden(true, duration);
+        _tray.Balloon("Ilha escondida", $"Volta sozinha em {duration.TotalMinutes:0} min. Ctrl+Alt+D ou clique no ícone para mostrar antes.");
     }
 
     public void ToggleUpdates()
@@ -386,6 +411,11 @@ public partial class App : Application
             return item;
         }
 
+        var hide = Item("Esconder a ilha", ToggleHidden, IslandHidden);
+        hide.InputGestureText = "Ctrl+Alt+D";
+        menu.Items.Add(hide);
+        menu.Items.Add(Item("Esconder por 1 hora", () => HideFor(TimeSpan.FromHours(1))));
+        menu.Items.Add(new Separator());
         menu.Items.Add(Item("Pílula flutuante", () => SetShape(IslandShape.Pill), Settings.Shape == IslandShape.Pill));
         menu.Items.Add(Item("Notch no topo", () => SetShape(IslandShape.Notch), Settings.Shape == IslandShape.Notch));
         menu.Items.Add(Item("Recolher quando ocioso", ToggleDiscreet, Settings.DiscreetIdle));
@@ -411,6 +441,7 @@ public partial class App : Application
         shows.Items.Add(Item("Letra da música (LRCLIB)", ToggleLyrics, Settings.ShowLyrics));
         shows.Items.Add(Item("O que foi copiado", ToggleClipboard, Settings.ShowClipboard));
         shows.Items.Add(Item("Caps Lock / Num Lock", ToggleLockKeys, Settings.ShowLockKeys));
+        shows.Items.Add(Item("Vídeos (YouTube, Netflix…)", ToggleQuietVideos, !Settings.QuietVideos));
         menu.Items.Add(shows);
         menu.Items.Add(Item("Resumo da semana", ShowRecap));
         menu.Items.Add(new Separator());

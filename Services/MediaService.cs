@@ -15,7 +15,8 @@ public sealed record MediaSnapshot(
     TimeSpan Position,
     TimeSpan Duration,
     DateTimeOffset LastUpdated,
-    string? Source = null)
+    string? Source = null,
+    bool IsVideo = false)
 {
     public TimeSpan PositionNow()
     {
@@ -251,6 +252,7 @@ public sealed class MediaService(Dispatcher ui)
         var title = BrowserTabs.IsBrowser(source.ProcessName)
             ? BrowserTabs.PlayingTabTitle(source.ProcessName) ?? ""
             : WindowTitle(source, app);
+        var video = IsVideoTitle(title);
         foreach (var site in new[] { " - YouTube Music", " - YouTube", " | Spotify", " - Spotify" })
             if (title.EndsWith(site, StringComparison.OrdinalIgnoreCase)) title = title[..^site.Length].Trim();
 
@@ -276,8 +278,15 @@ public sealed class MediaService(Dispatcher ui)
         }
         catch { }
         return new MediaSnapshot(title, artist, icon, icon != null ? ColorUtil.Accent(icon) : DefaultAccent,
-            true, TimeSpan.Zero, TimeSpan.Zero, DateTimeOffset.Now, app);
+            true, TimeSpan.Zero, TimeSpan.Zero, DateTimeOffset.Now, app, video);
     }
+
+    static readonly string[] VideoSites = [" - YouTube", "Netflix", "Prime Video", "Disney+", "Globoplay", "Twitch", "Crunchyroll", "Vimeo"];
+
+    // "- YouTube Music" is music; plain "- YouTube" and streaming services are video.
+    static bool IsVideoTitle(string title) =>
+        !title.EndsWith(" - YouTube Music", StringComparison.OrdinalIgnoreCase)
+        && VideoSites.Any(site => title.EndsWith(site, StringComparison.OrdinalIgnoreCase));
 
     // "Spotify.exe", "Chrome", "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic" -> a name people know.
     static string SourceName(string? appId)
@@ -324,7 +333,9 @@ public sealed class MediaService(Dispatcher ui)
             timeline.Position,
             timeline.EndTime - timeline.StartTime,
             timeline.LastUpdatedTime,
-            SourceName(session.SourceAppUserModelId));
+            SourceName(session.SourceAppUserModelId),
+            playback?.PlaybackType == Windows.Media.MediaPlaybackType.Video
+                || IsVideoTitle(props.Title) || IsVideoTitle(props.Artist ?? ""));
     }
 
     static async Task<BitmapSource?> LoadArtAsync(IRandomAccessStreamReference? thumbnail)

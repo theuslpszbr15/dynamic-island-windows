@@ -241,9 +241,11 @@ public partial class IslandWindow : Window
     {
         if (Agents.Any(a => a.IsActive)) return CompactKind.Agent;
         if (TimerActive) return CompactKind.Timer;
-        if (_mediaSnap?.IsPlaying == true) return CompactKind.Media;
+        if (MediaShown) return CompactKind.Media;
         return CompactKind.Clock;
     }
+
+    bool MediaShown => _mediaSnap is { IsPlaying: true } m && !(m.IsVideo && _settings.QuietVideos);
 
     Size TargetSize()
     {
@@ -700,6 +702,11 @@ public partial class IslandWindow : Window
 
     void GuardTick()
     {
+        if (_unhideAt is { } unhide && DateTime.Now >= unhide)
+        {
+            _userHidden = false;
+            _unhideAt = null;
+        }
         var hide = _userHidden || (Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4);
         if (hide != _hiddenFullscreen)
         {
@@ -750,7 +757,7 @@ public partial class IslandWindow : Window
         HighlightSourceChips();
 
         if (_expanded && _page == PageMedia) RefreshPage();
-        if (newTrack && snapshot!.IsPlaying) ShowTransient(Transient.NowPlaying, 3.2);
+        if (newTrack && MediaShown) ShowTransient(Transient.NowPlaying, 3.2);
         else Retarget();
     }
 

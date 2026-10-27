@@ -27,6 +27,7 @@ public static class Installer
     {
         var source = AppContext.BaseDirectory.TrimEnd('\\');
         Directory.CreateDirectory(InstallDir);
+        StopInstalled();
         long bytes = 0;
         // A single-file build may sit in Downloads next to anything, so only the exe itself is copied.
         var singleFile = string.IsNullOrEmpty(typeof(Installer).Assembly.Location);
@@ -59,6 +60,30 @@ public static class Installer
 
         StartupRegistration.Set(true, InstalledExe);
         return InstalledExe;
+    }
+
+    public const string QuitEventName = @"Local\DynamicIsland.Quit";
+
+    // The installed exe is locked while it runs: ask it to quit, then make sure.
+    static void StopInstalled()
+    {
+        var running = Process.GetProcessesByName("DynamicIsland").Where(p =>
+        {
+            try
+            {
+                return p.Id != Environment.ProcessId
+                       && string.Equals(Path.GetDirectoryName(p.MainModule?.FileName), InstallDir, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }).ToList();
+        if (running.Count == 0) return;
+
+        try { if (EventWaitHandle.TryOpenExisting(QuitEventName, out var quit)) using (quit) quit.Set(); } catch { }
+        foreach (var process in running)
+        {
+            try { if (!process.WaitForExit(4000)) { process.Kill(); process.WaitForExit(3000); } }
+            catch { }
+        }
     }
 
     /// <summary>Removes registrations, closes the running island and deletes the install folder once this process exits.</summary>

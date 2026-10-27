@@ -23,6 +23,8 @@ public sealed class IslandSettings
     public bool ShowLyrics { get; set; } = true;
     public bool ShowClipboard { get; set; } = true;
     public bool ShowLockKeys { get; set; } = true;
+    /// <summary>Videos (YouTube, Netflix…) don't pop up or keep the pill open; still on the media page.</summary>
+    public bool QuietVideos { get; set; } = true;
     public bool CheckUpdates { get; set; } = true;
     public bool DesktopPet { get; set; }
     public double? DesktopPetX { get; set; }
