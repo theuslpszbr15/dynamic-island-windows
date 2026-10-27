@@ -11,6 +11,7 @@ public partial class IslandWindow
     DateTime _lastActivity = DateTime.Now, _lastGlass;
     Effect? _shadow;
     System.Windows.Threading.DispatcherTimer? _glassTimer;
+    bool _glassBusy;
 
     PetView[] Pets => [CompactPet, HeaderPet, AlertPet, AgentPet];
     bool PetOn => _settings.Mascot != PetSpecies.None;
@@ -23,8 +24,9 @@ public partial class IslandWindow
         ground.Freeze();
         IslandBg.Background = ground;
         EarLeft.Fill = EarRight.Fill = ground;
-        // A shadow under a see-through island would only darken the glass.
+        // The glass carries the shadow: the tint above it is see-through and would only darken it.
         IslandBg.Effect = Glass ? null : _shadow;
+        GlassFill.Effect = Glass ? _shadow : null;
         ApplyGlass();
 
         var pet = PetOn;
@@ -40,39 +42,48 @@ public partial class IslandWindow
         UpdatePet();
     }
 
-    // DWM's own blur only covers whole window rectangles, so the glass is made here: a heavily downscaled
-    // copy of the screen behind the island, stretched back (box blur). The island is excluded from screen
-    // capture while glass is on, otherwise it would capture itself.
+    // DWM's own blur only covers whole window rectangles, so the glass is made here from a capture of the
+    // screen behind the island (see LiquidGlass). The island is excluded from screen capture while glass
+    // is on, otherwise it would capture itself.
     void ApplyGlass()
     {
         if (_hwnd != IntPtr.Zero) Native.SetWindowDisplayAffinity(_hwnd, Glass ? Native.WDA_EXCLUDEFROMCAPTURE : 0);
-        GlassFill.Visibility = Vis(Glass);
+        GlassFill.Visibility = GlassRim.Visibility = Vis(Glass);
         if (!Glass)
         {
             _glassTimer?.Stop();
             GlassFill.Background = null;
             return;
         }
-        _glassTimer ??= MakeTimer(0.25, () => CaptureGlass(true));
+        _glassTimer ??= MakeTimer(0.2, () => CaptureGlass(true));
         _glassTimer.Start();
         CaptureGlass(true);
     }
 
-    void CaptureGlass(bool force = false)
+    async void CaptureGlass(bool force = false)
     {
-        if (!Glass || _hiddenFullscreen || PresentationSource.FromVisual(Island) == null) return;
+        if (!Glass || _glassBusy || _hiddenFullscreen || PresentationSource.FromVisual(Island) == null) return;
         var now = DateTime.Now;
-        if (!force && now - _lastGlass < TimeSpan.FromMilliseconds(60)) return;
+        if (!force && now - _lastGlass < TimeSpan.FromMilliseconds(50)) return;
         _lastGlass = now;
         var dpi = VisualTreeHelper.GetDpi(this);
         var origin = Island.PointToScreen(new Point(0, 0));
-        var shot = Native.CaptureScaled((int)Math.Round(origin.X), (int)Math.Round(origin.Y),
-            (int)Math.Round(Island.Width * dpi.DpiScaleX), (int)Math.Round(Island.Height * dpi.DpiScaleY), 14);
-        if (shot == null) return;
-        var brush = new ImageBrush(shot) { Stretch = Stretch.Fill };
-        RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.Linear);
-        brush.Freeze();
-        GlassFill.Background = brush;
+        int x = (int)Math.Round(origin.X), y = (int)Math.Round(origin.Y);
+        int w = (int)Math.Round(Island.Width * dpi.DpiScaleX), h = (int)Math.Round(Island.Height * dpi.DpiScaleY);
+        var radius = IslandBg.CornerRadius.BottomLeft * dpi.DpiScaleX;
+        var flatTop = IslandBg.CornerRadius.TopLeft < IslandBg.CornerRadius.BottomLeft;
+
+        _glassBusy = true;
+        try
+        {
+            var shot = await Task.Run(() => LiquidGlass.Render(x, y, w, h, radius, flatTop, dpi.DpiScaleX));
+            if (shot == null || !Glass) return;
+            var brush = new ImageBrush(shot) { Stretch = Stretch.Fill };
+            RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.Linear);
+            brush.Freeze();
+            GlassFill.Background = brush;
+        }
+        finally { _glassBusy = false; }
     }
 
     double PetExtraWidth(CompactKind kind) => PetOn && kind is CompactKind.Clock or CompactKind.Timer ? 24 : 0;

@@ -27,7 +27,7 @@ atrapalhar: os cliques passam por ela.
 |---|---|
 | **Mascotes** — o **Coco** (o mascote da ilha: um coquinho com brotinho), a **Pipoca** (gatinha) ou o **Bu** (fantasminha). Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. | <img src="docs/img/25-mascot-coco.png" width="190"> <img src="docs/img/24-dizzy-card.png" width="190"> |
 | **Agentes ao vivo** — o mascote do agente, os passos (Leitura, Edição, Terminal…) e o diff da última edição; com vários agentes, a lista de todos com o mascote de cada um. | <img src="docs/img/10b-agent-detail.png" width="380"> |
-| **Vidro (desfocado)** — tema translúcido estilo iPhone que desfoca o que está atrás da ilha, além de 8 cores sólidas (Obsidiana, Grafite, Ardósia, Oceano, Floresta, Café, Ameixa, Cereja). | <img src="docs/img/26-glass-media.png" width="380"> |
+| **Vidro (desfocado)** — "liquid glass" estilo iOS 26: o fundo atrás da ilha é fosco no meio e se curva como uma lente nas bordas, com brilho na borda, além de 8 cores sólidas (Obsidiana, Grafite, Ardósia, Oceano, Floresta, Café, Ameixa, Cereja). | <img src="docs/img/26-glass-media.png" width="380"> |
 | **Mídia** — capa, título, progresso e controles de qualquer player (Spotify, YouTube…). A cor de destaque vem da capa. | <img src="docs/img/02-now-playing.png" width="380"> |
 | **Volume** — barra ao mudar o volume (role o mouse sobre ela para ajustar). | <img src="docs/img/04-volume.png" width="380"> |
 | **Agentes de IA** — azul trabalhando, laranja precisa de você, verde concluído. | <img src="docs/img/09-agent-alert.png" width="380"> |

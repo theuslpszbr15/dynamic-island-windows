@@ -61,8 +61,8 @@ static class Native
     [DllImport("gdi32.dll")] static extern int SetStretchBltMode(IntPtr dc, int mode);
     [DllImport("gdi32.dll")] static extern bool StretchBlt(IntPtr dest, int dx, int dy, int dw, int dh, IntPtr src, int sx, int sy, int sw, int sh, int op);
 
-    /// <summary>The screen area given in physical pixels, shrunk by <paramref name="factor"/> (averaged).</summary>
-    public static BitmapSource? CaptureScaled(int x, int y, int width, int height, int factor)
+    /// <summary>The screen area given in physical pixels, shrunk by <paramref name="factor"/> (averaged), as 0xRRGGBB ints.</summary>
+    public static (int[] Pixels, int Width, int Height)? CapturePixels(int x, int y, int width, int height, int factor)
     {
         if (width < 4 || height < 4) return null;
         int w = Math.Max(2, width / factor), h = Math.Max(2, height / factor);
@@ -75,9 +75,12 @@ static class Native
             SetStretchBltMode(memory, 4); // HALFTONE averages the source pixels
             if (!StretchBlt(memory, 0, 0, w, h, screen, x, y, width, height, 0x40CC0020)) return null; // SRCCOPY | CAPTUREBLT
             SelectObject(memory, old);
-            var source = Imaging.CreateBitmapSourceFromHBitmap(bitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            source.Freeze();
-            return source;
+            var source = new FormatConvertedBitmap(
+                Imaging.CreateBitmapSourceFromHBitmap(bitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions()),
+                PixelFormats.Bgr32, null, 0);
+            var pixels = new int[w * h];
+            source.CopyPixels(pixels, w * 4, 0);
+            return (pixels, w, h);
         }
         catch { return null; }
         finally

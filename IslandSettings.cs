@@ -65,7 +65,7 @@ public static class IslandThemes
     // Glass is a translucent tint over a real blur of what is behind the island.
     public static readonly (string Name, Color Color)[] All =
     [
-        (Glass, Color.FromArgb(0x9E, 0x18, 0x18, 0x1C)),
+        (Glass, Color.FromArgb(0x66, 0x10, 0x10, 0x14)),
         ("Obsidiana", Color.FromRgb(0x00, 0x00, 0x00)),
         ("Grafite", Color.FromRgb(0x1C, 0x1C, 0x1E)),
         ("Ardósia", Color.FromRgb(0x1E, 0x25, 0x33)),

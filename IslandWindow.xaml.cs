@@ -319,7 +319,7 @@ public partial class IslandWindow : Window
         IslandContent.Clip = flatTop
             ? new RectangleGeometry(new Rect(0, -r, w, h + r), r, r)
             : new RectangleGeometry(new Rect(0, 0, w, h), r, r);
-        GlassFill.CornerRadius = IslandBg.CornerRadius;
+        GlassFill.CornerRadius = GlassRim.CornerRadius = IslandBg.CornerRadius;
         if (Glass) CaptureGlass();
     }
 
