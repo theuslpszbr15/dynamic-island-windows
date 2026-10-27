@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Windows.Media;
 using Microsoft.Win32;
 
 namespace DynamicIsland;
@@ -16,6 +17,8 @@ public sealed class IslandSettings
     public string Monitor { get; set; } = "primary";
     public bool ShowNotifications { get; set; } = true;
     public int TimerMinutes { get; set; } = 25;
+    public bool Pet { get; set; } = true;
+    public string Theme { get; set; } = IslandThemes.Default;
 
     [JsonIgnore] public bool ReadOnly { get; init; }
 
@@ -50,6 +53,31 @@ public sealed class IslandSettings
             File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Options));
         }
         catch { }
+    }
+}
+
+public static class IslandThemes
+{
+    public const string Default = "Obsidiana";
+
+    // Deep tones only, so the island's white text and the album/agent colours keep their contrast.
+    public static readonly (string Name, Color Color)[] All =
+    [
+        ("Obsidiana", Color.FromRgb(0x00, 0x00, 0x00)),
+        ("Grafite", Color.FromRgb(0x1C, 0x1C, 0x1E)),
+        ("Ardósia", Color.FromRgb(0x1E, 0x25, 0x33)),
+        ("Oceano", Color.FromRgb(0x0A, 0x1F, 0x36)),
+        ("Floresta", Color.FromRgb(0x0F, 0x26, 0x1C)),
+        ("Café", Color.FromRgb(0x2B, 0x1D, 0x15)),
+        ("Ameixa", Color.FromRgb(0x2A, 0x16, 0x33)),
+        ("Cereja", Color.FromRgb(0x33, 0x0F, 0x18)),
+    ];
+
+    public static Color Of(string name)
+    {
+        foreach (var (n, c) in All)
+            if (n == name) return c;
+        return Colors.Black;
     }
 }
 

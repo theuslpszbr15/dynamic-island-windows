@@ -219,6 +219,7 @@ public partial class IslandWindow : Window
     public void ApplyShape()
     {
         CompactView.Height = CompactHeight;
+        ApplyLook();
         Retarget();
         ApplySize();
     }
@@ -255,12 +256,13 @@ public partial class IslandWindow : Window
         if (IsHandle) return new(110, 8);
         var h = CompactHeight;
         var extra = IsNotch ? 16 : 0;
-        return Kind() switch
+        var kind = Kind();
+        return kind switch
         {
             CompactKind.Agent => new(290 + extra, h),
             CompactKind.Media => new(220 + extra, h),
-            CompactKind.Timer => new(150 + extra, h),
-            _ => new(132 + extra, h),
+            CompactKind.Timer => new(150 + extra + PetExtraWidth(kind), h),
+            _ => new(132 + extra + PetExtraWidth(kind), h),
         };
     }
 
@@ -345,6 +347,7 @@ public partial class IslandWindow : Window
             _compactPulsing = kind == CompactKind.Agent;
             Pulse((ScaleTransform)CompactOrb.RenderTransform, _compactPulsing);
         }
+        UpdatePet();
     }
 
     Color? HandleColor() => Kind() switch
@@ -411,6 +414,7 @@ public partial class IslandWindow : Window
     {
         if (!_ready || _expanded || _hiddenFullscreen) return;
         if (_transient != Transient.None && _transient != kind && Priority(kind) < Priority(_transient)) return;
+        Touch();
         _transient = kind;
         _transientTimer.Stop();
         _transientTimer.Interval = TimeSpan.FromSeconds(seconds);
@@ -425,6 +429,7 @@ public partial class IslandWindow : Window
     void PollTick()
     {
         if (_hwnd == IntPtr.Zero || !Native.GetCursorPos(out var cursor)) return;
+        if (PresentationSource.FromVisual(Root) == null) return;
         var local = Root.PointFromScreen(new Point(cursor.X, cursor.Y));
         var bounds = Island.TransformToAncestor(Root).TransformBounds(new Rect(Island.RenderSize));
         bounds.Inflate(IsHandle ? 10 : 2, IsHandle ? 4 : 2);
@@ -438,13 +443,18 @@ public partial class IslandWindow : Window
         {
             _hover = over;
             _hoverSince = now;
-            if (over) _hoverTimer.Stop();
+            if (over)
+            {
+                _hoverTimer.Stop();
+                PetsHello();
+            }
             else
             {
                 _dwellBlocked = false;
                 ScheduleClose(0.4);
             }
         }
+        PetsLookAt(local);
 
         if (button)
         {
@@ -612,6 +622,7 @@ public partial class IslandWindow : Window
     {
         var text = DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture);
         if (CompactClock.Text != text) CompactClock.Text = text;
+        UpdatePet();
     }
 
     void LiveTick()
@@ -663,6 +674,7 @@ public partial class IslandWindow : Window
 
     void OnMedia(MediaSnapshot? snapshot)
     {
+        Touch();
         _mediaSnap = snapshot;
         var key = snapshot == null ? null : $"{snapshot.Title}|{snapshot.Artist}";
         var newTrack = key != null && key != _trackKey;
@@ -863,8 +875,13 @@ public partial class IslandWindow : Window
             session.Update(m.State, m.Detail);
 
             if (m.State == "waiting" && !wasWaiting) ShowAlert(session, "\uEA8F", $"{session.Agent} precisa de você");
-            else if (m.State == "done") ShowAlert(session, "\uE73E", $"{session.Agent} terminou");
+            else if (m.State == "done")
+            {
+                ShowAlert(session, "\uE73E", $"{session.Agent} terminou");
+                PetsCelebrate();
+            }
         }
+        Touch();
 
         if (_expanded && _page == PageAgents) RefreshPage();
         Retarget();
@@ -882,6 +899,7 @@ public partial class IslandWindow : Window
         AlertTitle.Text = title;
         AlertDetail.Text = detail;
         Pulse((ScaleTransform)AlertOrb.RenderTransform, pulse);
+        AlertPetFor(orb, pulse);
         ShowTransient(Transient.AgentAlert, seconds);
     }
 
@@ -905,7 +923,7 @@ public partial class IslandWindow : Window
         var many = active.Count > 1;
         CompactAgentCount.Visibility = Vis(many);
         CompactAgentCountText.Text = active.Count.ToString(CultureInfo.CurrentCulture);
-        CompactAgentText.Margin = new Thickness(32, 0, many ? 36 : 16, 0);
+        CompactAgentText.Margin = new Thickness(PetOn ? 38 : 32, 0, many ? 36 : 16, 0);
     }
 
     static void Pulse(ScaleTransform scale, bool on)

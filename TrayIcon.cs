@@ -15,6 +15,8 @@ sealed class TrayIcon : IDisposable
         var shape = new WinForms.ToolStripMenuItem("Formato");
         shape.DropDownItems.AddRange([pill, notch]);
         var discreet = new WinForms.ToolStripMenuItem("Recolher quando ocioso", null, (_, _) => app.ToggleDiscreet());
+        var theme = new WinForms.ToolStripMenuItem("Tema");
+        var pet = new WinForms.ToolStripMenuItem("Bichinho (Pipoca)", null, (_, _) => app.TogglePet());
         var startup = new WinForms.ToolStripMenuItem("Iniciar com o Windows", null, (_, _) => app.ToggleStartup());
         var copilot = new WinForms.ToolStripMenuItem("Conectar Copilot (VS Code)", null, (_, _) => app.ToggleCopilotHooks());
         var hooks = new WinForms.ToolStripMenuItem("Copiar hooks do Claude Code", null, (_, _) => app.CopyClaudeHooks());
@@ -28,12 +30,19 @@ sealed class TrayIcon : IDisposable
         var exit = new WinForms.ToolStripMenuItem("Sair", null, (_, _) => app.Quit());
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.AddRange([shape, discreet, monitor, notifications, startup, new WinForms.ToolStripSeparator(),
+        menu.Items.AddRange([shape, theme, pet, discreet, monitor, notifications, startup, new WinForms.ToolStripSeparator(),
             copilot, hooks, new WinForms.ToolStripSeparator(), install, exit]);
         menu.Opening += (_, _) =>
         {
             copilot.Checked = App.CopilotConnected;
             discreet.Checked = app.Settings.DiscreetIdle;
+            pet.Checked = app.Settings.Pet;
+            theme.DropDownItems.Clear();
+            foreach (var (name, _) in IslandThemes.All)
+                theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, null, (_, _) => app.SetTheme(name))
+                {
+                    Checked = app.Settings.Theme == name,
+                });
             notifications.Checked = app.Settings.ShowNotifications;
             pill.Checked = app.Settings.Shape == IslandShape.Pill;
             notch.Checked = app.Settings.Shape == IslandShape.Notch;

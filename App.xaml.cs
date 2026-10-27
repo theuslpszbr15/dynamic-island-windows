@@ -128,6 +128,20 @@ public partial class App : Application
         _window.ApplyShape();
     }
 
+    public void SetTheme(string theme)
+    {
+        Settings.Theme = theme;
+        Settings.Save();
+        _window.ApplyShape();
+    }
+
+    public void TogglePet()
+    {
+        Settings.Pet = !Settings.Pet;
+        Settings.Save();
+        _window.ApplyShape();
+    }
+
     public void ToggleStartup()
     {
         if (StartupRegistration.IsEnabled)
@@ -246,6 +260,11 @@ public partial class App : Application
         menu.Items.Add(Item("Pílula flutuante", () => SetShape(IslandShape.Pill), Settings.Shape == IslandShape.Pill));
         menu.Items.Add(Item("Notch no topo", () => SetShape(IslandShape.Notch), Settings.Shape == IslandShape.Notch));
         menu.Items.Add(Item("Recolher quando ocioso", ToggleDiscreet, Settings.DiscreetIdle));
+        var themes = new MenuItem { Header = "Tema" };
+        foreach (var (name, _) in IslandThemes.All)
+            themes.Items.Add(Item(name, () => SetTheme(name), Settings.Theme == name));
+        menu.Items.Add(themes);
+        menu.Items.Add(Item("Bichinho (Pipoca)", TogglePet, Settings.Pet));
         var monitors = new MenuItem { Header = "Monitor" };
         foreach (var (id, label) in MonitorChoices())
             monitors.Items.Add(Item(label, () => SetMonitor(id), Settings.Monitor == id));

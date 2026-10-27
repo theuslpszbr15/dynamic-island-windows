@@ -25,9 +25,11 @@ atrapalhar: os cliques passam por ela.
 
 | | |
 |---|---|
+| **Pipoca, o bichinho** — um gatinho que mora na ilha: segue o mouse com os olhos, dança com a música, fica azul enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemora quando termina e dorme quando nada acontece. Clique nele: ele se irrita; três vezes rápido, fica tonto. | <img src="docs/img/09-agent-alert.png" width="380"> |
+| **Temas** — Obsidiana, Grafite, Ardósia, Oceano, Floresta, Café, Ameixa e Cereja. | <img src="docs/img/22-theme-ameixa.png" width="380"> |
 | **Mídia** — capa, título, progresso e controles de qualquer player (Spotify, YouTube…). A cor de destaque vem da capa. | <img src="docs/img/02-now-playing.png" width="380"> |
 | **Volume** — barra ao mudar o volume (role o mouse sobre ela para ajustar). | <img src="docs/img/04-volume.png" width="380"> |
-| **Agentes de IA** — azul trabalhando, laranja precisa de você, verde concluído. | <img src="docs/img/09-agent-alert.png" width="380"> |
+| **Agentes de IA** — azul trabalhando, laranja precisa de você, verde concluído. | <img src="docs/img/10-expanded-agents.png" width="380"> |
 | **Sistema** — CPU, memória, disco e bateria. | <img src="docs/img/06-expanded-system.png" width="380"> |
 | **Bandeja de arquivos** — arraste arquivos até a ilha, arraste de volta quando precisar. | <img src="docs/img/07-expanded-files.png" width="380"> |
 | **Timer / Pomodoro** — 5, 15, 25, 45 min ou 1 h; a contagem fica na ilha e ela toca um alarme no fim. | <img src="docs/img/15-expanded-timer.png" width="380"> |
@@ -42,7 +44,7 @@ atrapalhar: os cliques passam por ela.
 
 ## Configurações
 
-No ícone da bandeja (ou clique direito na ilha): formato pílula/notch, recolher quando ociosa, monitor,
+No ícone da bandeja (ou clique direito na ilha): formato pílula/notch, tema, bichinho, recolher quando ociosa, monitor,
 mostrar notificações, iniciar com o Windows, conectar Copilot, hooks do Claude Code e instalar/desinstalar.
 
 ## Compilar
@@ -84,6 +86,7 @@ demonstração (foi assim que as imagens acima foram geradas).
 |---|---|
 | `IslandWindow.xaml(.cs)` | Interface, animação de mola, estados e páginas |
 | `IslandWindow.Activities.cs` | Timer, notificações e indicador de microfone/câmera |
+| `PetView.cs`, `IslandWindow.Pet.cs` | Pipoca (desenhado com formas WPF, humores e reações) e temas |
 | `Services/NotificationService.cs` | Notificações do Windows (UserNotificationListener) |
 | `Services/PrivacyMonitor.cs` | Apps usando microfone/câmera (mesmos dados do indicador do Windows) |
 | `Services/Installer.cs` | Instalação por usuário, atalho e entrada em Aplicativos |

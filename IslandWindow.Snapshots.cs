@@ -14,6 +14,7 @@ public partial class IslandWindow
     {
         Directory.CreateDirectory(folder);
         _ready = true;
+        PetView.Still = true;
 
         async Task Shot(string name)
         {
@@ -112,6 +113,30 @@ public partial class IslandWindow
         _transient = Transient.None;
         Retarget();
         await Shot("19-privacy-dots");
+
+        OnPrivacy(PrivacyState.None);
+        _settings.DiscreetIdle = false;
+        _mediaSnap = null;
+        ApplyShape();
+        _lastActivity = DateTime.Now - TimeSpan.FromMinutes(5);
+        UpdatePet();
+        await Shot("20-pet-sleep");
+        Touch();
+        UpdatePet();
+        CompactPet.React(PetView.Mood.Dizzy, 3);
+        await Shot("21-pet-dizzy");
+
+        _settings.Theme = "Ameixa";
+        ApplyShape();
+        OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
+            TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now));
+        _transient = Transient.None;
+        SetExpanded(true, PageMedia);
+        await Shot("22-theme-ameixa");
+        SetExpanded(false);
+        _settings.Theme = "Oceano";
+        ApplyShape();
+        await Shot("23-theme-oceano-dance");
 
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),

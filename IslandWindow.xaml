@@ -140,6 +140,7 @@
 
                     <!-- ===== Compact ===== -->
                     <Grid x:Name="CompactView" Height="34" VerticalAlignment="Top">
+                        <local:PetView x:Name="CompactPet" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,1" Panel.ZIndex="1" />
                         <TextBlock x:Name="CompactClock" Text="00:00" FontSize="13.5" FontWeight="SemiBold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
 
@@ -167,7 +168,7 @@
                         </Grid>
 
                         <Grid x:Name="CompactTimer" Visibility="Collapsed">
-                            <Grid Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <Grid x:Name="CompactTimerRing" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0">
                                 <Ellipse Stroke="#45FF9F0A" StrokeThickness="2.5" />
                                 <Path x:Name="CompactTimerArc" Stroke="#FFFF9F0A" StrokeThickness="2.5"
                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
@@ -239,6 +240,9 @@
                         </Grid>
 
                         <Grid x:Name="AlertPanel" Height="78" VerticalAlignment="Top" Margin="16,0,20,0" Visibility="Collapsed">
+                            <Viewbox x:Name="AlertPetBox" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed">
+                                <local:PetView x:Name="AlertPet" />
+                            </Viewbox>
                             <Grid Width="38" Height="38" HorizontalAlignment="Left" VerticalAlignment="Center">
                                 <Ellipse x:Name="AlertOrb" Fill="#FFFF9F0A" RenderTransformOrigin="0.5,0.5">
                                     <Ellipse.RenderTransform>
@@ -272,6 +276,9 @@
                                 <RowDefinition Height="10" />
                             </Grid.RowDefinitions>
 
+                            <Viewbox x:Name="HeaderPetBox" Width="21" Height="21" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,-1,0,0">
+                                <local:PetView x:Name="HeaderPet" />
+                            </Viewbox>
                             <TextBlock x:Name="PageTitle" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
                             <TextBlock x:Name="HeaderInfo" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
 
