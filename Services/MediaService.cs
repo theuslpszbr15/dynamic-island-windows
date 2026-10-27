@@ -28,8 +28,10 @@ public sealed record MediaSnapshot(
     }
 }
 
-/// <summary>
-/// Tracks the current Windows media session (Spotify, browsers, etc.) via GSMTC. Apps that never publish
+/// <summary>An app that has a media session; Playing is a snapshot at listing time.</summary>
+public sealed record MediaSource(string Id, string Name, bool Playing);
+
+/// <summary> (Spotify, browsers, etc.) via GSMTC. Apps that never publish
 /// one (Photos, some players, browsers with media keys disabled) are picked up from their audio output.
 /// </summary>
 public sealed class MediaService(Dispatcher ui)
@@ -54,8 +56,23 @@ public sealed class MediaService(Dispatcher ui)
     int _heardPid, _heardTicks;
     DateTime _lastHeard, _resolvedAt;
     bool _resolving, _sampling;
+    string? _pinned;
 
     public event Action<MediaSnapshot?>? Changed;
+    public event Action? SourcesChanged;
+
+    /// <summary>Apps with a media session right now (Id = AppUserModelId).</summary>
+    public IReadOnlyList<MediaSource> Sources { get; private set; } = [];
+
+    /// <summary>The session the island is showing/controlling, or null for the audio fallback.</summary>
+    public string? CurrentId => UsingFallback ? null : _session?.SourceAppUserModelId;
+
+    /// <summary>Sticks to one app's session (while it exists) instead of following whatever plays.</summary>
+    public void Pin(string id)
+    {
+        _pinned = id;
+        Attach();
+    }
 
     public async Task StartAsync()
     {
@@ -83,7 +100,27 @@ public sealed class MediaService(Dispatcher ui)
             _session.PlaybackInfoChanged += OnPlaybackInfo;
             _session.TimelinePropertiesChanged += OnTimeline;
         }
+        UpdateSources();
         Refresh();
+    }
+
+    void UpdateSources()
+    {
+        List<MediaSource> sources = [];
+        try
+        {
+            foreach (var s in _manager?.GetSessions() ?? [])
+            {
+                var id = s.SourceAppUserModelId;
+                if (string.IsNullOrEmpty(id) || sources.Any(x => x.Id == id) || Ignored.Contains(SourceName(id))) continue;
+                var playing = s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+                sources.Add(new MediaSource(id, SourceName(id), playing));
+            }
+        }
+        catch { }
+        if (sources.SequenceEqual(Sources)) return;
+        Sources = sources;
+        SourcesChanged?.Invoke();
     }
 
     // The "current" session can be a paused tab while another app plays; prefer whichever is playing.
@@ -91,7 +128,14 @@ public sealed class MediaService(Dispatcher ui)
     {
         try
         {
-            var playing = _manager?.GetSessions().FirstOrDefault(s =>
+            var sessions = _manager?.GetSessions().ToList() ?? [];
+            if (_pinned != null)
+            {
+                var pinned = sessions.FirstOrDefault(s => s.SourceAppUserModelId == _pinned);
+                if (pinned != null) return pinned;
+                _pinned = null;
+            }
+            var playing = sessions.FirstOrDefault(s =>
                 s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
             return playing ?? _manager?.GetCurrentSession();
         }

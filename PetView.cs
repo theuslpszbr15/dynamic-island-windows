@@ -11,6 +11,9 @@ namespace DynamicIsland;
 
 public enum PetSpecies { None, Coco, Pipoca, Bu }
 
+/// <summary>Accessory on top of the mascot. Auto follows the calendar (Christmas, festa junina, New Year).</summary>
+public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa }
+
 /// <summary>
 /// The island's mascot, drawn from shapes on a 24×24 canvas (scale it with a Viewbox). Coco (the island's own
 /// little coconut), Pipoca (a cat) and Bu (a ghost) share one face; a base mood follows what the island shows
@@ -44,6 +47,23 @@ public sealed class PetView : Canvas
         SpeciesChanged?.Invoke();
     }
 
+    public static PetOutfit DefaultOutfit { get; private set; } = PetOutfit.Auto;
+
+    public static void SetDefaultOutfit(PetOutfit outfit)
+    {
+        if (outfit == DefaultOutfit) return;
+        DefaultOutfit = outfit;
+        SpeciesChanged?.Invoke();
+    }
+
+    public static PetOutfit Resolve(PetOutfit outfit, DateTime date) => outfit != PetOutfit.Auto ? outfit : date switch
+    {
+        { Month: 12, Day: 31 } or { Month: 1, Day: 1 } => PetOutfit.Festa,
+        { Month: 12 } => PetOutfit.Noel,
+        { Month: 6 or 7 } => PetOutfit.Palha,
+        _ => PetOutfit.None,
+    };
+
     public static readonly DependencyProperty TintColorProperty = DependencyProperty.Register(
         nameof(TintColor), typeof(Color), typeof(PetView),
         new PropertyMetadata(Colors.Transparent, (d, e) => ((PetView)d).Tint((Color)e.NewValue is { A: > 0 } c ? c : null)));
@@ -60,12 +80,14 @@ public sealed class PetView : Canvas
     readonly RotateTransform _tilt = new(0, 12, 20);
     readonly ScaleTransform _squash = new(1, 1, 12, 23.5), _blink = new(1, 1, 12, 13.6), _eyeSize = new(1, 1, 12, 13.6);
     readonly Canvas _shell = new() { Width = 24, Height = 24 };
+    readonly Canvas _hat = new() { Width = 24, Height = 24 }, _glasses = new() { Width = 24, Height = 24 };
     readonly Canvas _eyes;
     readonly Path _happyEyes, _closedEyes, _annoyedEyes, _dizzyEyes;
     readonly TextBlock _z;
     readonly DispatcherTimer _blinkTimer, _reactionTimer;
 
     PetSpecies _species = PetSpecies.None;
+    PetOutfit _outfit = PetOutfit.None;
     Mood _base = Mood.Idle, _shown = Mood.Idle;
     bool _active = true;
     int _pokes;
@@ -105,6 +127,8 @@ public sealed class PetView : Canvas
         face.Children.Add(_dizzyEyes = Stroke(
             "M8.5,13.7 A0.25,0.25 0 1 1 8.0,13.7 A0.5,0.5 0 1 1 9.0,13.7 A1.0,1.0 0 1 1 7.0,13.7 A1.4,1.4 0 1 1 9.8,13.7 " +
             "M16.0,13.7 A0.25,0.25 0 1 1 15.5,13.7 A0.5,0.5 0 1 1 16.5,13.7 A1.0,1.0 0 1 1 14.5,13.7 A1.4,1.4 0 1 1 17.3,13.7", 0.6));
+        face.Children.Add(_glasses);
+        body.Children.Add(_hat);
 
         _z = new TextBlock { Text = "z", FontSize = 7, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Opacity = 0, RenderTransform = new TranslateTransform() };
         Children.Add(Place(_z, 19, -1));
@@ -123,7 +147,12 @@ public sealed class PetView : Canvas
             e.Handled = true;
         };
         Species = DefaultSpecies;
-        void Sync() => Species = DefaultSpecies;
+        Outfit = Resolve(DefaultOutfit, DateTime.Today);
+        void Sync()
+        {
+            Species = DefaultSpecies;
+            Outfit = Resolve(DefaultOutfit, DateTime.Today);
+        }
         Loaded += (_, _) =>
         {
             SpeciesChanged -= Sync;
@@ -166,6 +195,67 @@ public sealed class PetView : Canvas
                     _shell.Children.Add(Place(new Ellipse { Width = 1.7, Height = 2.1, Fill = Ink }, 11.15, 16.9));
                     break;
             }
+            DrawOutfit();
+        }
+    }
+
+    public PetOutfit Outfit
+    {
+        get => _outfit;
+        set
+        {
+            if (_outfit == value) return;
+            _outfit = value;
+            DrawOutfit();
+        }
+    }
+
+    // Hats are drawn with their brim on y = 0 and moved onto the top of each body.
+    void DrawOutfit()
+    {
+        _hat.Children.Clear();
+        _glasses.Children.Clear();
+        var top = _species switch { PetSpecies.Pipoca => 7.4, PetSpecies.Bu => 5.4, _ => 7.0 };
+        _hat.RenderTransform = new TranslateTransform(0, top);
+        static Brush B(uint argb) => Frozen(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
+        var white = B(0xFFF8F8F8);
+
+        switch (_outfit)
+        {
+            case PetOutfit.Gorro:
+                _hat.Children.Add(Fill("M5.6,0 C5.6,-6.2 18.4,-6.2 18.4,0 Z", B(0xFF0A84FF)));
+                _hat.Children.Add(new Path { Data = Geometry.Parse("M8.4,-4 L8.9,-1 M12,-4.9 L12,-1 M15.6,-4 L15.1,-1"), Stroke = B(0x40FFFFFF), StrokeThickness = 0.7, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
+                _hat.Children.Add(Place(new Rectangle { Width = 14.4, Height = 2.6, RadiusX = 1.3, RadiusY = 1.3, Fill = B(0xFF64B5FF) }, 4.8, -1.4));
+                _hat.Children.Add(Place(new Ellipse { Width = 3.2, Height = 3.2, Fill = white }, 10.4, -7.6));
+                break;
+            case PetOutfit.Festa:
+                _hat.Children.Add(Fill("M8.4,0.4 L12.6,-9.2 L16.2,0.4 Z", B(0xFFBF5AF2)));
+                _hat.Children.Add(Fill("M9.9,-3.4 L14.8,-3.4 L15.3,-2 L9.4,-2 Z M11.5,-7 L13.6,-7 L14,-5.8 L11,-5.8 Z", B(0xFFFFD60A)));
+                _hat.Children.Add(Place(new Ellipse { Width = 2.8, Height = 2.8, Fill = B(0xFFFF375F) }, 11.2, -10.6));
+                break;
+            case PetOutfit.Noel:
+                _hat.Children.Add(Fill("M5.4,0 C5.6,-6 14.6,-8.4 20.2,-3.6 C18.6,-3.2 18.6,-1.6 18.6,0 Z", B(0xFFE5242B)));
+                _hat.Children.Add(Place(new Rectangle { Width = 15, Height = 2.8, RadiusX = 1.4, RadiusY = 1.4, Fill = white }, 4.5, -1.5));
+                _hat.Children.Add(Place(new Ellipse { Width = 3.2, Height = 3.2, Fill = white }, 18.8, -5.2));
+                break;
+            case PetOutfit.Palha:
+                _hat.Children.Add(Place(new Ellipse { Width = 22, Height = 3.6, Fill = B(0xFFE9C46A) }, 1, -2.2));
+                _hat.Children.Add(Fill("M7.2,-0.8 C7.2,-6.2 16.8,-6.2 16.8,-0.8 Z", B(0xFFD9A441)));
+                _hat.Children.Add(Place(new Rectangle { Width = 9.6, Height = 1.3, Fill = B(0xFFE5242B) }, 7.2, -2.3));
+                break;
+            case PetOutfit.Coroa:
+                _hat.Children.Add(Fill("M6.6,-0.2 L6.2,-5.4 L9.4,-2.6 L12,-6.6 L14.6,-2.6 L17.8,-5.4 L17.4,-0.2 Z", B(0xFFFFD60A)));
+                foreach (var x in new[] { 6.2, 11.3, 17.0 })
+                    _hat.Children.Add(Place(new Ellipse { Width = 1.4, Height = 1.4, Fill = B(0xFFFF375F) }, x - 0.3, x == 11.3 ? -7.6 : -6.4));
+                break;
+            case PetOutfit.Oculos:
+                var lens = B(0xF01C1C1E);
+                _glasses.Children.Add(Place(new Rectangle { Width = 5, Height = 3.6, RadiusX = 1.6, RadiusY = 1.6, Fill = lens }, 5.8, 11.9));
+                _glasses.Children.Add(Place(new Rectangle { Width = 5, Height = 3.6, RadiusX = 1.6, RadiusY = 1.6, Fill = lens }, 13.2, 11.9));
+                _glasses.Children.Add(Place(new Rectangle { Width = 2.6, Height = 0.8, Fill = lens }, 10.7, 12.6));
+                _glasses.Children.Add(Place(new Rectangle { Width = 1.6, Height = 0.6, RadiusX = 0.3, RadiusY = 0.3, Fill = B(0x99FFFFFF) }, 6.7, 12.6));
+                _glasses.Children.Add(Place(new Rectangle { Width = 1.6, Height = 0.6, RadiusX = 0.3, RadiusY = 0.3, Fill = B(0x99FFFFFF) }, 14.1, 12.6));
+                break;
         }
     }
 

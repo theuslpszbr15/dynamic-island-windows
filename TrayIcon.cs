@@ -21,7 +21,20 @@ sealed class TrayIcon : IDisposable
         var copilot = new WinForms.ToolStripMenuItem("Conectar Copilot (VS Code)", null, (_, _) => app.ToggleCopilotHooks());
         var hooks = new WinForms.ToolStripMenuItem("Copiar hooks do Claude Code", null, (_, _) => app.CopyClaudeHooks());
         var monitor = new WinForms.ToolStripMenuItem("Monitor");
-        var notifications = new WinForms.ToolStripMenuItem("Mostrar notificações do Windows", null, (_, _) => app.ToggleNotifications());
+        var notifications = new WinForms.ToolStripMenuItem("Notificações do Windows", null, (_, _) => app.ToggleNotifications());
+        var lyrics = new WinForms.ToolStripMenuItem("Letra da música (LRCLIB)", null, (_, _) => app.ToggleLyrics());
+        var clipboard = new WinForms.ToolStripMenuItem("O que foi copiado", null, (_, _) => app.ToggleClipboard());
+        var lockKeys = new WinForms.ToolStripMenuItem("Caps Lock / Num Lock", null, (_, _) => app.ToggleLockKeys());
+        var shows = new WinForms.ToolStripMenuItem("Mostrar na ilha");
+        shows.DropDownItems.AddRange([notifications, lyrics, clipboard, lockKeys]);
+        var outfit = new WinForms.ToolStripMenuItem("Roupinha do mascote");
+        var desktopPet = new WinForms.ToolStripMenuItem("Mascote na área de trabalho", null, (_, _) => app.ToggleDesktopPet());
+        var recap = new WinForms.ToolStripMenuItem("Resumo da semana", null, (_, _) => app.ShowRecap());
+        var update = new WinForms.ToolStripMenuItem("Procurar atualizações", null, (_, _) =>
+        {
+            if (app.Update != null) app.InstallUpdate();
+            else app.CheckForUpdates(true);
+        });
         var install = new WinForms.ToolStripMenuItem("Instalar no computador", null, (_, _) =>
         {
             if (Services.Installer.IsInstalled) app.Uninstall();
@@ -30,12 +43,23 @@ sealed class TrayIcon : IDisposable
         var exit = new WinForms.ToolStripMenuItem("Sair", null, (_, _) => app.Quit());
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.AddRange([shape, theme, pet, discreet, monitor, notifications, startup, new WinForms.ToolStripSeparator(),
-            copilot, hooks, new WinForms.ToolStripSeparator(), install, exit]);
+        menu.Items.AddRange([shape, theme, pet, outfit, desktopPet, discreet, monitor, shows, recap, startup, new WinForms.ToolStripSeparator(),
+            copilot, hooks, new WinForms.ToolStripSeparator(), update, install, exit]);
         menu.Opening += (_, _) =>
         {
             copilot.Checked = App.CopilotConnected;
             discreet.Checked = app.Settings.DiscreetIdle;
+            lyrics.Checked = app.Settings.ShowLyrics;
+            clipboard.Checked = app.Settings.ShowClipboard;
+            lockKeys.Checked = app.Settings.ShowLockKeys;
+            desktopPet.Checked = app.Settings.DesktopPet;
+            update.Text = app.Update is { } u ? $"Atualizar para {u.Version.ToString(3)}" : "Procurar atualizações";
+            outfit.DropDownItems.Clear();
+            foreach (var (o, label) in App.Outfits)
+                outfit.DropDownItems.Add(new WinForms.ToolStripMenuItem(label, null, (_, _) => app.SetOutfit(o))
+                {
+                    Checked = app.Settings.Outfit == o,
+                });
             pet.DropDownItems.Clear();
             foreach (var (species, label) in App.Mascots)
                 pet.DropDownItems.Add(new WinForms.ToolStripMenuItem(label, null, (_, _) => app.SetMascot(species))

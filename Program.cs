@@ -32,6 +32,20 @@ public static class Program
             return 0;
         }
 
+        // Started from a downloaded release by the running island, which then quits: wait for it, install over it.
+        if (args.Length > 0 && args[0] == "--update")
+        {
+            using (var old = new Mutex(false, @"Local\DynamicIsland.SingleInstance"))
+            {
+                try { if (old.WaitOne(TimeSpan.FromSeconds(20))) old.ReleaseMutex(); }
+                catch (AbandonedMutexException) { }
+            }
+            var exe = Installer.Install();
+            App.RefreshCopilotHooks(exe);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "--replace") { UseShellExecute = true });
+            return 0;
+        }
+
         using var mutex = new Mutex(true, @"Local\DynamicIsland.SingleInstance", out var isFirst);
         if (!isFirst)
         {

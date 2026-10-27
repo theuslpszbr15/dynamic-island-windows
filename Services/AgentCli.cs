@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace DynamicIsland.Services;
 
@@ -8,19 +9,45 @@ namespace DynamicIsland.Services;
 /// Command-line entry points used by AI agents and scripts:
 ///   DynamicIsland.exe hook claude            (reads a Claude Code hook payload from stdin)
 ///   DynamicIsland.exe agent --name X --state working|waiting|done|idle|end [--text T] [--session S] [--cwd C]
-/// Never writes to stdout and always exits 0, so it can't block or alter the agent.
+/// Writes to stdout only to answer a Claude Code PermissionRequest that was decided on the island;
+/// always exits 0, so it can't block or break the agent.
 /// </summary>
 public static class AgentCli
 {
+    static readonly TimeSpan DecisionWait = TimeSpan.FromSeconds(55);
+
     public static int Run(string[] args)
     {
         try
         {
             var message = args[0] == "hook" ? FromHook(args.Length > 1 ? args[1] : "claude") : FromArgs(args);
-            if (message != null) Send(message);
+            if (message?.RequestId != null) AwaitDecision(message);
+            else if (message != null) Send(message);
         }
         catch { }
         return 0;
+    }
+
+    // Shows Allow/Deny on the island and relays the click. No answer (or no island) = no output, so
+    // Claude Code falls back to its own prompt in the terminal.
+    static void AwaitDecision(AgentMessage message)
+    {
+        using var server = new NamedPipeServerStream(AgentHub.ReplyPipe(message.RequestId!), PipeDirection.In, 1,
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        if (!Send(message)) return;
+        if (!server.WaitForConnectionAsync().Wait(DecisionWait)) return;
+        using var reader = new StreamReader(server, Encoding.UTF8);
+        var decision = reader.ReadToEnd().Trim();
+        if (decision is not ("allow" or "deny")) return;
+
+        var answer = new JsonObject { ["behavior"] = decision };
+        if (decision == "deny") answer["message"] = "Negado na Dynamic Island.";
+        var output = new JsonObject
+        {
+            ["hookSpecificOutput"] = new JsonObject { ["hookEventName"] = "PermissionRequest", ["decision"] = answer },
+        };
+        using var stdout = Console.OpenStandardOutput();
+        stdout.Write(Encoding.UTF8.GetBytes(output.ToJsonString()));
     }
 
     static AgentMessage? FromArgs(string[] args)
@@ -56,7 +83,7 @@ public static class AgentCli
             // Copilot also notifies shell/agent completions; only prompts for the user mean "waiting".
             "Notification" when notification is null or "permission_prompt" or "elicitation_dialog"
                 => ("waiting", Str(root, "message") ?? "Precisa da sua atenção"),
-            "PermissionRequest" => ("waiting", "Pedindo permissão"),
+            "PermissionRequest" => ("waiting", "Pedindo permissão: " + DescribeTool(Str(root, "tool_name"), root.TryGetProperty("tool_input", out var asked) ? asked : default)),
             "Stop" => ("done", "Concluído"),
             "SessionStart" => ("idle", "Sessão iniciada"),
             "SessionEnd" => ("end", null),
@@ -73,7 +100,10 @@ public static class AgentCli
         }
         else if (hookEvent == "UserPromptSubmit") step = "think";
 
-        return new AgentMessage(DisplayName(agent), Str(root, "session_id"), state, Clip(detail), Str(root, "cwd"), step, file, diff);
+        // Only Claude Code reads a decision back from this hook.
+        var requestId = hookEvent == "PermissionRequest" && agent.Equals("claude", StringComparison.OrdinalIgnoreCase)
+            ? Guid.NewGuid().ToString("N") : null;
+        return new AgentMessage(DisplayName(agent), Str(root, "session_id"), state, Clip(detail), Str(root, "cwd"), step, file, diff, requestId);
     }
 
     // What kind of step a tool is, which file it touches and, for edits, a short "-old / +new" diff.
@@ -198,13 +228,14 @@ public static class AgentCli
         return text.Length > 120 ? text[..119] + "…" : text;
     }
 
-    static void Send(AgentMessage message)
+    static bool Send(AgentMessage message)
     {
         using var client = new NamedPipeClientStream(".", AgentHub.PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly);
         try { client.Connect(400); }
-        catch { return; } // island not running
+        catch { return false; } // island not running
         var bytes = JsonSerializer.SerializeToUtf8Bytes(message, JsonSerializerOptions.Web);
         client.Write(bytes);
         client.Flush();
+        return true;
     }
 }

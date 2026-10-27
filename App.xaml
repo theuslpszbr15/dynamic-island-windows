@@ -4,7 +4,12 @@
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+        <!-- recoloured by the light theme (IslandWindow.ApplyLook) -->
         <SolidColorBrush x:Key="Muted" Color="#FF8E8E93" />
         <SolidColorBrush x:Key="Track" Color="#2EFFFFFF" />
+        <SolidColorBrush x:Key="Ink" Color="White" />
+        <SolidColorBrush x:Key="Card" Color="#1CFFFFFF" />
+        <SolidColorBrush x:Key="CardHover" Color="#33FFFFFF" />
+        <SolidColorBrush x:Key="Faint" Color="#66FFFFFF" />
     </Application.Resources>
 </Application>

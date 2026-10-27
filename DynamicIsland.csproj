@@ -13,7 +13,7 @@
     <StartupObject>DynamicIsland.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\DynamicIsland.ico</ApplicationIcon>
-    <Version>1.2.1</Version>
+    <Version>1.3.0</Version>
     <Product>Dynamic Island</Product>
     <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
@@ -28,6 +28,11 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\DynamicIsland.ico" LogicalName="DynamicIsland.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- laptop panel brightness (WmiMonitorBrightness) when the screen has no DDC/CI -->
+    <PackageReference Include="System.Management" Version="10.0.0" />
   </ItemGroup>
 
 </Project>

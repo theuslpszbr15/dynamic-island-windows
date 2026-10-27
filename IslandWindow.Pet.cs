@@ -13,7 +13,7 @@ public partial class IslandWindow
     System.Windows.Threading.DispatcherTimer? _glassTimer;
     bool _glassBusy;
 
-    PetView[] Pets => [CompactPet, HeaderPet, AlertPet, AgentPet];
+    PetView[] Pets => [CompactPet, HeaderPet, AlertPet, AgentPet, ApprovalPet];
     bool PetOn => _settings.Mascot != PetSpecies.None;
     bool Glass => _settings.Theme == IslandThemes.Glass;
 
@@ -28,10 +28,11 @@ public partial class IslandWindow
         IslandBg.Effect = Glass ? null : _shadow;
         GlassFill.Effect = Glass ? _shadow : null;
         ApplyGlass();
+        ApplyInk(_settings.Theme == IslandThemes.Light);
 
         var pet = PetOn;
         PetView.SetDefaultSpecies(_settings.Mascot);
-        CompactPet.Visibility = HeaderPetBox.Visibility = AlertPetBox.Visibility = Vis(pet);
+        CompactPet.Visibility = HeaderPetBox.Visibility = AlertPetBox.Visibility = ApprovalPetBox.Visibility = Vis(pet);
         AlertOrb.Visibility = AlertGlyph.Visibility = Vis(!pet);
         // The mascot takes the slot of the album art, the agent orb and the timer ring's left edge.
         CompactArt.Visibility = Vis(!pet);
@@ -40,6 +41,24 @@ public partial class IslandWindow
         CompactTimerRing.Margin = new Thickness(pet ? 38 : 12, 0, 0, 0);
         PageTitle.Margin = new Thickness(pet ? 27 : 0, 0, 0, 0);
         UpdatePet();
+    }
+
+    // Text and hairline brushes are shared app resources; the light theme turns them dark.
+    static void ApplyInk(bool light)
+    {
+        static void Set(string key, long argb)
+        {
+            var color = Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
+            var resources = Application.Current.Resources;
+            if (resources[key] is SolidColorBrush { IsFrozen: false } brush) brush.Color = color;
+            else resources[key] = new SolidColorBrush(color);
+        }
+        Set("Ink", light ? 0xFF1C1C1E : 0xFFFFFFFF);
+        Set("Muted", light ? 0xFF6E6E73 : 0xFF8E8E93);
+        Set("Track", light ? 0x1F000000 : 0x2EFFFFFF);
+        Set("Card", light ? 0x0F000000 : 0x1CFFFFFF);
+        Set("CardHover", light ? 0x1F000000 : 0x33FFFFFF);
+        Set("Faint", light ? 0x66000000 : 0x66FFFFFF);
     }
 
     // DWM's own blur only covers whole window rectangles, so the glass is made here from a capture of the
@@ -118,7 +137,9 @@ public partial class IslandWindow
         CompactPet.Active = !_expanded && !transient && !IsHandle;
         HeaderPet.Active = _expanded;
         AlertPet.Active = _transient == Transient.AgentAlert;
+        ApprovalPet.Active = _transient == Transient.Approval;
         AgentPet.Active = _expanded && _page == PageAgents;
+        ((App)Application.Current).DesktopPet?.Follow(mood, tint);
     }
 
     void PetsLookAt(Point cursorInRoot)
@@ -145,14 +166,23 @@ public partial class IslandWindow
     {
         Touch();
         if (PetOn) foreach (var p in Pets) p.React(PetView.Mood.Happy, 1.6);
+        ((App)Application.Current).DesktopPet?.Celebrate();
     }
 
     void AlertPetFor(Brush orb, bool waiting)
     {
+        if (waiting) ((App)Application.Current).DesktopPet?.Visit(IslandAnchor());
         if (!PetOn) return;
         AlertPet.Tint((orb as SolidColorBrush)?.Color);
         AlertPet.BaseMood = waiting ? PetView.Mood.Waiting : PetView.Mood.Idle;
         if (!waiting) AlertPet.React(PetView.Mood.Happy, 2);
+    }
+
+    /// <summary>Screen point (physical pixels) just under the island, where the desktop pet comes to call you.</summary>
+    Point IslandAnchor()
+    {
+        if (PresentationSource.FromVisual(Island) == null) return default;
+        return Island.PointToScreen(new Point(Island.ActualWidth / 2, Island.ActualHeight + 12));
     }
 
     void OnPetDizzy()

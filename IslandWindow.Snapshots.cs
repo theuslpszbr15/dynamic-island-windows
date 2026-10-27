@@ -15,6 +15,7 @@ public partial class IslandWindow
         Directory.CreateDirectory(folder);
         _ready = true;
         PetView.Still = true;
+        PetView.SetDefaultOutfit(PetOutfit.None);
 
         async Task Shot(string name)
         {
@@ -173,6 +174,96 @@ public partial class IslandWindow
         await Task.Delay(600);
         CaptureGlass(true);
         await Shot("27-glass-compact");
+
+        // ── 1.3: approvals, info pill, lyrics, system extras, calendar, outfits, light theme, recap
+        _settings.Theme = IslandThemes.Default;
+        ApplyShape();
+        var approval = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, "hook claude")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        using (var hook = System.Diagnostics.Process.Start(approval)!)
+        {
+            await hook.StandardInput.WriteAsync("""{"hook_event_name":"PermissionRequest","session_id":"s9","cwd":"C:\\dev\\dynamic-island","tool_name":"Bash","tool_input":{"command":"git push origin main"}}""");
+            hook.StandardInput.Close();
+            await Task.Delay(1500);
+            await Shot("28-approval");
+            Answer("allow");
+            var output = await hook.StandardOutput.ReadToEndAsync();
+            await hook.WaitForExitAsync();
+            File.WriteAllText(System.IO.Path.Combine(folder, "approval-output.txt"), output);
+        }
+        Agents.Clear();
+        _transient = Transient.None;
+        Retarget();
+
+        ShowInfo("\uE8C8", "git commit -m \"feat: ilha 1.3\"", "Copiado");
+        await Shot("29-info-clipboard");
+        ShowInfo("\uE765", "Caps Lock ativado", "ABC", glyphColor: AgentSession.Done);
+        await Shot("30-info-caps");
+        _transient = Transient.None;
+
+        OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
+            TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now, "Spotify"));
+        _transient = Transient.None;
+        _lyrics = LyricsService.Parse("[00:58.00]I've been on my own for long enough\n[01:12.00]I said, ooh, I'm blinded by the lights\n[01:20.00]No, I can't sleep until I feel your touch");
+        Retarget();
+        await Shot("31-compact-lyrics");
+        _lyrics = null;
+
+        SetExpanded(true, PageSystem);
+        BrightnessRow.Visibility = Visibility.Visible;
+        ShowBrightness(70);
+        ShowBluetooth([new("Galaxy Buds2", 80), new("MX Master 3", 12)]);
+        await Shot("32-system-brightness-bt");
+        SetWeather(new WeatherNow("Joinville", 24, 26, 78, 11, "Parcialmente nublado", 116, 19, 28));
+        ShowPage(PageCalendar, 1);
+        await Shot("33-calendar-weather");
+        SetExpanded(false);
+        _mediaSnap = null;
+        _transient = Transient.None;
+        Retarget();
+
+        var lineup = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E)),
+        };
+        var outfits = new[] { PetOutfit.Gorro, PetOutfit.Festa, PetOutfit.Noel, PetOutfit.Palha, PetOutfit.Oculos, PetOutfit.Coroa };
+        for (var i = 0; i < outfits.Length; i++)
+        {
+            var dressed = new PetView { Species = (PetSpecies)(1 + i % 3), BaseMood = PetView.Mood.Happy };
+            dressed.Outfit = outfits[i];
+            lineup.Children.Add(new System.Windows.Controls.Viewbox { Width = 96, Height = 96, Margin = new Thickness(14, 34, 14, 10), Child = dressed });
+        }
+        var lineupCard = new System.Windows.Controls.Border { CornerRadius = new CornerRadius(24), Child = lineup, ClipToBounds = true };
+        lineupCard.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        lineupCard.Arrange(new Rect(lineupCard.DesiredSize));
+        lineupCard.UpdateLayout();
+        RecapWindow.SaveCard(lineupCard, System.IO.Path.Combine(folder, "34-outfits.png"));
+
+        _settings.Theme = IslandThemes.Light;
+        ApplyShape();
+        OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
+            TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now, "Spotify"));
+        _transient = Transient.None;
+        SetExpanded(true, PageMedia);
+        await Shot("35-light-media");
+        ShowPage(PageSystem, 1);
+        await Shot("36-light-system");
+        SetExpanded(false);
+        await Shot("37-light-compact");
+        _settings.Theme = IslandThemes.Default;
+        ApplyShape();
+
+        var card = RecapWindow.BuildCard(new WeekRecap(DateOnly.FromDateTime(DateTime.Today.AddDays(-7)), DateOnly.FromDateTime(DateTime.Today.AddDays(-1)),
+            5 * 3600 + 47 * 60, 128, 342, 23, 9, "dynamic-island", DayOfWeek.Wednesday, 6));
+        card.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        card.Arrange(new Rect(card.DesiredSize));
+        card.UpdateLayout();
+        RecapWindow.SaveCard(card, System.IO.Path.Combine(folder, "38-recap.png"));
 
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),

@@ -36,10 +36,127 @@ public partial class App : Application
         }
 
         Settings = IslandSettings.Load();
+        PetView.SetDefaultOutfit(Settings.Outfit);
         _window = new IslandWindow(Settings);
         _window.Show();
         _tray = new TrayIcon(this);
         if (Installer.IsInstalled) RepairInstalledPaths();
+        if (Settings.DesktopPet) ShowDesktopPet(true);
+
+        // Look for a new release shortly after start, then twice a day.
+        var updates = new DispatcherTimer { Interval = TimeSpan.FromSeconds(45) };
+        updates.Tick += (_, _) =>
+        {
+            updates.Interval = TimeSpan.FromHours(12);
+            if (Settings.CheckUpdates) CheckForUpdates(false);
+        };
+        updates.Start();
+    }
+
+    public DesktopPetWindow? DesktopPet { get; private set; }
+    public UpdateInfo? Update { get; private set; }
+
+    public static readonly (PetOutfit Outfit, string Label)[] Outfits =
+    [
+        (PetOutfit.Auto, "Automática (datas especiais)"),
+        (PetOutfit.None, "Nenhuma"),
+        (PetOutfit.Gorro, "Gorro"),
+        (PetOutfit.Festa, "Chapéu de festa"),
+        (PetOutfit.Noel, "Gorro de Natal"),
+        (PetOutfit.Palha, "Chapéu de palha"),
+        (PetOutfit.Oculos, "Óculos escuros"),
+        (PetOutfit.Coroa, "Coroa"),
+    ];
+
+    public void SetOutfit(PetOutfit outfit)
+    {
+        Settings.Outfit = outfit;
+        Settings.Save();
+        PetView.SetDefaultOutfit(outfit);
+    }
+
+    public void ToggleLyrics()
+    {
+        Settings.ShowLyrics = !Settings.ShowLyrics;
+        Settings.Save();
+        _window.ApplyLyrics();
+    }
+
+    public void ToggleClipboard()
+    {
+        Settings.ShowClipboard = !Settings.ShowClipboard;
+        Settings.Save();
+    }
+
+    public void ToggleLockKeys()
+    {
+        Settings.ShowLockKeys = !Settings.ShowLockKeys;
+        Settings.Save();
+    }
+
+    public void ToggleUpdates()
+    {
+        Settings.CheckUpdates = !Settings.CheckUpdates;
+        Settings.Save();
+    }
+
+    public void ToggleDesktopPet()
+    {
+        Settings.DesktopPet = !Settings.DesktopPet;
+        Settings.Save();
+        ShowDesktopPet(Settings.DesktopPet);
+    }
+
+    void ShowDesktopPet(bool show)
+    {
+        if (show && DesktopPet == null)
+        {
+            DesktopPet = new DesktopPetWindow(Settings);
+            DesktopPet.Show();
+        }
+        else if (!show && DesktopPet != null)
+        {
+            DesktopPet.Close();
+            DesktopPet = null;
+        }
+    }
+
+    public void ShowRecap() => new RecapWindow(AgentStats.LastWeek()).Show();
+
+    public async void CheckForUpdates(bool manual)
+    {
+        try
+        {
+            Update = await Updater.CheckAsync();
+            if (Update != null)
+                _window.ShowInfo("\uE896", $"Versão {Update.Version.ToString(3)} disponível", "Atualizar",
+                    glyphColor: System.Windows.Media.Color.FromRgb(0x0A, 0x84, 0xFF), action: InstallUpdate, seconds: 10);
+            else if (manual)
+                _tray.Balloon("Tudo em dia", $"Você já tem a versão mais recente ({Updater.Current.ToString(3)}).");
+        }
+        catch (Exception ex)
+        {
+            if (manual) _tray.Balloon("Não foi possível procurar atualizações", ex.Message);
+        }
+    }
+
+    public async void InstallUpdate()
+    {
+        if (Update is not { } update) return;
+        var answer = MessageBox.Show($"Baixar e instalar a versão {update.Version.ToString(3)} agora? A ilha reinicia sozinha.",
+            "Atualizar Dynamic Island", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.OK) return;
+        try
+        {
+            _tray.Balloon("Baixando atualização", $"Versão {update.Version.ToString(3)}…");
+            var exe = await Updater.DownloadAsync(update);
+            Process.Start(new ProcessStartInfo(exe, "--update") { UseShellExecute = true });
+            Quit();
+        }
+        catch (Exception ex)
+        {
+            _tray.Balloon("Não foi possível atualizar", ex.Message);
+        }
     }
 
     // Keeps autostart and the Copilot hook pointing at this installed copy (e.g. after an update).
@@ -167,11 +284,13 @@ public partial class App : Application
         var exe = (Environment.ProcessPath ?? "DynamicIsland.exe").Replace('\\', '/');
         var command = $"\"{exe}\" hook claude";
 
-        JsonArray Entry(string? matcher)
+        JsonArray Entry(string? matcher, int? timeout = null)
         {
             var entry = new JsonObject();
             if (matcher != null) entry["matcher"] = matcher;
-            entry["hooks"] = new JsonArray(new JsonObject { ["type"] = "command", ["command"] = command });
+            var hook = new JsonObject { ["type"] = "command", ["command"] = command };
+            if (timeout != null) hook["timeout"] = timeout;
+            entry["hooks"] = new JsonArray(hook);
             return new JsonArray(entry);
         }
 
@@ -181,6 +300,8 @@ public partial class App : Application
             ["PreToolUse"] = Entry("*"),
             ["PostToolUse"] = Entry("*"),
             ["Notification"] = Entry(null),
+            // waits up to 55 s for Allow/Deny on the island, then Claude asks in the terminal as usual
+            ["PermissionRequest"] = Entry("*", 60),
             ["Stop"] = Entry(null),
             ["SessionEnd"] = Entry(null),
         };
@@ -276,16 +397,31 @@ public partial class App : Application
         foreach (var (species, label) in Mascots)
             mascots.Items.Add(Item(label, () => SetMascot(species), Settings.Mascot == species));
         menu.Items.Add(mascots);
+        var outfits = new MenuItem { Header = "Roupinha do mascote" };
+        foreach (var (outfit, label) in Outfits)
+            outfits.Items.Add(Item(label, () => SetOutfit(outfit), Settings.Outfit == outfit));
+        menu.Items.Add(outfits);
+        menu.Items.Add(Item("Mascote na área de trabalho", ToggleDesktopPet, Settings.DesktopPet));
         var monitors = new MenuItem { Header = "Monitor" };
         foreach (var (id, label) in MonitorChoices())
             monitors.Items.Add(Item(label, () => SetMonitor(id), Settings.Monitor == id));
         menu.Items.Add(monitors);
-        menu.Items.Add(Item("Mostrar notificações do Windows", ToggleNotifications, Settings.ShowNotifications));
+        var shows = new MenuItem { Header = "Mostrar na ilha" };
+        shows.Items.Add(Item("Notificações do Windows", ToggleNotifications, Settings.ShowNotifications));
+        shows.Items.Add(Item("Letra da música (LRCLIB)", ToggleLyrics, Settings.ShowLyrics));
+        shows.Items.Add(Item("O que foi copiado", ToggleClipboard, Settings.ShowClipboard));
+        shows.Items.Add(Item("Caps Lock / Num Lock", ToggleLockKeys, Settings.ShowLockKeys));
+        menu.Items.Add(shows);
+        menu.Items.Add(Item("Resumo da semana", ShowRecap));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Iniciar com o Windows", ToggleStartup, StartupRegistration.IsEnabled));
         menu.Items.Add(Item("Conectar Copilot (VS Code)", ToggleCopilotHooks, CopilotConnected));
         menu.Items.Add(Item("Copiar hooks do Claude Code", CopyClaudeHooks));
         menu.Items.Add(new Separator());
+        menu.Items.Add(Update is { } update
+            ? Item($"Atualizar para {update.Version.ToString(3)}", InstallUpdate)
+            : Item("Procurar atualizações", () => CheckForUpdates(true)));
+        menu.Items.Add(Item("Avisar quando houver atualização", ToggleUpdates, Settings.CheckUpdates));
         menu.Items.Add(Installer.IsInstalled ? Item("Desinstalar", Uninstall) : Item("Instalar no computador", Install));
         menu.Items.Add(Item("Sair", Quit));
         return menu;
@@ -294,6 +430,7 @@ public partial class App : Application
     public void Quit()
     {
         _tray.Dispose();
+        DesktopPet?.Close();
         _window.Teardown();
         Settings.Save();
         Shutdown();

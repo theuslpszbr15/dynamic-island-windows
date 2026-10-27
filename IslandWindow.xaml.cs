@@ -18,11 +18,11 @@ namespace DynamicIsland;
 
 public partial class IslandWindow : Window
 {
-    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy }
+    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info }
     enum CompactKind { Clock, Media, Timer, Agent }
 
-    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer"];
+    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5;
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
 
@@ -53,7 +53,7 @@ public partial class IslandWindow : Window
 
     readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
-    readonly Border[] _dots = new Border[5];
+    readonly Border[] _dots = new Border[6];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
     Point _pressPoint;
@@ -71,9 +71,9 @@ public partial class IslandWindow : Window
         _battery = new BatteryService(Dispatcher);
         _hub = new AgentHub(Dispatcher);
         _notifications = new NotificationService(Dispatcher);
-        _page = Math.Clamp(settings.LastPage, 0, 4);
+        _page = Math.Clamp(settings.LastPage, 0, PageTitles.Length - 1);
 
-        _transientTimer = MakeTimer(1, () => { _transientTimer!.Stop(); _transient = Transient.None; Retarget(); });
+        _transientTimer = MakeTimer(1, TransientEnded);
         _hoverTimer = MakeTimer(0.2, CloseTick);
         _pollTimer = MakeTimer(0.033, PollTick);
         _clockTimer = MakeTimer(1, ClockTick);
@@ -152,6 +152,7 @@ public partial class IslandWindow : Window
         _volume.Start();
         _battery.Start();
         _hub.Start();
+        StartExtras();
         await _media.StartAsync();
         if (_settings.ShowNotifications) await _notifications.StartAsync();
 
@@ -211,6 +212,7 @@ public partial class IslandWindow : Window
     public void Teardown()
     {
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+        StopExtras();
         _notifications.Stop();
         _glassTimer?.Stop();
         _hub.Dispose();
@@ -254,6 +256,8 @@ public partial class IslandWindow : Window
             case Transient.NowPlaying: return new(360, 62);
             case Transient.AgentAlert:
             case Transient.Notification: return new(400, 78);
+            case Transient.Approval: return new(440, 112);
+            case Transient.Info: return new(340, 40);
         }
         if (IsHandle) return new(110, 8);
         var h = CompactHeight;
@@ -262,13 +266,19 @@ public partial class IslandWindow : Window
         return kind switch
         {
             CompactKind.Agent => new(290 + extra, h),
-            CompactKind.Media => new(220 + extra, h),
+            CompactKind.Media => new((LyricsOn ? 360 : 220) + extra, h),
             CompactKind.Timer => new(150 + extra + PetExtraWidth(kind), h),
             _ => new(132 + extra + PetExtraWidth(kind), h),
         };
     }
 
-    static Size ExpandedFor(int page) => page == PageAgents ? new(560, 236) : ExpandedSize;
+    static Size ExpandedFor(int page) => page switch
+    {
+        PageAgents => new(560, 236),
+        PageCalendar => new(520, 236),
+        PageSystem => new(450, 216),
+        _ => ExpandedSize,
+    };
 
     void Retarget()
     {
@@ -341,10 +351,13 @@ public partial class IslandWindow : Window
         AlertPanel.Visibility = Vis(_transient == Transient.AgentAlert);
         NotifyPanel.Visibility = Vis(_transient == Transient.Notification);
         PrivacyPanel.Visibility = Vis(_transient == Transient.Privacy);
+        ApprovalPanel.Visibility = Vis(_transient == Transient.Approval);
+        InfoPanel.Visibility = Vis(_transient == Transient.Info);
 
         var kind = Kind();
         CompactClock.Visibility = Vis(kind == CompactKind.Clock);
         CompactMedia.Visibility = Vis(kind == CompactKind.Media);
+        if (kind == CompactKind.Media) UpdateLyric();
         CompactAgent.Visibility = Vis(kind == CompactKind.Agent);
         CompactTimer.Visibility = Vis(kind == CompactKind.Timer);
         if (kind == CompactKind.Agent) UpdateCompactAgent();
@@ -411,10 +424,20 @@ public partial class IslandWindow : Window
 
     static int Priority(Transient t) => t switch
     {
+        Transient.Approval => 4,
         Transient.AgentAlert => 3,
         Transient.Battery or Transient.Notification or Transient.Privacy => 2,
         _ => 1,
     };
+
+    void TransientEnded()
+    {
+        _transientTimer.Stop();
+        var was = _transient;
+        _transient = Transient.None;
+        if (was == Transient.Approval) ShowApproval(); // the next one still waiting, if any
+        if (_transient == Transient.None) Retarget();
+    }
 
     void ShowTransient(Transient kind, double seconds)
     {
@@ -461,6 +484,7 @@ public partial class IslandWindow : Window
             }
         }
         PetsLookAt(local);
+        CheckLockKeys();
 
         if (button)
         {
@@ -476,10 +500,12 @@ public partial class IslandWindow : Window
         }
 
         var dwell = IsHandle ? 0.6 : 0.4;
-        if (over && !_expanded && !button && !_dwellBlocked && (now - _hoverSince).TotalSeconds >= dwell)
+        var answering = _transient == Transient.Approval;
+        if (over && !_expanded && !button && !_dwellBlocked && !answering && (now - _hoverSince).TotalSeconds >= dwell)
             SetExpanded(true);
 
-        var interactive = over && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen
+        var interactive = over && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
+                                   || (_transient == Transient.Info && _infoAction != null)
                                    || (!_settings.DiscreetIdle && !IsHandle));
         SetClickThrough(!interactive);
     }
@@ -500,6 +526,17 @@ public partial class IslandWindow : Window
     void Island_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_expanded) return;
+        if (_transient == Transient.Approval) return;
+        if (_transient == Transient.Info)
+        {
+            var action = _infoAction;
+            _infoAction = null;
+            _transientTimer.Stop();
+            _transient = Transient.None;
+            Retarget();
+            action?.Invoke();
+            return;
+        }
         if (_transient == Transient.Notification)
         {
             _transientTimer.Stop();
@@ -562,7 +599,7 @@ public partial class IslandWindow : Window
 
     // ───────────────────────── pages ─────────────────────────
 
-    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage];
+    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage];
 
     void ShowPage(int index, int direction)
     {
@@ -597,7 +634,7 @@ public partial class IslandWindow : Window
         {
             var active = i == _page;
             _dots[i].BeginAnimation(WidthProperty, new DoubleAnimation(active ? 16 : 5, Quick));
-            _dots[i].Background = active ? Brushes.White : new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF));
+            _dots[i].SetResourceReference(Border.BackgroundProperty, active ? "Ink" : "Faint");
         }
         RefreshPage();
     }
@@ -610,10 +647,11 @@ public partial class IslandWindow : Window
         switch (_page)
         {
             case PageMedia: UpdateMediaUi(); break;
-            case PageSystem: SampleSystem(); break;
+            case PageSystem: SampleSystem(); SampleBrightness(); break;
             case PageFiles: FilesEmpty.Visibility = Vis(Files.Count == 0); break;
             case PageAgents: UpdateAgentDetail(); break;
             case PageTimer: UpdateTimerUi(); break;
+            case PageCalendar: UpdateCalendar(); break;
         }
     }
 
@@ -632,6 +670,7 @@ public partial class IslandWindow : Window
     {
         var text = DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture);
         if (CompactClock.Text != text) CompactClock.Text = text;
+        if (_transient == Transient.Approval) UpdateApprovalElapsed();
         UpdatePet();
     }
 
@@ -656,7 +695,7 @@ public partial class IslandWindow : Window
 
     void GuardTick()
     {
-        var hide = Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4;
+        var hide = _userHidden || (Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4);
         if (hide != _hiddenFullscreen)
         {
             _hiddenFullscreen = hide;
@@ -702,6 +741,8 @@ public partial class IslandWindow : Window
         NowArt.Background = art;
         NowTitle.Text = snapshot?.Title ?? "";
         NowArtist.Text = snapshot?.Artist ?? "";
+        LoadLyrics(snapshot);
+        HighlightSourceChips();
 
         if (_expanded && _page == PageMedia) RefreshPage();
         if (newTrack && snapshot!.IsPlaying) ShowTransient(Transient.NowPlaying, 3.2);
@@ -805,7 +846,7 @@ public partial class IslandWindow : Window
         var pct = (int)Math.Round(level * 100);
         VolumeText.Text = muted ? "—" : pct.ToString(CultureInfo.CurrentCulture);
         VolumeIcon.Text = muted || pct == 0 ? "\uE74F" : pct < 34 ? "\uE993" : pct < 67 ? "\uE994" : "\uE995";
-        VolumeFill.Background = muted ? new SolidColorBrush(Color.FromRgb(0x63, 0x63, 0x66)) : Brushes.White;
+        VolumeFill.Background = muted ? new SolidColorBrush(Color.FromRgb(0x63, 0x63, 0x66)) : (Brush)FindResource("Ink");
         VolumeScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(muted ? 0 : level, Quick));
         ShowTransient(Transient.Volume, 1.6);
     }
@@ -833,7 +874,7 @@ public partial class IslandWindow : Window
     Meter AddMeter(string label)
     {
         var meter = new Meter(label);
-        SystemPage.Children.Add(meter.Root);
+        SystemMeters.Children.Add(meter.Root);
         return meter;
     }
 
@@ -867,6 +908,14 @@ public partial class IslandWindow : Window
     {
         var key = $"{m.Agent}|{m.Session ?? "default"}";
         var session = Agents.FirstOrDefault(a => a.Key == key);
+        var project = string.IsNullOrEmpty(m.Cwd) ? "" : System.IO.Path.GetFileName(m.Cwd.TrimEnd('\\', '/'));
+        // Time since the previous event of a working session counts as work (capped, in case a hook was missed).
+        var worked = session?.State == "working" ? DateTime.Now - session.UpdatedAt : TimeSpan.Zero;
+        if (worked > TimeSpan.FromMinutes(10)) worked = TimeSpan.FromMinutes(10);
+        AgentStats.Record(m.Step, session == null && m.State != "end", false, worked,
+            string.IsNullOrEmpty(project) ? session?.Project : project);
+        // Anything but "waiting" means the question was answered in the terminal.
+        if (m.State != "waiting") ClearApprovals(key);
 
         if (m.State == "end")
         {
@@ -876,7 +925,6 @@ public partial class IslandWindow : Window
         {
             if (session == null)
             {
-                var project = string.IsNullOrEmpty(m.Cwd) ? "" : System.IO.Path.GetFileName(m.Cwd.TrimEnd('\\', '/'));
                 session = new AgentSession(key, m.Agent, project);
                 Agents.Insert(0, session);
             }
@@ -888,7 +936,8 @@ public partial class IslandWindow : Window
             session.Update(m.State, m.Detail);
             session.Record(m.Step, m.File, m.Diff);
 
-            if (m.State == "waiting" && !wasWaiting) ShowAlert(session, "\uEA8F", $"{session.Agent} precisa de você");
+            if (m.RequestId != null) AddApproval(session, m);
+            else if (m.State == "waiting" && !wasWaiting) ShowAlert(session, "\uEA8F", $"{session.Agent} precisa de você");
             else if (m.State == "done")
             {
                 ShowAlert(session, "\uE73E", $"{session.Agent} terminou");

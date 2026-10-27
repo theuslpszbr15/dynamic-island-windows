@@ -5,12 +5,12 @@
         Title="Dynamic Island" Width="640" Height="290"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" ShowActivated="False"
-        UseLayoutRounding="True" FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="White"
+        UseLayoutRounding="True" FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="{DynamicResource Ink}"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
 
     <Window.Resources>
         <Style x:Key="IconButton" TargetType="Button">
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="FontFamily" Value="{StaticResource Icons}" />
             <Setter Property="FontSize" Value="17" />
@@ -26,10 +26,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#22FFFFFF" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#38FFFFFF" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHover}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -45,7 +45,7 @@
         </Style>
 
         <Style x:Key="RoundButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
-            <Setter Property="Background" Value="#1CFFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource Card}" />
             <Setter Property="Width" Value="34" />
             <Setter Property="Height" Value="34" />
             <Setter Property="FontSize" Value="14" />
@@ -57,10 +57,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#4DFFFFFF" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHover}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -75,7 +75,7 @@
                     <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="7.5" FontWeight="Bold" Foreground="Black"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Grid>
-                <Path x:Name="Spin" Width="13" Height="13" HorizontalAlignment="Left" Visibility="Collapsed" Stroke="White" StrokeThickness="1.7"
+                <Path x:Name="Spin" Width="13" Height="13" HorizontalAlignment="Left" Visibility="Collapsed" Stroke="{DynamicResource Ink}" StrokeThickness="1.7"
                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M6.5,1.2 A5.3,5.3 0 1 1 1.2,6.5" RenderTransformOrigin="0.5,0.5">
                     <Path.RenderTransform>
                         <RotateTransform />
@@ -91,13 +91,13 @@
                         </EventTrigger>
                     </Path.Triggers>
                 </Path>
-                <TextBlock x:Name="Label" Text="{Binding Label}" FontSize="12" Margin="21,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                <TextBlock x:Name="Label" Text="{Binding Label}" FontSize="12" Margin="21,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsCurrent}" Value="True">
                     <Setter TargetName="Done" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="Spin" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Label" Property="Foreground" Value="White" />
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Ink}" />
                     <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
                 </DataTrigger>
             </DataTemplate.Triggers>
@@ -122,8 +122,8 @@
         </DataTemplate>
 
         <Style x:Key="Chip" TargetType="Button">
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="Background" Value="#1FFFFFFF" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+            <Setter Property="Background" Value="{DynamicResource Card}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Height" Value="34" />
@@ -153,11 +153,11 @@
         <DataTemplate x:Key="FileTemplate" DataType="{x:Type local:FileItem}">
             <Grid x:Name="Tile" Width="76" Margin="0,0,4,0" Background="Transparent" Cursor="Hand" ToolTip="{Binding Path}"
                   MouseLeftButtonDown="FileTile_MouseDown" MouseMove="FileTile_MouseMove" MouseLeftButtonUp="FileTile_MouseUp">
-                <Border x:Name="Hover" CornerRadius="14" Background="#16FFFFFF" Opacity="0" />
+                <Border x:Name="Hover" CornerRadius="14" Background="{DynamicResource Card}" Opacity="0" />
                 <StackPanel Margin="4,10,4,6">
                     <Image Source="{Binding Icon}" Width="40" Height="40" RenderOptions.BitmapScalingMode="HighQuality" />
                     <TextBlock Text="{Binding Name}" FontSize="10.5" Margin="0,6,0,0" TextAlignment="Center"
-                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="28" Foreground="#E6FFFFFF" />
+                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="28" Foreground="{DynamicResource Ink}" />
                 </StackPanel>
                 <Button x:Name="Remove" Style="{StaticResource TinyButton}" Content="&#xE711;" Visibility="Hidden"
                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,3,0" Click="FileRemove_Click" />
@@ -182,11 +182,11 @@
                 </Viewbox>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0">
                     <TextBlock Text="{Binding StateLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding OrbBrush}" HorizontalAlignment="Right" />
-                    <TextBlock Text="{Binding Elapsed}" FontSize="10.5" Foreground="{StaticResource Muted}" HorizontalAlignment="Right" />
+                    <TextBlock Text="{Binding Elapsed}" FontSize="10.5" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" />
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -247,6 +247,8 @@
                                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="7,0,0,0" />
                             <StackPanel x:Name="CompactEq" Orientation="Horizontal" Height="14"
                                         HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" />
+                            <TextBlock x:Name="CompactLyric" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Visibility="Collapsed"
+                                       VerticalAlignment="Center" Margin="40,0,44,0" />
                         </Grid>
 
                         <Grid x:Name="CompactAgent" Visibility="Collapsed">
@@ -286,8 +288,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="VolumeIcon" FontFamily="{StaticResource Icons}" FontSize="15" Text="&#xE995;" VerticalAlignment="Center" />
-                            <Border Grid.Column="1" Height="6" CornerRadius="3" Background="{StaticResource Track}" Margin="12,0" ClipToBounds="True">
-                                <Border x:Name="VolumeFill" Background="White" CornerRadius="3" RenderTransformOrigin="0,0.5">
+                            <Border Grid.Column="1" Height="6" CornerRadius="3" Background="{DynamicResource Track}" Margin="12,0" ClipToBounds="True">
+                                <Border x:Name="VolumeFill" Background="{DynamicResource Ink}" CornerRadius="3" RenderTransformOrigin="0,0.5">
                                     <Border.RenderTransform>
                                         <ScaleTransform x:Name="VolumeScale" ScaleX="0" />
                                     </Border.RenderTransform>
@@ -306,8 +308,54 @@
                         <Grid x:Name="PrivacyPanel" Height="40" VerticalAlignment="Top" Margin="16,0,18,0" Visibility="Collapsed">
                             <TextBlock x:Name="PrivacyIcon" FontFamily="{StaticResource Icons}" FontSize="15" VerticalAlignment="Center" />
                             <TextBlock x:Name="PrivacyText" FontSize="12.5" FontWeight="SemiBold" Margin="28,0,0,0" VerticalAlignment="Center" />
-                            <TextBlock x:Name="PrivacyApp" FontSize="12.5" Foreground="{StaticResource Muted}" MaxWidth="110"
+                            <TextBlock x:Name="PrivacyApp" FontSize="12.5" Foreground="{DynamicResource Muted}" MaxWidth="110"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid x:Name="InfoPanel" Height="40" VerticalAlignment="Top" Margin="16,0,18,0" Visibility="Collapsed">
+                            <TextBlock x:Name="InfoIcon" FontFamily="{StaticResource Icons}" FontSize="15" VerticalAlignment="Center" />
+                            <Border x:Name="InfoThumb" Width="26" Height="26" CornerRadius="6" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed" />
+                            <TextBlock x:Name="InfoText" FontSize="12.5" FontWeight="SemiBold" Margin="30,0,90,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="InfoRight" FontSize="12" Foreground="{DynamicResource Muted}" MaxWidth="86" TextTrimming="CharacterEllipsis"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- Claude Code asking for permission: answer from the island -->
+                        <Grid x:Name="ApprovalPanel" Height="112" VerticalAlignment="Top" Margin="16,0,16,0" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="62" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Viewbox x:Name="ApprovalPetBox" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <local:PetView x:Name="ApprovalPet" />
+                            </Viewbox>
+                            <StackPanel Margin="52,0,0,0" VerticalAlignment="Center">
+                                <TextBlock FontSize="13.5" TextTrimming="CharacterEllipsis">
+                                    <Run x:Name="ApprovalAgent" FontWeight="SemiBold" />
+                                    <Run Text=" esperando seu OK" Foreground="#FFFF9F0A" FontWeight="SemiBold" />
+                                    <Run x:Name="ApprovalElapsed" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                </TextBlock>
+                                <TextBlock x:Name="ApprovalDetail" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <Grid Grid.Row="1" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Style="{StaticResource Chip}" Margin="0" Background="#FF5A1D1D" Click="ApprovalDeny_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE711;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Text="Negar" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FF30D158" Foreground="Black" Click="ApprovalAllow_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Text="Permitir" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
                         </Grid>
 
                         <Grid x:Name="NotifyPanel" Height="78" VerticalAlignment="Top" Margin="16,0,20,0" Visibility="Collapsed">
@@ -319,10 +367,10 @@
                             <StackPanel Margin="52,0,0,0" VerticalAlignment="Center">
                                 <Grid>
                                     <TextBlock x:Name="NotifyTitle" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,70,0" />
-                                    <TextBlock x:Name="NotifyApp" FontSize="11" Foreground="{StaticResource Muted}" MaxWidth="70"
+                                    <TextBlock x:Name="NotifyApp" FontSize="11" Foreground="{DynamicResource Muted}" MaxWidth="70"
                                                TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                 </Grid>
-                                <TextBlock x:Name="NotifyBody" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                <TextBlock x:Name="NotifyBody" FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                                            TextTrimming="CharacterEllipsis" MaxHeight="34" Margin="0,1,0,0" />
                             </StackPanel>
                         </Grid>
@@ -332,7 +380,7 @@
                                     HorizontalAlignment="Left" VerticalAlignment="Center" />
                             <StackPanel Margin="54,0,44,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="NowTitle" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock x:Name="NowArtist" FontSize="12" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="NowArtist" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <StackPanel x:Name="NowEq" Orientation="Horizontal" Height="16" HorizontalAlignment="Right" VerticalAlignment="Center" />
                         </Grid>
@@ -352,7 +400,7 @@
                             </Grid>
                             <StackPanel Margin="52,0,0,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="AlertTitle" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock x:Name="AlertDetail" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                <TextBlock x:Name="AlertDetail" FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                                            TextTrimming="CharacterEllipsis" MaxHeight="34" Margin="0,1,0,0" />
                             </StackPanel>
                         </Grid>
@@ -377,8 +425,8 @@
                             <Viewbox x:Name="HeaderPetBox" Width="21" Height="21" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,-1,0,0">
                                 <local:PetView x:Name="HeaderPet" />
                             </Viewbox>
-                            <TextBlock x:Name="PageTitle" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
-                            <TextBlock x:Name="HeaderInfo" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock x:Name="PageTitle" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="HeaderInfo" FontSize="12" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
 
                             <Grid Grid.Row="1" Margin="0,6,0,4" ClipToBounds="True">
                                 <!-- Media -->
@@ -393,8 +441,10 @@
                                         </Grid.ColumnDefinitions>
                                         <Border x:Name="MediaArt" Width="104" Height="104" CornerRadius="18" Background="#FF1C1C1E" VerticalAlignment="Center">
                                             <TextBlock x:Name="MediaArtGlyph" FontFamily="{StaticResource Icons}" Text="&#xE8D6;" FontSize="32"
-                                                       Foreground="#55FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                       Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
+                                        <!-- one chip per app playing; click to control that one -->
+                                        <StackPanel x:Name="MediaSources" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6,0,0,-4" />
                                         <Grid Grid.Column="1" Margin="18,6,0,0">
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
@@ -404,8 +454,8 @@
                                             </Grid.RowDefinitions>
                                             <TextBlock x:Name="MediaTitle" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                             <StackPanel Grid.Row="1" Margin="0,1,0,0">
-                                                <TextBlock x:Name="MediaArtist" FontSize="12.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock x:Name="MediaSource" FontSize="11.5" Foreground="#80FFFFFF" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="MediaArtist" FontSize="12.5" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="MediaSource" FontSize="11.5" Foreground="{DynamicResource Faint}" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                             <Grid Grid.Row="2" VerticalAlignment="Center">
                                                 <Grid.ColumnDefinitions>
@@ -413,22 +463,22 @@
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock x:Name="MediaPos" FontSize="10.5" Foreground="{StaticResource Muted}" MinWidth="30" VerticalAlignment="Center" />
+                                                <TextBlock x:Name="MediaPos" FontSize="10.5" Foreground="{DynamicResource Muted}" MinWidth="30" VerticalAlignment="Center" />
                                                 <Grid x:Name="MediaTrack" Grid.Column="1" Height="12" Margin="6,0">
-                                                    <Border Height="4" CornerRadius="2" Background="{StaticResource Track}" ClipToBounds="True">
-                                                        <Border x:Name="MediaProgress" Background="White" CornerRadius="2" RenderTransformOrigin="0,0.5">
+                                                    <Border Height="4" CornerRadius="2" Background="{DynamicResource Track}" ClipToBounds="True">
+                                                        <Border x:Name="MediaProgress" Background="{DynamicResource Ink}" CornerRadius="2" RenderTransformOrigin="0,0.5">
                                                             <Border.RenderTransform>
                                                                 <ScaleTransform x:Name="MediaProgressScale" ScaleX="0" />
                                                             </Border.RenderTransform>
                                                         </Border>
                                                     </Border>
-                                                    <Ellipse x:Name="MediaKnob" Width="11" Height="11" Fill="White" HorizontalAlignment="Left">
+                                                    <Ellipse x:Name="MediaKnob" Width="11" Height="11" Fill="{DynamicResource Ink}" HorizontalAlignment="Left">
                                                         <Ellipse.RenderTransform>
                                                             <TranslateTransform x:Name="MediaKnobShift" X="-5.5" />
                                                         </Ellipse.RenderTransform>
                                                     </Ellipse>
                                                 </Grid>
-                                                <TextBlock x:Name="MediaDur" Grid.Column="2" FontSize="10.5" Foreground="{StaticResource Muted}" MinWidth="30" TextAlignment="Right" VerticalAlignment="Center" />
+                                                <TextBlock x:Name="MediaDur" Grid.Column="2" FontSize="10.5" Foreground="{DynamicResource Muted}" MinWidth="30" TextAlignment="Right" VerticalAlignment="Center" />
                                             </Grid>
                                             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
                                                 <Button Style="{StaticResource RoundButton}" Content="&#xE892;" Click="Prev_Click" />
@@ -439,19 +489,45 @@
                                         </Grid>
                                     </Grid>
                                     <StackPanel x:Name="MediaEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8D6;" FontSize="26" Foreground="#66FFFFFF" HorizontalAlignment="Center" />
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8D6;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
                                         <TextBlock Text="Nada tocando agora" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
                                         <TextBlock Text="Spotify, YouTube e outros players aparecem aqui" FontSize="11.5"
-                                                   Foreground="{StaticResource Muted}" HorizontalAlignment="Center" />
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
                                 </Grid>
 
                                 <!-- System -->
-                                <UniformGrid x:Name="SystemPage" Rows="2" Columns="2" Visibility="Collapsed">
-                                    <UniformGrid.RenderTransform>
+                                <Grid x:Name="SystemPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
                                         <TranslateTransform />
-                                    </UniformGrid.RenderTransform>
-                                </UniformGrid>
+                                    </Grid.RenderTransform>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <UniformGrid x:Name="SystemMeters" Rows="2" Columns="2" />
+                                    <Grid Grid.Row="1" Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid x:Name="BrightnessRow" Height="22" Margin="0,0,18,0">
+                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE706;" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
+                                            <Grid x:Name="BrightTrack" Margin="24,0,40,0" Height="22" Background="Transparent" Cursor="Hand"
+                                                  MouseLeftButtonDown="Bright_MouseDown" MouseMove="Bright_MouseMove" MouseLeftButtonUp="Bright_MouseUp">
+                                                <Border Height="6" CornerRadius="3" Background="{DynamicResource Track}" ClipToBounds="True" VerticalAlignment="Center">
+                                                    <Border Background="#FFFFD60A" CornerRadius="3" RenderTransformOrigin="0,0.5">
+                                                        <Border.RenderTransform>
+                                                            <ScaleTransform x:Name="BrightScale" ScaleX="0.5" />
+                                                        </Border.RenderTransform>
+                                                    </Border>
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock x:Name="BrightText" FontSize="11.5" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <StackPanel x:Name="BluetoothList" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Grid>
 
                                 <!-- Files -->
                                 <Grid x:Name="FilesPage" Visibility="Collapsed">
@@ -468,13 +544,13 @@
                                         </ItemsControl>
                                     </ScrollViewer>
                                     <StackPanel x:Name="FilesEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8B7;" FontSize="26" Foreground="#66FFFFFF" HorizontalAlignment="Center" />
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8B7;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
                                         <TextBlock Text="Arraste arquivos até a ilha" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
                                         <TextBlock Text="Eles ficam guardados aqui para você arrastar de volta depois" FontSize="11.5"
-                                                   Foreground="{StaticResource Muted}" HorizontalAlignment="Center" />
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
                                     <Grid x:Name="DropHint" Visibility="Collapsed" Background="#CC000000">
-                                        <Rectangle RadiusX="16" RadiusY="16" Stroke="#99FFFFFF" StrokeThickness="1.5" StrokeDashArray="4 3" />
+                                        <Rectangle RadiusX="16" RadiusY="16" Stroke="{DynamicResource Faint}" StrokeThickness="1.5" StrokeDashArray="4 3" />
                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" FontSize="24" HorizontalAlignment="Center" />
                                             <TextBlock Text="Solte para guardar" FontSize="13" FontWeight="SemiBold" Margin="0,6,0,0" />
@@ -503,7 +579,7 @@
                                                 </Border>
                                             </Grid>
                                             <TextBlock x:Name="AgentProject" FontSize="14.5" FontWeight="SemiBold" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock x:Name="AgentName" FontSize="11.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="AgentName" FontSize="11.5" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
                                             <ItemsControl x:Name="AgentSteps" Margin="0,6,0,0" ItemTemplate="{StaticResource StepTemplate}" />
                                         </StackPanel>
                                         <Border Grid.Column="1" CornerRadius="12" Background="#C80B0B0D" BorderBrush="#14FFFFFF" BorderThickness="1" Padding="10,8">
@@ -513,7 +589,7 @@
                                                         <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="*" />
                                                     </Grid.RowDefinitions>
-                                                    <Border HorizontalAlignment="Left" Background="#1AFFFFFF" CornerRadius="6" Padding="7,3,9,3" Margin="0,0,0,7">
+                                                    <Border HorizontalAlignment="Left" Background="{DynamicResource Card}" CornerRadius="6" Padding="7,3,9,3" Margin="0,0,0,7">
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE943;" FontSize="11" Foreground="#FF5AC8FA" VerticalAlignment="Center" />
                                                             <TextBlock x:Name="DiffFile" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Margin="6,0,0,0" VerticalAlignment="Center" />
@@ -527,11 +603,41 @@
                                         </Border>
                                     </Grid>
                                     <StackPanel x:Name="AgentsEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE99A;" FontSize="26" Foreground="#66FFFFFF" HorizontalAlignment="Center" />
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE99A;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
                                         <TextBlock Text="Nenhum agente ativo" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
                                         <TextBlock Text="Bandeja → Conectar Copilot (VS Code)" FontSize="11.5"
-                                                   Foreground="{StaticResource Muted}" HorizontalAlignment="Center" />
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
+                                </Grid>
+
+                                <!-- Calendar + weather -->
+                                <Grid x:Name="CalendarPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
+                                        <TranslateTransform />
+                                    </Grid.RenderTransform>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="230" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock x:Name="CalMonth" FontSize="13" FontWeight="SemiBold" Margin="2,0,0,4" />
+                                        <UniformGrid x:Name="CalGrid" Columns="7" />
+                                    </StackPanel>
+                                    <Border Grid.Column="1" Margin="16,0,0,0" CornerRadius="14" Background="{DynamicResource Card}" Padding="14,10">
+                                        <Grid>
+                                            <StackPanel x:Name="WeatherBox">
+                                                <TextBlock x:Name="WeatherPlace" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                    <TextBlock x:Name="WeatherIcon" FontFamily="{StaticResource Icons}" FontSize="26" VerticalAlignment="Center" Foreground="#FFFFD60A" />
+                                                    <TextBlock x:Name="WeatherTemp" FontSize="34" FontWeight="SemiBold" Margin="10,0,0,0" />
+                                                </StackPanel>
+                                                <TextBlock x:Name="WeatherDesc" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="WeatherMore" FontSize="11.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                            <TextBlock x:Name="WeatherEmpty" Text="Carregando o clima…" FontSize="12" Foreground="{DynamicResource Muted}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+                                        </Grid>
+                                    </Border>
                                 </Grid>
 
                                 <!-- Timer -->
@@ -542,7 +648,7 @@
                                     <StackPanel x:Name="TimerIdle" VerticalAlignment="Center">
                                         <TextBlock Text="Quanto tempo?" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                         <TextBlock Text="A contagem fica na ilha e ela avisa quando acabar" FontSize="11.5"
-                                                   Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,2,0,14" />
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,2,0,14" />
                                         <StackPanel x:Name="TimerPresets" Orientation="Horizontal" HorizontalAlignment="Center" />
                                     </StackPanel>
                                     <Grid x:Name="TimerRunning" Visibility="Collapsed">
@@ -552,7 +658,7 @@
                                         </Grid.RowDefinitions>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock x:Name="TimerBig" FontSize="46" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular" Margin="0,-6,0,0" />
-                                            <TextBlock x:Name="TimerCaption" FontSize="12" Foreground="{StaticResource Muted}" />
+                                            <TextBlock x:Name="TimerCaption" FontSize="12" Foreground="{DynamicResource Muted}" />
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                             <Button Style="{StaticResource IconButton}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
@@ -561,7 +667,7 @@
                                                     Width="50" Height="38" Margin="6,0" Click="TimerPause_Click" />
                                             <Button Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Parar" Click="TimerStop_Click" />
                                         </StackPanel>
-                                        <Border Grid.Row="1" Height="5" CornerRadius="2.5" Background="{StaticResource Track}" ClipToBounds="True" Margin="0,0,0,4">
+                                        <Border Grid.Row="1" Height="5" CornerRadius="2.5" Background="{DynamicResource Track}" ClipToBounds="True" Margin="0,0,0,4">
                                             <Border Background="#FFFF9F0A" CornerRadius="2.5" RenderTransformOrigin="0,0.5">
                                                 <Border.RenderTransform>
                                                     <ScaleTransform x:Name="TimerProgressScale" ScaleX="0" />
