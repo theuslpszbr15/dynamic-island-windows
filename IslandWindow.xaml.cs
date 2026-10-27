@@ -330,6 +330,11 @@ public partial class IslandWindow : Window
             ? new RectangleGeometry(new Rect(0, -r, w, h + r), r, r)
             : new RectangleGeometry(new Rect(0, 0, w, h), r, r);
         GlassFill.CornerRadius = GlassRim.CornerRadius = IslandBg.CornerRadius;
+        foreach (Border layer in ShadowLayers.Children)
+        {
+            var spread = -layer.Margin.Left;
+            layer.CornerRadius = flatTop ? new CornerRadius(0, 0, r + spread, r + spread) : new CornerRadius(r + spread);
+        }
         if (Glass) CaptureGlass();
     }
 

@@ -265,10 +265,49 @@ public partial class IslandWindow
         card.UpdateLayout();
         RecapWindow.SaveCard(card, System.IO.Path.Combine(folder, "38-recap.png"));
 
+        _settings.Theme = IslandThemes.Default;
+        _mediaSnap = null;
+        Agents.Clear();
+        _transient = Transient.None;
+        ApplyShape();
+        var perf = "default: " + await MeasureFrames() + Environment.NewLine;
+        File.WriteAllText(System.IO.Path.Combine(folder, "perf.txt"), perf);
+
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),
             $"managed={GC.GetTotalMemory(true) / 1048576.0:0.0}MB heap={info.HeapSizeBytes / 1048576.0:0.0}MB " +
             $"committed={info.TotalCommittedBytes / 1048576.0:0.0}MB private={Environment.WorkingSet / 1048576.0:0.0}MB");
+    }
+
+    /// <summary>Frame pacing and CPU while the island opens and closes a few times.</summary>
+    async Task<string> MeasureFrames()
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        List<double> gaps = [];
+        double last = -1;
+        void OnFrame(object? sender, EventArgs e)
+        {
+            var now = clock.Elapsed.TotalMilliseconds;
+            if (_animating && last >= 0) gaps.Add(now - last);
+            last = now;
+        }
+        var cpuBefore = process.TotalProcessorTime;
+        CompositionTarget.Rendering += OnFrame;
+        for (var i = 0; i < 4; i++)
+        {
+            SetExpanded(true, PageMedia);
+            await Task.Delay(900);
+            SetExpanded(false);
+            await Task.Delay(900);
+        }
+        CompositionTarget.Rendering -= OnFrame;
+        process.Refresh();
+        var cpu = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds;
+        gaps.Sort();
+        if (gaps.Count == 0) return "no frames";
+        return $"frames={gaps.Count} avg={gaps.Average():0.0}ms p95={gaps[(int)(gaps.Count * 0.95)]:0.0}ms max={gaps[^1]:0.0}ms " +
+               $"slow(>25ms)={gaps.Count(g => g > 25)} cpu={cpu:0}ms";
     }
 
     static BitmapSource DemoArt()

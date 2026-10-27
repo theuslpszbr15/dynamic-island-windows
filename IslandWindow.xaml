@@ -205,12 +205,16 @@
                   PreviewMouseWheel="Island_PreviewMouseWheel"
                   DragEnter="Island_DragOver" DragOver="Island_DragOver" DragLeave="Island_DragLeave" Drop="Island_Drop">
 
+                <!-- Soft shadow from stacked translucent outlines: a DropShadowEffect is re-blurred on the CPU every animation frame -->
+                <Grid x:Name="ShadowLayers" IsHitTestVisible="False" Margin="0,3,0,-3">
+                    <Border Margin="-12" Background="#08000000" />
+                    <Border Margin="-9.5" Background="#0A000000" />
+                    <Border Margin="-7" Background="#0C000000" />
+                    <Border Margin="-4.5" Background="#10000000" />
+                    <Border Margin="-2" Background="#14000000" />
+                </Grid>
                 <Border x:Name="GlassFill" Visibility="Collapsed" />
-                <Border x:Name="IslandBg" Background="Black" CornerRadius="17">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="20" ShadowDepth="3" Direction="270" Opacity="0.45" Color="Black" RenderingBias="Performance" />
-                    </Border.Effect>
-                </Border>
+                <Border x:Name="IslandBg" Background="Black" CornerRadius="17" />
 
                 <!-- Liquid glass rim: a bright edge catching light from the top-left, a softer one bottom-right -->
                 <Border x:Name="GlassRim" Visibility="Collapsed" BorderThickness="1.2" IsHitTestVisible="False">

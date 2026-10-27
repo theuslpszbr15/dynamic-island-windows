@@ -9,7 +9,6 @@ public partial class IslandWindow
 {
     static readonly TimeSpan SleepAfter = TimeSpan.FromSeconds(90);
     DateTime _lastActivity = DateTime.Now, _lastGlass;
-    Effect? _shadow;
     System.Windows.Threading.DispatcherTimer? _glassTimer;
     bool _glassBusy;
 
@@ -19,14 +18,10 @@ public partial class IslandWindow
 
     public void ApplyLook()
     {
-        _shadow ??= IslandBg.Effect;
         var ground = new SolidColorBrush(IslandThemes.Of(_settings.Theme));
         ground.Freeze();
         IslandBg.Background = ground;
         EarLeft.Fill = EarRight.Fill = ground;
-        // The glass carries the shadow: the tint above it is see-through and would only darken it.
-        IslandBg.Effect = Glass ? null : _shadow;
-        GlassFill.Effect = Glass ? _shadow : null;
         ApplyGlass();
         ApplyInk(_settings.Theme == IslandThemes.Light);
 
@@ -83,7 +78,7 @@ public partial class IslandWindow
     {
         if (!Glass || _glassBusy || _hiddenFullscreen || PresentationSource.FromVisual(Island) == null) return;
         var now = DateTime.Now;
-        if (!force && now - _lastGlass < TimeSpan.FromMilliseconds(50)) return;
+        if (!force && now - _lastGlass < TimeSpan.FromMilliseconds(_animating ? 120 : 50)) return;
         _lastGlass = now;
         var dpi = VisualTreeHelper.GetDpi(this);
         var origin = Island.PointToScreen(new Point(0, 0));
