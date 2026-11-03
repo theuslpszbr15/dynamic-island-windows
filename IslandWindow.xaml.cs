@@ -728,7 +728,7 @@ public partial class IslandWindow : Window
                 removed = true;
             }
         }
-        if (removed) { Retarget(); if (_expanded) RefreshPage(); }
+        if (removed) { Retarget(); if (_expanded) RefreshPage(); PublishPhoneSessions(); }
     }
 
     // ───────────────────────── media ─────────────────────────
@@ -960,6 +960,7 @@ public partial class IslandWindow : Window
 
         if (_expanded && _page == PageAgents) RefreshPage();
         Retarget();
+        PublishPhoneSessions();
     }
 
     void ShowAlert(AgentSession session, string glyph, string title) =>
@@ -1077,6 +1078,21 @@ public partial class IslandWindow : Window
         _settings.TrayFiles = Files.Select(f => f.Path).ToList();
         _settings.Save();
         FilesEmpty.Visibility = Vis(Files.Count == 0);
+        PublishPhoneTray();
+    }
+
+    public void AddTrayFiles(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+            if (!Files.Any(f => string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase)))
+                Files.Add(new FileItem(path));
+        SaveFiles();
+    }
+
+    public void RemoveTrayFile(FileItem item)
+    {
+        Files.Remove(item);
+        SaveFiles();
     }
 
     void FileTile_MouseDown(object sender, MouseButtonEventArgs e)

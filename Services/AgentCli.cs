@@ -103,7 +103,20 @@ public static class AgentCli
         // Only Claude Code reads a decision back from this hook.
         var requestId = hookEvent == "PermissionRequest" && agent.Equals("claude", StringComparison.OrdinalIgnoreCase)
             ? Guid.NewGuid().ToString("N") : null;
-        return new AgentMessage(DisplayName(agent), Str(root, "session_id"), state, Clip(detail), Str(root, "cwd"), step, file, diff, requestId);
+        var command = requestId == null ? null
+            : FullCommand(Str(root, "tool_name"), root.TryGetProperty("tool_input", out var full) ? full : default);
+        return new AgentMessage(DisplayName(agent), Str(root, "session_id"), state, Clip(detail), Str(root, "cwd"), step, file, diff,
+            requestId, command);
+    }
+
+    // What exactly is being allowed, for the phone (the island shows the one-line version).
+    static string FullCommand(string? tool, JsonElement input)
+    {
+        string? Arg(string name) => input.ValueKind == JsonValueKind.Object ? Str(input, name) : null;
+        var text = Arg("command") is { } shell ? "$ " + shell
+            : (Arg("file_path") ?? Arg("filePath") ?? Arg("path")) is { } path ? $"{tool}: {path}"
+            : DescribeTool(tool, input);
+        return text.Length > 4000 ? text[..4000] : text;
     }
 
     // What kind of step a tool is, which file it touches and, for edits, a short "-old / +new" diff.

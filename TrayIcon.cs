@@ -20,6 +20,10 @@ sealed class TrayIcon : IDisposable
         var startup = new WinForms.ToolStripMenuItem("Iniciar com o Windows", null, (_, _) => app.ToggleStartup());
         var copilot = new WinForms.ToolStripMenuItem("Conectar Copilot (VS Code)", null, (_, _) => app.ToggleCopilotHooks());
         var hooks = new WinForms.ToolStripMenuItem("Copiar hooks do Claude Code", null, (_, _) => app.CopyClaudeHooks());
+        var phoneLink = new WinForms.ToolStripMenuItem("Aprovar pelo celular", null, (_, _) => app.TogglePhoneLink());
+        var phonePair = new WinForms.ToolStripMenuItem("Parear celular (QR)…", null, (_, _) => app.ShowPhonePairing());
+        var phone = new WinForms.ToolStripMenuItem("Celular Android");
+        phone.DropDownItems.AddRange([phoneLink, phonePair]);
         var monitor = new WinForms.ToolStripMenuItem("Monitor");
         var notifications = new WinForms.ToolStripMenuItem("Notificações do Windows", null, (_, _) => app.ToggleNotifications());
         var lyrics = new WinForms.ToolStripMenuItem("Letra da música (LRCLIB)", null, (_, _) => app.ToggleLyrics());
@@ -28,6 +32,7 @@ sealed class TrayIcon : IDisposable
         var videos = new WinForms.ToolStripMenuItem("Vídeos (YouTube, Netflix…)", null, (_, _) => app.ToggleQuietVideos());
         var shows = new WinForms.ToolStripMenuItem("Mostrar na ilha");
         shows.DropDownItems.AddRange([notifications, lyrics, clipboard, lockKeys, videos]);
+        var settings = new WinForms.ToolStripMenuItem("Configurações…", null, (_, _) => app.ShowSettings()) { Font = new Font(WinForms.Control.DefaultFont, FontStyle.Bold) };
         var hide = new WinForms.ToolStripMenuItem("Esconder a ilha", null, (_, _) => app.ToggleHidden()) { ShortcutKeyDisplayString = "Ctrl+Alt+D" };
         var hideHour = new WinForms.ToolStripMenuItem("Esconder por 1 hora", null, (_, _) => app.HideFor(TimeSpan.FromHours(1)));
         var outfit = new WinForms.ToolStripMenuItem("Roupinha do mascote");
@@ -46,10 +51,11 @@ sealed class TrayIcon : IDisposable
         var exit = new WinForms.ToolStripMenuItem("Sair", null, (_, _) => app.Quit());
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.AddRange([hide, hideHour, new WinForms.ToolStripSeparator(), shape, theme, pet, outfit, desktopPet, discreet, monitor, shows, recap, startup, new WinForms.ToolStripSeparator(),
-            copilot, hooks, new WinForms.ToolStripSeparator(), update, install, exit]);
+        menu.Items.AddRange([settings, new WinForms.ToolStripSeparator(), hide, hideHour, new WinForms.ToolStripSeparator(), shape, theme, pet, outfit, desktopPet, discreet, monitor, shows, recap, startup, new WinForms.ToolStripSeparator(),
+            copilot, hooks, phone, new WinForms.ToolStripSeparator(), update, install, exit]);
         menu.Opening += (_, _) =>
         {
+            phoneLink.Checked = app.Settings.PhoneLink;
             hide.Checked = app.IslandHidden;
             videos.Checked = !app.Settings.QuietVideos;
             copilot.Checked = App.CopilotConnected;

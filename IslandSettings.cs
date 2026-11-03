@@ -17,7 +17,7 @@ public sealed class IslandSettings
     public string Monitor { get; set; } = "primary";
     public bool ShowNotifications { get; set; } = true;
     public int TimerMinutes { get; set; } = 25;
-    public PetSpecies Mascot { get; set; } = PetSpecies.Coco;
+    public PetSpecies Mascot { get; set; } = PetSpecies.Bit;
     public string Theme { get; set; } = IslandThemes.Default;
     public PetOutfit Outfit { get; set; } = PetOutfit.Auto;
     public bool ShowLyrics { get; set; } = true;
@@ -25,12 +25,17 @@ public sealed class IslandSettings
     public bool ShowLockKeys { get; set; } = true;
     /// <summary>Videos (YouTube, Netflix…) don't pop up or keep the pill open; still on the media page.</summary>
     public bool QuietVideos { get; set; } = true;
+    /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
+    public bool PhoneLink { get; set; }
+    /// <summary>The paired phone sees the file tray and can open its items on this PC.</summary>
+    public bool PhoneTray { get; set; } = true;
     public bool CheckUpdates { get; set; } = true;
     public bool DesktopPet { get; set; }
     public double? DesktopPetX { get; set; }
     public double? DesktopPetY { get; set; }
     /// <summary>Monday the weekly recap was last offered (yyyy-MM-dd).</summary>
     public string? RecapShown { get; set; }
+    public int Version { get; set; }
 
     [JsonIgnore] public bool ReadOnly { get; init; }
 
@@ -47,13 +52,21 @@ public sealed class IslandSettings
 
     public static IslandSettings Load()
     {
+        var settings = new IslandSettings();
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<IslandSettings>(File.ReadAllText(FilePath), Options) ?? new();
+                settings = JsonSerializer.Deserialize<IslandSettings>(File.ReadAllText(FilePath), Options) ?? new();
         }
         catch { }
-        return new();
+        // 2: Coco was only the old default, so files from before Bit move to Bit once.
+        if (settings.Version < 2)
+        {
+            if (settings.Mascot == PetSpecies.Coco) settings.Mascot = PetSpecies.Bit;
+            settings.Version = 2;
+            settings.Save();
+        }
+        return settings;
     }
 
     public void Save()

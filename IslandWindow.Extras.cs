@@ -26,7 +26,12 @@ public partial class IslandWindow
     [DllImport("user32.dll")] static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
     [DllImport("user32.dll")] static extern short GetKeyState(int key);
 
-    sealed record Approval(string Id, string SessionKey, string Agent, string Detail, DateTime Since);
+    sealed record Approval(string Id, string SessionKey, string Agent, string Project, string Detail, string Command, DateTime Since)
+    {
+        // What the phone refers to: tied to this exact request; the request id itself never leaves the PC.
+        public string Fingerprint { get; } = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{Id}\u001f{SessionKey}\u001f{Command}"))).ToLowerInvariant();
+    }
 
     static readonly TimeSpan ApprovalWait = TimeSpan.FromSeconds(54);
     readonly List<Approval> _approvals = [];
@@ -63,6 +68,7 @@ public partial class IslandWindow
         _lyricsTimer = MakeTimer(0.25, UpdateLyric);
         _extrasTimer = MakeTimer(60, ExtrasTick);
         _extrasTimer.Start();
+        ApplyPhoneLink();
         Dispatcher.InvokeAsync(async () =>
         {
             await Task.Delay(4000);
@@ -78,6 +84,7 @@ public partial class IslandWindow
         _lyricsTimer?.Stop();
         _extrasTimer?.Stop();
         foreach (var approval in _approvals) _ = AgentHub.Reply(approval.Id, "none");
+        _phone?.Dispose();
         AgentStats.Save();
     }
 
@@ -210,21 +217,34 @@ public partial class IslandWindow
 
     void AddApproval(AgentSession session, AgentMessage m)
     {
-        _approvals.RemoveAll(a => a.SessionKey == session.Key);
-        _approvals.Add(new Approval(m.RequestId!, session.Key, session.Agent,
-            string.IsNullOrEmpty(m.Detail) ? "Quer usar uma ferramenta" : m.Detail, DateTime.Now));
+        DropApprovals(a => a.SessionKey == session.Key);
+        var approval = new Approval(m.RequestId!, session.Key, session.Agent, session.Project,
+            string.IsNullOrEmpty(m.Detail) ? "Quer usar uma ferramenta" : m.Detail, m.Command ?? m.Detail ?? "", DateTime.Now);
+        _approvals.Add(approval);
+        PublishApproval(approval);
         ShowApproval();
     }
 
     void ClearApprovals(string sessionKey)
     {
-        if (_approvals.RemoveAll(a => a.SessionKey == sessionKey) == 0) return;
+        if (DropApprovals(a => a.SessionKey == sessionKey) == 0) return;
         if (_transient == Transient.Approval) NextApprovalOrClose();
+    }
+
+    int DropApprovals(Func<Approval, bool> match)
+    {
+        var gone = _approvals.Where(match).ToList();
+        foreach (var approval in gone)
+        {
+            _approvals.Remove(approval);
+            _phone?.PublishResolved(approval.Fingerprint);
+        }
+        return gone.Count;
     }
 
     void ShowApproval()
     {
-        _approvals.RemoveAll(a => DateTime.Now - a.Since > ApprovalWait);
+        DropApprovals(a => DateTime.Now - a.Since > ApprovalWait);
         var approval = _approvals.FirstOrDefault();
         if (approval == null) return;
         ApprovalAgent.Text = approval.Agent;
@@ -256,15 +276,20 @@ public partial class IslandWindow
 
     void Answer(string decision)
     {
-        if (_approvals.FirstOrDefault() is not { } approval) return;
-        _approvals.Remove(approval);
+        if (_approvals.FirstOrDefault() is { } approval) Answer(approval, decision);
+    }
+
+    void Answer(Approval approval, string decision)
+    {
+        var showing = ReferenceEquals(approval, _approvals.FirstOrDefault());
+        DropApprovals(a => ReferenceEquals(a, approval));
         _ = AgentHub.Reply(approval.Id, decision);
         if (decision == "allow")
         {
             AgentStats.Record(null, false, true, TimeSpan.Zero, null);
             PetsCelebrate();
         }
-        NextApprovalOrClose();
+        if (showing && _transient == Transient.Approval) NextApprovalOrClose();
     }
 
     void ApprovalAllow_Click(object sender, RoutedEventArgs e)

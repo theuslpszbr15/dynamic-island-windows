@@ -8,7 +8,7 @@ namespace DynamicIsland.Services;
 /// <summary>One agent event. State: working | waiting | done | idle | end. Step: read | edit | run | search | web | think | task.
 /// RequestId is set when the hook is waiting for an Allow/Deny answer from the island.</summary>
 public sealed record AgentMessage(string Agent, string? Session, string State, string? Detail, string? Cwd,
-    string? Step = null, string? File = null, string? Diff = null, string? RequestId = null);
+    string? Step = null, string? File = null, string? Diff = null, string? RequestId = null, string? Command = null);
 
 /// <summary>Receives agent events from hook processes over a per-user named pipe.</summary>
 public sealed class AgentHub(Dispatcher ui) : IDisposable

@@ -25,7 +25,7 @@ atrapalhar: os cliques passam por ela.
 
 | | |
 |---|---|
-| **Mascotes** — o **Coco** (o mascote da ilha: um coquinho com brotinho), a **Pipoca** (gatinha) ou o **Bu** (fantasminha). Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. | <img src="docs/img/25-mascot-coco.png" width="190"> <img src="docs/img/24-dizzy-card.png" width="190"> |
+| **Mascotes** — o **Bit** (gatinho de capuz, o mascote da ilha), o **Coco** (coquinho), a **Pipoca** (gatinha) ou o **Bu** (fantasminha). Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. | <img src="docs/img/25-bit-moods.png" width="380"> |
 | **Permitir / Negar** — quando o Claude Code pede permissão (rodar um comando, editar um arquivo), a pergunta aparece na ilha com dois botões. Sem resposta em ~55 s, ele pergunta no terminal como sempre. | <img src="docs/img/28-approval.png" width="380"> |
 | **Roupinhas** — gorro, chapéu de festa, gorro de Natal, chapéu de palha, óculos escuros e coroa. No modo automático o mascote se veste sozinho no Natal, nas festas juninas e no Ano-Novo. O mascote também pode morar na **área de trabalho**: arraste para onde quiser; ele corre até a ilha quando um agente chama. | <img src="docs/img/34-outfits.png" width="380"> |
 | **Agentes ao vivo** — o mascote do agente, os passos (Leitura, Edição, Terminal…) e o diff da última edição; com vários agentes, a lista de todos com o mascote de cada um. | <img src="docs/img/10b-agent-detail.png" width="380"> |
@@ -55,9 +55,12 @@ atrapalhar: os cliques passam por ela.
 
 ## Configurações
 
-No ícone da bandeja (ou clique direito na ilha): formato pílula/notch, tema, mascote, roupinha, mascote na área de
-trabalho, recolher quando ociosa, monitor, o que mostrar na ilha (notificações, letras, área de transferência, Caps Lock),
-resumo da semana, iniciar com o Windows, conectar Copilot, hooks do Claude Code, atualizações e instalar/desinstalar.
+Clique direito na ilha (ou no ícone da bandeja) → **Configurações…**: um painel com tudo em um lugar — Geral
+(esconder, formato, monitor, iniciar com o Windows, timer, atalhos), Aparência (tema, mascote, roupinha, mascote na
+área de trabalho), Na ilha (notificações, letras, copiado, Caps Lock, vídeos), Agentes (Copilot, Claude Code, resumo da
+semana), Celular (pareamento por QR), Bandeja de arquivos (fixar/remover itens) e Atualizações.
+
+<img src="docs/img/40-settings-look.png" width="640">
 
 > No tema **Vidro** a ilha não aparece em prints nem em compartilhamento de tela: ela se esconde da captura
 > para conseguir desfocar o que está atrás dela.
@@ -94,6 +97,29 @@ Os eventos chegam por um *named pipe* restrito ao usuário atual. O comando semp
 no stdout para responder a um pedido de permissão que você aceitou ou negou na ilha.
 
 Conexões de rede (todas opcionais): letras no `lrclib.net`, clima no `wttr.in` e a checagem de versão na API do GitHub.
+
+## Aprovar pelo celular (Android)
+
+O app **Dynamic Island para Android** (pasta [android/](android), Kotlin + Jetpack Compose, com o Bit) é um app
+normal: liga o celular à ilha do PC, recebe os pedidos de permissão do Claude Code e mostra seus agentes. **Negar**
+funciona direto na notificação; **Permitir** pede a digital ou o bloqueio de tela. A aba **Bandeja do PC** mostra o que
+está fixado na bandeja de arquivos da ilha e abre o item no PC com um toque (também pede a digital).
+Serve para qualquer Android 11+.
+
+1. Baixe `DynamicIsland-Android.apk` da página de Releases no celular e instale (o Android pede para permitir
+   instalações do navegador uma vez).
+2. No PC: **Configurações → Celular → Ligação com o celular**. Aparece um QR code.
+3. No app: **Escanear código do PC**. Celular e PC precisam estar na **mesma rede Wi-Fi**.
+
+<img src="docs/img/41-android-approval.png" width="220"> <img src="docs/img/42-android-tray.png" width="220">
+
+Como funciona: a ilha escuta só na rede local (porta 47900) e só enquanto a opção está ligada; o celular aceita
+apenas o certificado do PC lido no QR (TLS com *pinning*) e manda o segredo do pareamento; a decisão vale só para o
+pedido exato que ainda está esperando. Comandos com mais de 500 caracteres só podem ser negados pelo celular.
+Redes de visitante/corporativas costumam isolar os aparelhos, e o Windows pode pedir para liberar a ilha no firewall.
+Desenho do protocolo inspirado no [Coucou](https://github.com/Louis-CFM/coucou) (MIT); código e mascote são nossos.
+
+Compilar: JDK 17+ e Android SDK 35, `cd android` e `gradlew assembleRelease`.
 
 ## Desenvolvimento
 

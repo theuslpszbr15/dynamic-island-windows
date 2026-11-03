@@ -148,14 +148,39 @@ public partial class IslandWindow
         _settings.Theme = IslandThemes.Default;
         _mediaSnap = null;
         Agents.Clear();
-        foreach (var (species, name) in new[] { (PetSpecies.Coco, "coco"), (PetSpecies.Pipoca, "pipoca"), (PetSpecies.Bu, "bu") })
+        foreach (var (species, name) in new[] { (PetSpecies.Bit, "bit"), (PetSpecies.Coco, "coco"), (PetSpecies.Pipoca, "pipoca"), (PetSpecies.Bu, "bu") })
         {
             _settings.Mascot = species;
             ApplyShape();
             await Shot("25-mascot-" + name);
         }
-        _settings.Mascot = PetSpecies.Coco;
+        _settings.Mascot = PetSpecies.Bit;
         ApplyShape();
+
+        // Bit up close: idle, working (blue hoodie), waiting (orange), happy, annoyed, asleep
+        var moods = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            Background = new SolidColorBrush(Color.FromRgb(0xF2, 0xF2, 0xF7)),
+        };
+        foreach (var (mood, tint) in new (PetView.Mood, Color?)[]
+                 {
+                     (PetView.Mood.Idle, null), (PetView.Mood.Working, AgentSession.Working), (PetView.Mood.Waiting, AgentSession.Waiting),
+                     (PetView.Mood.Happy, null), (PetView.Mood.Annoyed, null), (PetView.Mood.Sleep, null),
+                 })
+        {
+            var bit = new PetView { Species = PetSpecies.Bit, Active = false };
+            bit.Tint(tint);
+            bit.BaseMood = mood;
+            moods.Children.Add(new System.Windows.Controls.Viewbox { Width = 110, Height = 110, Margin = new Thickness(12, 22, 12, 12), Child = bit });
+        }
+        var moodCard = new System.Windows.Controls.Border { Child = moods };
+        moodCard.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        moodCard.Arrange(new Rect(moodCard.DesiredSize));
+        moodCard.UpdateLayout();
+        await Task.Delay(400);
+        RecapWindow.SaveCard(moodCard, System.IO.Path.Combine(folder, "25-bit-moods.png"));
+
         OnPetDizzy();
         await Shot("24-dizzy-card");
 
@@ -234,7 +259,7 @@ public partial class IslandWindow
         var outfits = new[] { PetOutfit.Gorro, PetOutfit.Festa, PetOutfit.Noel, PetOutfit.Palha, PetOutfit.Oculos, PetOutfit.Coroa };
         for (var i = 0; i < outfits.Length; i++)
         {
-            var dressed = new PetView { Species = (PetSpecies)(1 + i % 3), BaseMood = PetView.Mood.Happy };
+            var dressed = new PetView { Species = i % 2 == 0 ? PetSpecies.Bit : (PetSpecies)(1 + i / 2 % 3), BaseMood = PetView.Mood.Happy };
             dressed.Outfit = outfits[i];
             lineup.Children.Add(new System.Windows.Controls.Viewbox { Width = 96, Height = 96, Margin = new Thickness(14, 34, 14, 10), Child = dressed });
         }
@@ -272,6 +297,28 @@ public partial class IslandWindow
         ApplyShape();
         var perf = "default: " + await MeasureFrames() + Environment.NewLine;
         File.WriteAllText(System.IO.Path.Combine(folder, "perf.txt"), perf);
+        File.WriteAllText(System.IO.Path.Combine(folder, "phone-link.txt"), await TestPhoneLink());
+
+        // The settings panel, one image per section (with the phone link on, to show the pairing code).
+        _settings.PhoneLink = true;
+        ApplyPhoneLink();
+        var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
+        settingsWindow.Show();
+        foreach (var section in new[] { "general", "look", "island", "agents", "phone", "tray", "updates" })
+        {
+            settingsWindow.Navigate(section);
+            await Task.Delay(700);
+            var root = (FrameworkElement)settingsWindow.Content;
+            var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
+            image.Render(root);
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(image));
+            await using var file = File.Create(System.IO.Path.Combine(folder, $"40-settings-{section}.png"));
+            png.Save(file);
+        }
+        settingsWindow.Close();
+        _settings.PhoneLink = false;
+        ApplyPhoneLink();
 
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),
@@ -308,6 +355,79 @@ public partial class IslandWindow
         if (gaps.Count == 0) return "no frames";
         return $"frames={gaps.Count} avg={gaps.Average():0.0}ms p95={gaps[(int)(gaps.Count * 0.95)]:0.0}ms max={gaps[^1]:0.0}ms " +
                $"slow(>25ms)={gaps.Count(g => g > 25)} cpu={cpu:0}ms";
+    }
+
+    /// <summary>Plays the phone over loopback: wrong token, pairing, a real hook's permission request, Allow from the "phone".</summary>
+    async Task<string> TestPhoneLink()
+    {
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            _settings.PhoneLink = true;
+            ApplyPhoneLink();
+            if (_phone?.Running != true) throw new InvalidOperationException("link não iniciou: " + PhoneError);
+            var query = System.Web.HttpUtility.ParseQueryString(new Uri(_phone!.PairingLink()).Query);
+            var (fingerprint, token, port) = (query["fp"]!, query["token"]!, int.Parse(query["port"]!));
+
+            async Task<(System.Net.Security.SslStream Ssl, StreamReader Reader)> Connect(string secret)
+            {
+                var tcp = new System.Net.Sockets.TcpClient();
+                await tcp.ConnectAsync("127.0.0.1", port);
+                var ssl = new System.Net.Security.SslStream(tcp.GetStream(), false, (_, cert, _, _) =>
+                    cert != null && Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(cert.GetRawCertData())).ToLowerInvariant() == fingerprint);
+                await ssl.AuthenticateAsClientAsync("dynamic-island");
+                await ssl.WriteAsync(System.Text.Encoding.UTF8.GetBytes($"{{\"type\":\"hello\",\"v\":1,\"token\":\"{secret}\",\"device\":\"teste\"}}\n"));
+                return (ssl, new StreamReader(ssl));
+            }
+
+            var (bad, badReader) = await Connect("token-errado");
+            log.AppendLine("token errado -> " + await badReader.ReadLineAsync());
+            bad.Dispose();
+
+            var (ssl, reader) = await Connect(token);
+            log.AppendLine("pareado -> " + await reader.ReadLineAsync());
+            log.AppendLine("primeiro -> " + await reader.ReadLineAsync());
+
+            var hook = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, "hook claude")
+            {
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+            await hook.StandardInput.WriteAsync("""{"hook_event_name":"PermissionRequest","session_id":"p1","cwd":"C:\\dev\\api","tool_name":"Bash","tool_input":{"command":"npm publish --access public"}}""");
+            hook.StandardInput.Close();
+
+            string? approvalFp = null, trayId = null;
+            using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            while (approvalFp == null && await reader.ReadLineAsync(wait.Token) is { } line)
+            {
+                log.AppendLine("recebido -> " + (line.Length > 300 ? line[..300] + "…" : line));
+                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                var type = doc.RootElement.GetProperty("type").GetString();
+                if (type == "approval")
+                    approvalFp = doc.RootElement.GetProperty("fingerprint").GetString();
+                else if (type == "tray" && doc.RootElement.GetProperty("items").GetArrayLength() > 0)
+                    trayId = doc.RootElement.GetProperty("items")[0].GetProperty("id").GetString();
+            }
+            await ssl.WriteAsync(System.Text.Encoding.UTF8.GetBytes("{\"type\":\"decision\",\"fingerprint\":\"0000\",\"decision\":\"allow\"}\n"));
+            await ssl.WriteAsync(System.Text.Encoding.UTF8.GetBytes($"{{\"type\":\"decision\",\"fingerprint\":\"{approvalFp}\",\"decision\":\"allow\"}}\n"));
+            log.AppendLine("hook respondeu -> " + await hook.StandardOutput.ReadToEndAsync());
+            await hook.WaitForExitAsync();
+            for (var i = 0; i < 2; i++) log.AppendLine("depois -> " + await reader.ReadLineAsync(wait.Token));
+            await ssl.WriteAsync(System.Text.Encoding.UTF8.GetBytes("{\"type\":\"open\",\"id\":\"naoexiste\"}\n"));
+            await ssl.WriteAsync(System.Text.Encoding.UTF8.GetBytes($"{{\"type\":\"open\",\"id\":\"{trayId}\"}}\n"));
+            await Task.Delay(800);
+            log.AppendLine("aberto pelo celular -> " + string.Join(", ", PhoneOpened));
+            ssl.Dispose();
+        }
+        catch (Exception ex) { log.AppendLine("ERRO: " + ex); }
+        finally
+        {
+            _settings.PhoneLink = false;
+            ApplyPhoneLink();
+            Agents.Clear();
+        }
+        return log.ToString();
     }
 
     static BitmapSource DemoArt()

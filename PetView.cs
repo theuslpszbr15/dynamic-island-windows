@@ -9,7 +9,7 @@ using Path = System.Windows.Shapes.Path;
 
 namespace DynamicIsland;
 
-public enum PetSpecies { None, Coco, Pipoca, Bu }
+public enum PetSpecies { None, Coco, Pipoca, Bu, Bit }
 
 /// <summary>Accessory on top of the mascot. Auto follows the calendar (Christmas, festa junina, New Year).</summary>
 public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa }
@@ -24,7 +24,11 @@ public sealed class PetView : Canvas
     public enum Mood { Idle, Dance, Working, Waiting, Sleep, Happy, Annoyed, Dizzy }
 
     public static readonly Color Cream = Color.FromRgb(0xF4, 0xEF, 0xE6);
+    /// <summary>Bit's hoodie when nothing tints it.</summary>
+    public static readonly Color Hoodie = Color.FromRgb(0x3D, 0x44, 0x4D);
     static readonly Brush Ink = Frozen(Color.FromRgb(0x1C, 0x1C, 0x1E));
+    static readonly Brush BitFace = Frozen(Color.FromRgb(0x1F, 0x23, 0x28));
+    static readonly Brush BitRim = Frozen(Color.FromRgb(0x5A, 0x63, 0x6E));
     static readonly Brush Pink = Frozen(Color.FromRgb(0xFF, 0x8F, 0xA3));
     static readonly Brush Leaf = Frozen(Color.FromRgb(0x30, 0xC8, 0x5A));
     static readonly Brush LeafLight = Frozen(Color.FromRgb(0x62, 0xE0, 0x7E));
@@ -37,7 +41,7 @@ public sealed class PetView : Canvas
     public event Action? Dizzied;
 
     /// <summary>The mascot every PetView shows (the island's, the agent list's...).</summary>
-    public static PetSpecies DefaultSpecies { get; private set; } = PetSpecies.Coco;
+    public static PetSpecies DefaultSpecies { get; private set; } = PetSpecies.Bit;
     static event Action? SpeciesChanged;
 
     public static void SetDefaultSpecies(PetSpecies species)
@@ -76,6 +80,8 @@ public sealed class PetView : Canvas
     }
 
     readonly SolidColorBrush _fill = new(Cream);
+    // eyes and expression lines: dark on light bodies, white on Bit's dark face
+    readonly SolidColorBrush _faceInk = new(Color.FromRgb(0x1C, 0x1C, 0x1E));
     readonly TranslateTransform _hop = new(), _look = new();
     readonly RotateTransform _tilt = new(0, 12, 20);
     readonly ScaleTransform _squash = new(1, 1, 12, 23.5), _blink = new(1, 1, 12, 13.6), _eyeSize = new(1, 1, 12, 13.6);
@@ -116,15 +122,10 @@ public sealed class PetView : Canvas
         eyeTransforms.Children.Add(_blink);
         _eyes.RenderTransform = eyeTransforms;
         face.Children.Add(_eyes);
-        foreach (var x in new[] { 6.9, 14.4 })
-        {
-            _eyes.Children.Add(Place(new Ellipse { Width = 2.8, Height = 3.6, Fill = Ink }, x, 11.8));
-            _eyes.Children.Add(Place(new Ellipse { Width = 1.0, Height = 1.0, Fill = Brushes.White }, x + 0.45, 12.35));
-        }
-        face.Children.Add(_happyEyes = Stroke("M6.8,14.4 Q8.25,12.1 9.7,14.4 M14.3,14.4 Q15.75,12.1 17.2,14.4", 1.4));
-        face.Children.Add(_closedEyes = Stroke("M6.9,13.9 Q8.25,14.9 9.6,13.9 M14.4,13.9 Q15.75,14.9 17.1,13.9", 1.2));
-        face.Children.Add(_annoyedEyes = Stroke("M7,12.3 L9.5,13.7 L7,15.1 M17,12.3 L14.5,13.7 L17,15.1", 1.3));
-        face.Children.Add(_dizzyEyes = Stroke(
+        face.Children.Add(_happyEyes = FaceStroke("M6.8,14.4 Q8.25,12.1 9.7,14.4 M14.3,14.4 Q15.75,12.1 17.2,14.4", 1.4));
+        face.Children.Add(_closedEyes = FaceStroke("M6.9,13.9 Q8.25,14.9 9.6,13.9 M14.4,13.9 Q15.75,14.9 17.1,13.9", 1.2));
+        face.Children.Add(_annoyedEyes = FaceStroke("M7,12.3 L9.5,13.7 L7,15.1 M17,12.3 L14.5,13.7 L17,15.1", 1.3));
+        face.Children.Add(_dizzyEyes = FaceStroke(
             "M8.5,13.7 A0.25,0.25 0 1 1 8.0,13.7 A0.5,0.5 0 1 1 9.0,13.7 A1.0,1.0 0 1 1 7.0,13.7 A1.4,1.4 0 1 1 9.8,13.7 " +
             "M16.0,13.7 A0.25,0.25 0 1 1 15.5,13.7 A0.5,0.5 0 1 1 16.5,13.7 A1.0,1.0 0 1 1 14.5,13.7 A1.4,1.4 0 1 1 17.3,13.7", 0.6));
         face.Children.Add(_glasses);
@@ -150,7 +151,7 @@ public sealed class PetView : Canvas
         Outfit = Resolve(DefaultOutfit, DateTime.Today);
         void Sync()
         {
-            Species = DefaultSpecies;
+            Species = FixedSpecies ?? DefaultSpecies;
             Outfit = Resolve(DefaultOutfit, DateTime.Today);
         }
         Loaded += (_, _) =>
@@ -163,6 +164,18 @@ public sealed class PetView : Canvas
         Show(Mood.Idle);
     }
 
+    /// <summary>Always this mascot, whatever the island's choice (previews in the settings).</summary>
+    public PetSpecies? FixedSpecies
+    {
+        get => _fixed;
+        set
+        {
+            _fixed = value;
+            if (value is { } species) Species = species;
+        }
+    }
+    PetSpecies? _fixed;
+
     public PetSpecies Species
     {
         get => _species;
@@ -171,8 +184,55 @@ public sealed class PetView : Canvas
             if (_species == value || value == PetSpecies.None) return;
             _species = value;
             _shell.Children.Clear();
+            _eyes.Children.Clear();
+            var bit = value == PetSpecies.Bit;
+            _faceInk.Color = bit ? Colors.White : Color.FromRgb(0x1C, 0x1C, 0x1E);
+            _fill.BeginAnimation(SolidColorBrush.ColorProperty, null);
+            _fill.Color = bit ? Hoodie : Cream;
+            if (bit)
+            {
+                // big white eyes, pupils looking slightly inward
+                foreach (var x in new[] { 8.25, 15.75 })
+                {
+                    _eyes.Children.Add(Place(new Ellipse { Width = 4.2, Height = 4.8, Fill = Brushes.White }, x - 2.1, 11.2));
+                    _eyes.Children.Add(Place(new Ellipse { Width = 2.1, Height = 2.7, Fill = Ink }, x - 1.05 + (x < 12 ? 0.35 : -0.35), 12.5));
+                    _eyes.Children.Add(Place(new Ellipse { Width = 0.9, Height = 0.9, Fill = Brushes.White }, x - 0.6 + (x < 12 ? 0.35 : -0.35), 12.75));
+                }
+            }
+            else
+            {
+                foreach (var x in new[] { 6.9, 14.4 })
+                {
+                    _eyes.Children.Add(Place(new Ellipse { Width = 2.8, Height = 3.6, Fill = Ink }, x, 11.8));
+                    _eyes.Children.Add(Place(new Ellipse { Width = 1.0, Height = 1.0, Fill = Brushes.White }, x + 0.45, 12.35));
+                }
+            }
             switch (value)
             {
+                case PetSpecies.Bit:
+                    // hoodie body peeking under the head, with its drawstrings
+                    _shell.Children.Add(Fill("M6.2,18.6 C6.2,21.8 8.2,23.6 12,23.6 C15.8,23.6 17.8,21.8 17.8,18.6 Z", _fill));
+                    _shell.Children.Add(new Path { Data = Geometry.Parse("M10.7,18.8 L10.5,21 M13.3,18.8 L13.5,21"), Stroke = Brushes.White, Opacity = 0.85, StrokeThickness = 0.55, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
+                    // hood with cat ears
+                    foreach (var ear in new[] { "M3.6,10.4 L4.6,2.2 L10.4,6.4 Z", "M20.4,10.4 L19.4,2.2 L13.6,6.4 Z" })
+                        _shell.Children.Add(new Path { Data = Geometry.Parse(ear), Fill = _fill, Stroke = _fill, StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round });
+                    _shell.Children.Add(Fill("M5.4,4.6 L6.1,8 L8.4,6.4 Z M18.6,4.6 L17.9,8 L15.6,6.4 Z", Pink));
+                    _shell.Children.Add(new Path
+                    {
+                        Data = Geometry.Parse("M12,4.4 C18.5,4.4 21.6,8.5 21.6,13.2 C21.6,17.7 17.7,20.2 12,20.2 C6.3,20.2 2.4,17.7 2.4,13.2 C2.4,8.5 5.5,4.4 12,4.4 Z"),
+                        Fill = _fill, Stroke = BitRim, StrokeThickness = 0.45,
+                    });
+                    // the face inside the hood
+                    _shell.Children.Add(new Path
+                    {
+                        Data = Geometry.Parse("M12,7.3 C16.9,7.3 19.2,10.1 19.2,13.4 C19.2,16.7 16.3,18.6 12,18.6 C7.7,18.6 4.8,16.7 4.8,13.4 C4.8,10.1 7.1,7.3 12,7.3 Z"),
+                        Fill = BitFace, Stroke = BitRim, StrokeThickness = 0.35,
+                    });
+                    _shell.Children.Add(Place(new Ellipse { Width = 2.2, Height = 1.2, Fill = Pink, Opacity = 0.45 }, 5.6, 16.2));
+                    _shell.Children.Add(Place(new Ellipse { Width = 2.2, Height = 1.2, Fill = Pink, Opacity = 0.45 }, 16.2, 16.2));
+                    _shell.Children.Add(Fill("M11.35,15.95 L12.65,15.95 L12,16.7 Z", Pink));
+                    _shell.Children.Add(new Path { Data = Geometry.Parse("M10.9,17.1 Q11.45,17.7 12,17.1 Q12.55,17.7 13.1,17.1"), Stroke = BitRim, StrokeThickness = 0.55, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
+                    break;
                 case PetSpecies.Coco:
                     _shell.Children.Add(Fill("M12,6.2 C18.6,6.2 22.4,10.3 22.4,15.3 C22.4,20.5 18,23.5 12,23.5 C6,23.5 1.6,20.5 1.6,15.3 C1.6,10.3 5.4,6.2 12,6.2 Z", _fill));
                     _shell.Children.Add(new Path { Data = Geometry.Parse("M12,6.7 Q12.1,4.9 12.8,3.6"), Stroke = Leaf, StrokeThickness = 1.1, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
@@ -215,7 +275,7 @@ public sealed class PetView : Canvas
     {
         _hat.Children.Clear();
         _glasses.Children.Clear();
-        var top = _species switch { PetSpecies.Pipoca => 7.4, PetSpecies.Bu => 5.4, _ => 7.0 };
+        var top = _species switch { PetSpecies.Pipoca => 7.4, PetSpecies.Bu => 5.4, PetSpecies.Bit => 6.2, _ => 7.0 };
         _hat.RenderTransform = new TranslateTransform(0, top);
         static Brush B(uint argb) => Frozen(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
         var white = B(0xFFF8F8F8);
@@ -284,6 +344,13 @@ public sealed class PetView : Canvas
         StrokeLineJoin = PenLineJoin.Round,
     };
 
+    Path FaceStroke(string data, double thickness)
+    {
+        var path = Stroke(data, thickness);
+        path.Stroke = _faceInk;
+        return path;
+    }
+
     static SolidColorBrush Frozen(Color color)
     {
         var brush = new SolidColorBrush(color);
@@ -316,7 +383,12 @@ public sealed class PetView : Canvas
 
     public void Tint(Color? color)
     {
-        var target = color is { } c ? Color.FromRgb((byte)((c.R + 255 * 1.4) / 2.4), (byte)((c.G + 255 * 1.4) / 2.4), (byte)((c.B + 255 * 1.4) / 2.4)) : Cream;
+        Color target;
+        if (_species == PetSpecies.Bit)
+            // a dark hoodie in the state's colour
+            target = color is { } h ? Color.FromRgb((byte)(h.R * 0.42 + 0x22 * 0.58), (byte)(h.G * 0.42 + 0x26 * 0.58), (byte)(h.B * 0.42 + 0x2B * 0.58)) : Hoodie;
+        else
+            target = color is { } c ? Color.FromRgb((byte)((c.R + 255 * 1.4) / 2.4), (byte)((c.G + 255 * 1.4) / 2.4), (byte)((c.B + 255 * 1.4) / 2.4)) : Cream;
         if (_fill.Color == target) return;
         _fill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(target, TimeSpan.FromMilliseconds(260)));
     }

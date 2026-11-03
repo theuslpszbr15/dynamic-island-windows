@@ -36,6 +36,7 @@ public partial class App : Application
         }
 
         Settings = IslandSettings.Load();
+        PetView.SetDefaultSpecies(Settings.Mascot);
         PetView.SetDefaultOutfit(Settings.Outfit);
         ListenForQuit();
         _window = new IslandWindow(Settings);
@@ -110,6 +111,51 @@ public partial class App : Application
     }
 
     public bool IslandHidden => _window.UserHidden;
+
+    public IslandWindow Island => _window;
+
+    SettingsWindow? _settingsWindow;
+
+    public void ShowSettings(string? page = null)
+    {
+        if (_settingsWindow == null)
+        {
+            _settingsWindow = new SettingsWindow(this);
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            _settingsWindow.Show();
+        }
+        if (page != null) _settingsWindow.Navigate(page);
+        if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
+        _settingsWindow.Activate();
+    }
+
+    public void TogglePhoneTray()
+    {
+        Settings.PhoneTray = !Settings.PhoneTray;
+        Settings.Save();
+        _window.PublishPhoneTray();
+    }
+
+    public void Balloon(string title, string text) => _tray.Balloon(title, text);
+
+    public void TogglePhoneLink()
+    {
+        Settings.PhoneLink = !Settings.PhoneLink;
+        Settings.Save();
+        _window.ApplyPhoneLink();
+        if (Settings.PhoneLink) ShowPhonePairing();
+    }
+
+    public void ShowPhonePairing()
+    {
+        if (!Settings.PhoneLink)
+        {
+            Settings.PhoneLink = true;
+            Settings.Save();
+            _window.ApplyPhoneLink();
+        }
+        ShowSettings("phone");
+    }
 
     public void ToggleHidden() => _window.SetUserHidden(!_window.UserHidden);
 
@@ -279,7 +325,8 @@ public partial class App : Application
 
     public static readonly (PetSpecies Species, string Label)[] Mascots =
     [
-        (PetSpecies.Coco, "Coco (o nosso)"),
+        (PetSpecies.Bit, "Bit (gatinho de capuz)"),
+        (PetSpecies.Coco, "Coco (coquinho)"),
         (PetSpecies.Pipoca, "Pipoca (gatinho)"),
         (PetSpecies.Bu, "Bu (fantasminha)"),
         (PetSpecies.None, "Nenhum"),
@@ -413,6 +460,8 @@ public partial class App : Application
 
         var hide = Item("Esconder a ilha", ToggleHidden, IslandHidden);
         hide.InputGestureText = "Ctrl+Alt+D";
+        menu.Items.Add(Item("Configurações…", () => ShowSettings()));
+        menu.Items.Add(new Separator());
         menu.Items.Add(hide);
         menu.Items.Add(Item("Esconder por 1 hora", () => HideFor(TimeSpan.FromHours(1))));
         menu.Items.Add(new Separator());
@@ -448,6 +497,10 @@ public partial class App : Application
         menu.Items.Add(Item("Iniciar com o Windows", ToggleStartup, StartupRegistration.IsEnabled));
         menu.Items.Add(Item("Conectar Copilot (VS Code)", ToggleCopilotHooks, CopilotConnected));
         menu.Items.Add(Item("Copiar hooks do Claude Code", CopyClaudeHooks));
+        var phone = new MenuItem { Header = "Celular Android" };
+        phone.Items.Add(Item("Aprovar pelo celular", TogglePhoneLink, Settings.PhoneLink));
+        phone.Items.Add(Item("Parear celular (QR)…", ShowPhonePairing));
+        menu.Items.Add(phone);
         menu.Items.Add(new Separator());
         menu.Items.Add(Update is { } update
             ? Item($"Atualizar para {update.Version.ToString(3)}", InstallUpdate)
