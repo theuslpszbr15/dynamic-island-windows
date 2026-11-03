@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Path = System.Windows.Shapes.Path;
@@ -21,7 +22,54 @@ public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa }
 /// </summary>
 public sealed class PetView : Canvas
 {
-    public enum Mood { Idle, Dance, Working, Waiting, Sleep, Happy, Annoyed, Dizzy }
+    public enum Mood { Idle, Dance, Working, Waiting, Sleep, Happy, Annoyed, Dizzy, Patted }
+
+    // PatPat (after the Minecraft mod): a pixel hand pats the head in 5 frames over 300 ms.
+    // Our own sprite; per frame: hand lift above the (squashed) head, hand squash, body squash X/Y.
+    static readonly double[] PatHandLift = [-3.4, -1.8, 0.5, -0.8, -2.8];
+    static readonly double[] PatHandSquash = [1, 0.95, 0.8, 0.9, 1];
+    static readonly double[] PatBodyX = [1, 1.03, 1.12, 1.06, 1];
+    static readonly double[] PatBodyY = [1, 0.96, 0.82, 0.9, 1];
+    const int PatFrameMs = 60;
+
+    static readonly string[] HandPixels =
+    [
+        "......OOOOOOOCCO",
+        ".....OSSSSSSSOCC",
+        "...OOSSSSSSSSSOC",
+        "..OSSSSSSSSSSSOC",
+        ".OSSSSSSSSSSSDO.",
+        "OSSDSSDSSDSSDO..",
+        "OSSDSSDSSDSDO...",
+        "OSSOSSOSSOSO....",
+        ".OO.OO.OO.O.....",
+    ];
+
+    static readonly string[] HeartPixels = ["XX.XX", "XXXXX", ".XXX.", "..X.."];
+
+    static readonly BitmapSource HandSprite = Sprite(HandPixels, new()
+    {
+        ['O'] = Color.FromRgb(0x3B, 0x2A, 0x2A), ['S'] = Color.FromRgb(0xFF, 0xD7, 0xB5),
+        ['D'] = Color.FromRgb(0xE3, 0xA8, 0x84), ['C'] = Color.FromRgb(0x4A, 0x90, 0xE2),
+    });
+
+    static readonly BitmapSource HeartSprite = Sprite(HeartPixels, new() { ['X'] = Color.FromRgb(0xFF, 0x4D, 0x6D) });
+
+    static BitmapSource Sprite(string[] rows, Dictionary<char, Color> palette)
+    {
+        int w = rows[0].Length, h = rows.Length;
+        var pixels = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                if (!palette.TryGetValue(rows[y][x], out var c)) continue;
+                var i = (y * w + x) * 4;
+                (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = (c.B, c.G, c.R, 255);
+            }
+        var bitmap = BitmapSource.Create(w, h, 96, 96, PixelFormats.Pbgra32, null, pixels, w * 4);
+        bitmap.Freeze();
+        return bitmap;
+    }
 
     public static readonly Color Cream = Color.FromRgb(0xF4, 0xEF, 0xE6);
     /// <summary>Bit's hoodie when nothing tints it.</summary>
@@ -90,7 +138,11 @@ public sealed class PetView : Canvas
     readonly Canvas _eyes;
     readonly Path _happyEyes, _closedEyes, _annoyedEyes, _dizzyEyes;
     readonly TextBlock _z;
-    readonly DispatcherTimer _blinkTimer, _reactionTimer;
+    readonly DispatcherTimer _blinkTimer, _reactionTimer, _patTimer;
+    readonly Image _hand;
+    readonly ScaleTransform _handSquash = new(1, 1);
+    readonly TranslateTransform _handMove = new();
+    bool _patting;
 
     PetSpecies _species = PetSpecies.None;
     PetOutfit _outfit = PetOutfit.None;
@@ -134,6 +186,24 @@ public sealed class PetView : Canvas
         _z = new TextBlock { Text = "z", FontSize = 7, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Opacity = 0, RenderTransform = new TranslateTransform() };
         Children.Add(Place(_z, 19, -1));
 
+        _hand = new Image
+        {
+            Source = HandSprite, Width = 14.4, Height = 8.1, Stretch = Stretch.Fill, Opacity = 0, IsHitTestVisible = false,
+            RenderTransformOrigin = new Point(0.5, 1),
+        };
+        var handTransforms = new TransformGroup();
+        handTransforms.Children.Add(_handSquash);
+        handTransforms.Children.Add(_handMove);
+        _hand.RenderTransform = handTransforms;
+        RenderOptions.SetBitmapScalingMode(_hand, BitmapScalingMode.NearestNeighbor);
+        Children.Add(_hand);
+        _patTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(PatFrameMs * 5 + 30) };
+        _patTimer.Tick += (_, _) =>
+        {
+            if (Mouse.LeftButton == MouseButtonState.Pressed && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) Pat();
+            else EndPatting();
+        };
+
         _blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _blinkTimer.Tick += (_, _) => Blink();
         _reactionTimer = new DispatcherTimer();
@@ -142,11 +212,19 @@ public sealed class PetView : Canvas
             _reactionTimer.Stop();
             Show(_base);
         };
-        MouseLeftButtonUp += (_, e) =>
+        MouseLeftButtonDown += (_, e) =>
         {
-            Poke();
+            if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) return;
+            BeginPatting();
             e.Handled = true;
         };
+        MouseLeftButtonUp += (_, e) =>
+        {
+            if (_patting) EndPatting();
+            else Poke();
+            e.Handled = true;
+        };
+        MouseLeave += (_, _) => EndPatting();
         Species = DefaultSpecies;
         Outfit = Resolve(DefaultOutfit, DateTime.Today);
         void Sync()
@@ -428,6 +506,81 @@ public sealed class PetView : Canvas
         else React(Mood.Annoyed, 1.2);
     }
 
+    /// <summary>Starts patting; keeps patting while the button stays down with Shift.</summary>
+    public void BeginPatting()
+    {
+        _patting = true;
+        Pat();
+        _patTimer.Start();
+    }
+
+    public void EndPatting()
+    {
+        if (!_patting) return;
+        _patting = false;
+        _patTimer.Stop();
+        _hand.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(220)) { BeginTime = TimeSpan.FromMilliseconds(260) });
+    }
+
+    double HeadTop => _species switch { PetSpecies.Coco => 6.2, PetSpecies.Pipoca => 6.6, _ => 4.4 };
+
+    // The body squashes towards its feet (y 23.5), so the head comes down and the hand follows it.
+    double[] PatHandY => PatHandLift.Select((lift, i) => (23.5 - HeadTop) * (1 - PatBodyY[i]) + lift).ToArray();
+
+    /// <summary>One pat: the hand comes down on the head, the mascot squashes and a heart floats up.</summary>
+    public void Pat()
+    {
+        _pokes = 0;
+        React(Mood.Patted, 1.1);
+        SetLeft(_hand, 12 - _hand.Width / 2 + 0.8);
+        SetTop(_hand, HeadTop - _hand.Height + 0.6);
+        _hand.BeginAnimation(OpacityProperty, null);
+        _hand.Opacity = 1;
+        Frames(_handMove, TranslateTransform.YProperty, PatHandY);
+        Frames(_handSquash, ScaleTransform.ScaleYProperty, PatHandSquash);
+        Frames(_squash, ScaleTransform.ScaleXProperty, PatBodyX);
+        Frames(_squash, ScaleTransform.ScaleYProperty, PatBodyY);
+        if (!_patting) EndPattingSoon();
+        Heart();
+    }
+
+    void EndPattingSoon() =>
+        _hand.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(220)) { BeginTime = TimeSpan.FromMilliseconds(PatFrameMs * 5 + 120) });
+
+    // Sprite-like: each value holds for one frame, no tweening between them.
+    static void Frames(Animatable target, DependencyProperty property, double[] values)
+    {
+        var frames = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(PatFrameMs * values.Length), FillBehavior = FillBehavior.Stop };
+        for (var i = 0; i < values.Length; i++)
+            frames.KeyFrames.Add(new DiscreteDoubleKeyFrame(values[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(PatFrameMs * i))));
+        target.BeginAnimation(property, frames);
+    }
+
+    void Heart()
+    {
+        var heart = new Image { Source = HeartSprite, Width = 3.5, Height = 2.8, IsHitTestVisible = false, RenderTransform = new TranslateTransform() };
+        RenderOptions.SetBitmapScalingMode(heart, BitmapScalingMode.NearestNeighbor);
+        Children.Add(Place(heart, 4 + Rng.NextDouble() * 14, HeadTop - 1.5));
+        var rise = new DoubleAnimation(0, -7, TimeSpan.FromMilliseconds(700)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(700)) { BeginTime = TimeSpan.Zero };
+        fade.Completed += (_, _) => Children.Remove(heart);
+        ((TranslateTransform)heart.RenderTransform).BeginAnimation(TranslateTransform.YProperty, rise);
+        heart.BeginAnimation(OpacityProperty, fade);
+    }
+
+    /// <summary>For snapshots: freeze on one pat frame (0–4).</summary>
+    public void ShowPatFrame(int frame)
+    {
+        Show(Mood.Patted);
+        SetLeft(_hand, 12 - _hand.Width / 2 + 0.8);
+        SetTop(_hand, HeadTop - _hand.Height + 0.6);
+        _hand.Opacity = 1;
+        _handMove.Y = PatHandY[frame];
+        _handSquash.ScaleY = PatHandSquash[frame];
+        _squash.ScaleX = PatBodyX[frame];
+        _squash.ScaleY = PatBodyY[frame];
+    }
+
     void Show(Mood mood)
     {
         _shown = mood;
@@ -435,7 +588,7 @@ public sealed class PetView : Canvas
 
         var eyes = mood switch
         {
-            Mood.Happy or Mood.Dance => "happy",
+            Mood.Happy or Mood.Dance or Mood.Patted => "happy",
             Mood.Sleep => "closed",
             Mood.Annoyed => "annoyed",
             Mood.Dizzy => "dizzy",

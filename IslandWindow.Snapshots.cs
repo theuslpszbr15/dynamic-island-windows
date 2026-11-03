@@ -181,6 +181,25 @@ public partial class IslandWindow
         await Task.Delay(400);
         RecapWindow.SaveCard(moodCard, System.IO.Path.Combine(folder, "25-bit-moods.png"));
 
+        // PatPat: the five frames of a pat, Bit on the top row and the other mascots below
+        var patRows = new System.Windows.Controls.StackPanel { Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E)) };
+        foreach (var species in new[] { PetSpecies.Bit, PetSpecies.Coco, PetSpecies.Pipoca, PetSpecies.Bu })
+        {
+            var row = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            for (var frame = 0; frame < 5; frame++)
+            {
+                var pet = new PetView { FixedSpecies = species, Active = false };
+                pet.ShowPatFrame(frame);
+                row.Children.Add(new System.Windows.Controls.Viewbox { Width = 96, Height = 96, Margin = new Thickness(14, 30, 14, 8), Child = pet });
+            }
+            patRows.Children.Add(row);
+        }
+        var patCard = new System.Windows.Controls.Border { Child = patRows };
+        patCard.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        patCard.Arrange(new Rect(patCard.DesiredSize));
+        patCard.UpdateLayout();
+        RecapWindow.SaveCard(patCard, System.IO.Path.Combine(folder, "26-patpat.png"));
+
         OnPetDizzy();
         await Shot("24-dizzy-card");
 

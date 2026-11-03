@@ -62,6 +62,11 @@ public sealed class DesktopPetWindow : Window
         PreviewMouseLeftButtonDown += (_, e) =>
         {
             e.Handled = true;
+            if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift))
+            {
+                _pet.BeginPatting();
+                return;
+            }
             StopMoving();
             var before = new Point(Left, Top);
             try { DragMove(); } catch { return; }
@@ -76,6 +81,7 @@ public sealed class DesktopPetWindow : Window
             _settings.DesktopPetY = Top;
             _settings.Save();
         };
+        PreviewMouseLeftButtonUp += (_, _) => _pet.EndPatting();
         MouseRightButtonUp += (_, e) =>
         {
             e.Handled = true;
