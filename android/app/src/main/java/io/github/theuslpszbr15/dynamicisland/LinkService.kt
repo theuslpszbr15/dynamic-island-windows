@@ -38,6 +38,7 @@ class LinkService : Service() {
 
     private fun loop() {
         while (running) {
+            if (PairingStore.isPaused(this)) break
             val pairing = PairingStore.load(this) ?: break
             Link.update { it.copy(pairing = pairing, status = LinkStatus.Connecting, message = null) }
             val client = LinkClient(pairing, "${Build.MANUFACTURER} ${Build.MODEL}".take(40))
@@ -49,6 +50,8 @@ class LinkService : Service() {
                 Link.update { it.copy(status = LinkStatus.AuthFailed, message = e.message) }
                 break
             } catch (e: Exception) {
+                // stopped on purpose (pause / unpair): the UI already says so
+                if (!running) break
                 Link.update { it.copy(status = LinkStatus.Offline, message = e.message) }
             } finally {
                 Link.client = null

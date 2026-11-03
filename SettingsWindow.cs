@@ -319,6 +319,9 @@ public sealed class SettingsWindow : Window
             };
             buttons.Children.Add(copy);
             buttons.Children.Add(again);
+            var stop = new Button { Content = phones > 0 ? "Desconectar o celular" : "Parar de esperar", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
+            stop.Click += (_, _) => { _app.TogglePhoneLink(); Render(); };
+            buttons.Children.Add(stop);
             side.Children.Add(buttons);
             var pair = new DockPanel();
             DockPanel.SetDock(qr, Dock.Left);

@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import java.util.concurrent.Executors
 
-enum class LinkStatus { Unpaired, Connecting, Connected, Offline, AuthFailed }
+enum class LinkStatus { Unpaired, Connecting, Connected, Offline, AuthFailed, Paused }
 
 data class LinkUi(
     val pairing: Pairing? = null,
@@ -33,6 +33,20 @@ object Link {
     private val io = Executors.newSingleThreadExecutor()
 
     fun update(change: (LinkUi) -> LinkUi) = _state.update(change)
+
+    /** Stops looking for the PC (and stays stopped after a restart) but keeps the pairing. */
+    fun pause(context: Context) {
+        PairingStore.setPaused(context, true)
+        LinkService.stop(context)
+        _state.value.approvals.forEach { Notifications.cancelApproval(context, it.fingerprint) }
+        update { it.copy(status = LinkStatus.Paused, message = null, approvals = emptyList(), sessions = emptyList(), tray = emptyList()) }
+    }
+
+    fun resume(context: Context) {
+        PairingStore.setPaused(context, false)
+        update { it.copy(status = LinkStatus.Connecting, message = null) }
+        LinkService.start(context)
+    }
 
     fun pruneExpired(context: Context) {
         val now = System.currentTimeMillis()

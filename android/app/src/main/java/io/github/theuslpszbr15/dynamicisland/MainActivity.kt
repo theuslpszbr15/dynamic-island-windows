@@ -33,8 +33,11 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         Notifications.createChannels(this)
         PairingStore.load(this)?.let { pairing ->
-            Link.update { if (it.pairing == null) it.copy(pairing = pairing, status = LinkStatus.Connecting) else it }
-            LinkService.start(this)
+            val paused = PairingStore.isPaused(this)
+            Link.update {
+                if (it.pairing == null) it.copy(pairing = pairing, status = if (paused) LinkStatus.Paused else LinkStatus.Connecting) else it
+            }
+            if (!paused) LinkService.start(this)
         }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
@@ -67,7 +70,8 @@ class MainActivity : FragmentActivity() {
                         }
                     },
                     onUnpair = ::unpair,
-                    onRetry = { LinkService.start(this) },
+                    onRetry = { Link.resume(this) },
+                    onPause = { Link.pause(this) },
                 )
             }
         }
@@ -96,6 +100,7 @@ class MainActivity : FragmentActivity() {
         pendingPairing.value = null
         LinkService.stop(this)
         PairingStore.save(this, pairing)
+        PairingStore.setPaused(this, false)
         Link.update { LinkUi(pairing = pairing, status = LinkStatus.Connecting) }
         LinkService.start(this)
     }

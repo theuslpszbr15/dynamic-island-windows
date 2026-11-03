@@ -91,10 +91,11 @@ fun AppScreen(
     onOpen: (TrayItem) -> Unit,
     onUnpair: () -> Unit,
     onRetry: () -> Unit,
+    onPause: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(Ground).statusBarsPadding().navigationBarsPadding()) {
         if (state.pairing == null) PairScreen(onScan, onPaste)
-        else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onScan)
+        else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onPause, onScan)
     }
     if (pending != null) {
         AlertDialog(
@@ -163,9 +164,11 @@ private fun HomeScreen(
     onOpen: (TrayItem) -> Unit,
     onUnpair: () -> Unit,
     onRetry: () -> Unit,
+    onPause: () -> Unit,
     onScan: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(state.initialTab) }
+    var confirmUnpair by remember { mutableStateOf(false) }
     LaunchedEffect(focused) { if (focused != null) tab = 0 }
     val mood = when {
         state.approvals.isNotEmpty() -> BitMood.Waiting
@@ -173,7 +176,7 @@ private fun HomeScreen(
         else -> BitMood.Idle
     }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 8.dp),
+        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 10.dp, top = 18.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Bit(mood, size = 56.dp)
             Column(Modifier.padding(start = 14.dp).weight(1f)) {
@@ -181,9 +184,18 @@ private fun HomeScreen(
                     fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 StatusLine(state)
             }
+            when (state.status) {
+                LinkStatus.Connecting, LinkStatus.Offline ->
+                    OutlinedButton(onClick = onPause, shape = RoundedCornerShape(12.dp)) { Text("Parar de procurar", fontSize = 13.sp) }
+                LinkStatus.Connected ->
+                    OutlinedButton(onClick = onPause, shape = RoundedCornerShape(12.dp)) { Text("Desconectar", fontSize = 13.sp) }
+                LinkStatus.Paused ->
+                    Button(onClick = onRetry, shape = RoundedCornerShape(12.dp)) { Text("Procurar o PC", fontSize = 13.sp) }
+                else -> {}
+            }
         }
         Box(Modifier.weight(1f)) {
-            if (tab == 0) AgentsTab(state, focused, onAllow, onDeny, onUnpair, onRetry, onScan)
+            if (tab == 0) AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan)
             else TrayTab(state, onOpen)
         }
         NavigationBar(containerColor = Card) {
@@ -204,6 +216,15 @@ private fun HomeScreen(
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Blue.copy(alpha = 0.25f)),
             )
         }
+    }
+    if (confirmUnpair) {
+        AlertDialog(
+            onDismissRequest = { confirmUnpair = false },
+            title = { Text("Desparear deste PC?") },
+            text = { Text("O celular esquece ${state.pairing?.name ?: "o PC"}. Para ligar de novo, escaneie o código nas Configurações do PC.") },
+            confirmButton = { TextButton(onClick = { confirmUnpair = false; onUnpair() }) { Text("Desparear", color = Red) } },
+            dismissButton = { TextButton(onClick = { confirmUnpair = false }) { Text("Cancelar") } },
+        )
     }
 }
 
@@ -228,6 +249,10 @@ private fun AgentsTab(
                 Notice("Sem conexão. Confira se o PC está ligado, com a ilha aberta, na mesma rede Wi-Fi " +
                     "(redes de visitante costumam isolar os aparelhos).", "Tentar agora", onRetry)
             }
+            LinkStatus.Paused -> item {
+                Notice("Parado: o celular não está procurando o PC (nem gastando bateria com isso). " +
+                    "O pareamento continua salvo.", "Procurar o PC", onRetry)
+            }
             else -> {}
         }
         items(approvals, key = { it.fingerprint }) { approval ->
@@ -245,7 +270,7 @@ private fun AgentsTab(
         }
         item {
             TextButton(onClick = onUnpair, modifier = Modifier.padding(vertical = 18.dp)) {
-                Text("Desparear deste PC", color = Muted)
+                Text("Desparear deste PC", color = Red)
             }
         }
     }
@@ -302,6 +327,7 @@ private fun StatusLine(state: LinkUi) {
         LinkStatus.Connecting -> Orange to "Procurando o PC…"
         LinkStatus.Offline -> Red to (state.message ?: "Sem conexão")
         LinkStatus.AuthFailed -> Red to "Pareamento recusado"
+        LinkStatus.Paused -> Muted to "Parado"
         LinkStatus.Unpaired -> Muted to ""
     }
     Row(verticalAlignment = Alignment.CenterVertically) {

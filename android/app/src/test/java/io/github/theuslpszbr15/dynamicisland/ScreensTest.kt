@@ -19,7 +19,7 @@ class ScreensTest {
         captureRoboImage("build/screens/$name.png") {
             CompositionLocalProvider(LocalStill provides true) {
                 AppTheme {
-                    AppScreen(state, null, pending, {}, {}, {}, {}, {}, {}, {}, {}, {})
+                    AppScreen(state, null, pending, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
                 }
             }
         }
@@ -41,6 +41,8 @@ class ScreensTest {
     @Test fun offline() = shot("04-sem-conexao", LinkUi(
         pairing = pairing, status = LinkStatus.Offline, message = "connect timed out",
     ))
+
+    @Test fun paused() = shot("06-parado", LinkUi(pairing = pairing, status = LinkStatus.Paused))
 
     @Test fun tray() = shot("05-bandeja", LinkUi(
         pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 1,

@@ -45,15 +45,21 @@ object Notifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    fun link(context: Context, text: String): Notification =
-        NotificationCompat.Builder(context, LINK_CHANNEL)
+    fun link(context: Context, text: String): Notification {
+        val pause = PendingIntent.getBroadcast(
+            context, 1, Intent(context, DenyReceiver::class.java).setAction(DenyReceiver.ACTION_PAUSE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(context, LINK_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
             .setContentTitle("Dynamic Island")
             .setContentText(text)
             .setOngoing(true)
             .setSilent(true)
             .setContentIntent(openApp(context, null))
+            .addAction(0, "Parar de procurar", pause)
             .build()
+    }
 
     fun showApproval(context: Context, approval: Approval) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return

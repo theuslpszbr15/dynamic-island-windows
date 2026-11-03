@@ -37,8 +37,15 @@ object PairingStore {
     }
 
     fun clear(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(ENTRY).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(ENTRY).remove(PAUSED).apply()
     }
+
+    private const val PAUSED = "paused"
+
+    fun isPaused(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PAUSED, false)
+
+    fun setPaused(context: Context, paused: Boolean) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(PAUSED, paused).apply()
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
