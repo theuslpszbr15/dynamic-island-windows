@@ -15,6 +15,7 @@ namespace DynamicIsland;
 public sealed class SettingsWindow : Window
 {
     const string ReleasesUrl = "https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest";
+    const string ApkUrl = ReleasesUrl + "/download/DynamicIsland-Android.apk";
 
     static readonly Brush Ground = Frozen(0xFF141416), Panel = Frozen(0xFF1C1C1F), CardBg = Frozen(0xFF222226),
         Line = Frozen(0xFF2E2E33), Muted = Frozen(0xFF9A9AA0), Accent = Frozen(0xFF0A84FF), Hover = Frozen(0xFF2A2A2F);
@@ -34,6 +35,7 @@ public sealed class SettingsWindow : Window
     readonly StackPanel _nav = new() { Margin = new Thickness(10, 8, 10, 10) };
     readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(34, 26, 34, 30) };
     string _page = "general";
+    bool _downloadQr;
 
     IslandSettings S => _app.Settings;
 
@@ -88,6 +90,12 @@ public sealed class SettingsWindow : Window
         if (Sections.All(s => s.Id != page)) return;
         _page = page;
         Render();
+    }
+
+    public void ShowDownloadQr()
+    {
+        _downloadQr = true;
+        Navigate("phone");
     }
 
     void Render()
@@ -275,6 +283,7 @@ public sealed class SettingsWindow : Window
             Note("Com o app Dynamic Island no Android, os pedidos de permissão chegam no celular: Negar direto da notificação, " +
                  "Permitir com a sua digital. O celular conversa direto com este PC pela rede Wi-Fi (TLS, código de pareamento)."),
             Toggle("Ligação com o celular", "Desligada, nada fica escutando na rede.", S.PhoneLink, _ => _app.TogglePhoneLink())));
+        page.Children.Add(InstallCard());
 
         if (S.PhoneLink && island.Phone is { Running: true } link)
         {
@@ -296,7 +305,7 @@ public sealed class SettingsWindow : Window
             side.Children.Add(Note(PhoneLink.LocalAddress() is { } ip
                 ? $"Este PC: {ip}, porta {link.Port}"
                 : "Sem rede local: conecte o PC ao Wi-Fi."));
-            side.Children.Add(Note("1. Instale o app no celular (botão abaixo).\n2. Celular e PC na mesma rede Wi-Fi.\n3. No app, toque em Escanear e aponte para este código."));
+            side.Children.Add(Note("1. Instale o app no celular (Baixar no celular, acima).\n2. Celular e PC na mesma rede Wi-Fi.\n3. No app, toque em Escanear e aponte para este código."));
             var buttons = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
             var copy = new Button { Content = "Copiar link", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
             copy.Click += (_, _) => { try { Clipboard.SetText(url); } catch { } };
@@ -324,12 +333,41 @@ public sealed class SettingsWindow : Window
             page.Children.Add(Card("Parear", Note("A ligação não iniciou: " + (island.PhoneError ?? "erro desconhecido"))));
         }
 
-        var download = new Button { Content = "Baixar o app Android", Style = (Style)Resources["Action"] };
+        var download = new Button { Content = "Abrir no navegador", Style = (Style)Resources["Action"] };
         download.Click += (_, _) => Open(ReleasesUrl);
         page.Children.Add(Card("No celular",
             Toggle("Bandeja de arquivos no celular", "O celular vê os itens fixados na bandeja da ilha e pode abri-los neste PC (pede sua digital).",
                 S.PhoneTray, _ => _app.TogglePhoneTray()),
-            Row("App Android", "DynamicIsland-Android.apk na página de Releases (Android 11 ou mais novo).", download)));
+            Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
+    }
+
+    // Step one: get the APK onto the phone by scanning a QR code with its camera.
+    Border InstallCard()
+    {
+        var toggle = new Button { Content = _downloadQr ? "Esconder QR code" : "Baixar no celular", Style = (Style)Resources["Action"] };
+        toggle.Click += (_, _) => { _downloadQr = !_downloadQr; Render(); };
+        var row = Row("Instalar o app no celular", "Android 11 ou mais novo. Escaneie um QR code com a câmera e o download do app começa.", toggle);
+        if (!_downloadQr) return Card("App Android", row);
+
+        var qr = new Border
+        {
+            Background = Brushes.White, CornerRadius = new CornerRadius(14), Padding = new Thickness(10), Margin = new Thickness(0, 6, 22, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = new Image { Source = Qr(ApkUrl), Width = 190, Height = 190 },
+        };
+        var steps = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        steps.Children.Add(new TextBlock { Text = "Aponte a câmera do celular", FontSize = 17, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) });
+        steps.Children.Add(Note("1. Abra a câmera (ou o Google Lens) e toque no link que aparecer.\n" +
+                                "2. O navegador baixa DynamicIsland-Android.apk.\n" +
+                                "3. Abra o arquivo baixado. Na primeira vez o Android pede para permitir instalações do navegador.\n" +
+                                "4. Abra o app e pareie com o código de pareamento (abaixo)."));
+        var link = new TextBox { Text = ApkUrl, IsReadOnly = true, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Background = Hover, Foreground = Muted, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6) };
+        steps.Children.Add(link);
+        var both = new DockPanel { Margin = new Thickness(0, 10, 0, 0) };
+        DockPanel.SetDock(qr, Dock.Left);
+        both.Children.Add(qr);
+        both.Children.Add(steps);
+        return Card("App Android", row, both);
     }
 
     void Tray(Panel page)

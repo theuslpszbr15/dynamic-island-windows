@@ -304,9 +304,10 @@ public partial class IslandWindow
         ApplyPhoneLink();
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
-        foreach (var section in new[] { "general", "look", "island", "agents", "phone", "tray", "updates" })
+        foreach (var section in new[] { "general", "look", "island", "agents", "phone", "tray", "updates", "phone-download" })
         {
-            settingsWindow.Navigate(section);
+            if (section == "phone-download") settingsWindow.ShowDownloadQr();
+            else settingsWindow.Navigate(section);
             await Task.Delay(700);
             var root = (FrameworkElement)settingsWindow.Content;
             var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
