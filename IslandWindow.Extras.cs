@@ -17,8 +17,7 @@ namespace DynamicIsland;
 public partial class IslandWindow
 {
     const int WM_HOTKEY = 0x0312, WM_CLIPBOARDUPDATE = 0x031D;
-    const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_NOREPEAT = 0x4000;
-    const int HotkeyHide = 1, HotkeyMedia = 2, HotkeyTimer = 3, HotkeyAgents = 4, HotkeyCalendar = 5;
+    const uint MOD_NOREPEAT = 0x4000;
 
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hwnd, int id);
@@ -58,11 +57,7 @@ public partial class IslandWindow
         if (_extrasStarted || _hwnd == IntPtr.Zero) return;
         _extrasStarted = true;
         HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
-        RegisterHotKey(_hwnd, HotkeyHide, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x44);     // D
-        RegisterHotKey(_hwnd, HotkeyMedia, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x4D);    // M
-        RegisterHotKey(_hwnd, HotkeyTimer, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x54);    // T
-        RegisterHotKey(_hwnd, HotkeyAgents, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x41);   // A
-        RegisterHotKey(_hwnd, HotkeyCalendar, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x43); // C
+        RegisterHotkeys(announce: true);
         AddClipboardFormatListener(_hwnd);
         _media.SourcesChanged += BuildSourceChips;
         _lyricsTimer = MakeTimer(0.25, UpdateLyric);
@@ -79,7 +74,7 @@ public partial class IslandWindow
     void StopExtras()
     {
         if (!_extrasStarted) return;
-        for (var id = HotkeyHide; id <= HotkeyCalendar; id++) UnregisterHotKey(_hwnd, id);
+        foreach (var action in Hotkeys.All) UnregisterHotKey(_hwnd, action.Id);
         RemoveClipboardFormatListener(_hwnd);
         _lyricsTimer?.Stop();
         _extrasTimer?.Stop();
@@ -120,19 +115,51 @@ public partial class IslandWindow
         GuardTick();
     }
 
+    /// <summary>Shortcuts another app already owns (RegisterHotKey failed), as "Ctrl+Alt+A".</summary>
+    public IReadOnlyList<string> HotkeyConflicts { get; private set; } = [];
+
+    /// <summary>(Re)registers every shortcut from the settings; conflicts are kept in HotkeyConflicts and, when
+    /// <paramref name="announce"/>, shown once on the island instead of failing silently.</summary>
+    public void RegisterHotkeys(bool announce = false)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        var conflicts = new List<string>();
+        foreach (var action in Hotkeys.All)
+        {
+            UnregisterHotKey(_hwnd, action.Id);
+            var keys = Hotkeys.Keys(_settings, action.Key);
+            if (Hotkeys.Parse(keys) is not { } parsed) continue;
+            if (!RegisterHotKey(_hwnd, action.Id, parsed.Modifiers | MOD_NOREPEAT, parsed.Key))
+            {
+                conflicts.Add(keys);
+                Log.Warn("Hotkeys", $"{keys} ({action.Key}) is taken by another app");
+            }
+        }
+        HotkeyConflicts = conflicts;
+        if (announce && conflicts.Count > 0)
+            Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(5000); // after startup settles, so the pill is visible
+                ShowInfo("\uE765", $"{string.Join(", ", conflicts)} já é usado por outro app", "Mudar",
+                    glyphColor: AgentSession.Waiting, action: () => ((App)Application.Current).ShowSettings("general"), seconds: 8);
+            });
+    }
+
     void OnHotkey(int id)
     {
-        if (id == HotkeyHide)
+        var action = Hotkeys.ById(id)?.Key;
+        if (action == null) return;
+        if (action == "hide")
         {
             SetUserHidden(!_userHidden);
             return;
         }
         if (_userHidden) SetUserHidden(false);
-        var page = id switch
+        var page = action switch
         {
-            HotkeyMedia => PageMedia,
-            HotkeyTimer => PageTimer,
-            HotkeyAgents => PageAgents,
+            "media" => PageMedia,
+            "timer" => PageTimer,
+            "agents" => PageAgents,
             _ => PageCalendar,
         };
         if (_expanded && _page == page)
@@ -248,7 +275,14 @@ public partial class IslandWindow
         var approval = _approvals.FirstOrDefault();
         if (approval == null) return;
         ApprovalAgent.Text = approval.Agent;
-        ApprovalDetail.Text = approval.Detail;
+        // The exact command, not the one-line summary: Allow must never approve text the user didn't see.
+        var canAllow = ApprovalRules.IslandCanAllow(approval.Command);
+        ApprovalDetail.Text = canAllow
+            ? approval.Command
+            : $"{approval.Detail}\nComando longo ou com várias linhas: confira e responda no terminal.";
+        ApprovalAllow.IsEnabled = canAllow;
+        ApprovalAllow.Opacity = canAllow ? 1 : 0.35;
+        ApprovalAllowText.Text = canAllow ? "Permitir" : "Ver no terminal";
         UpdateApprovalElapsed();
         ApprovalPetBox.Visibility = Vis(PetOn);
         ApprovalPet.Tint(AgentSession.Waiting);
@@ -274,9 +308,12 @@ public partial class IslandWindow
         else Retarget();
     }
 
+    // From the island's own buttons (the phone has its own limit, in OnPhoneDecision).
     void Answer(string decision)
     {
-        if (_approvals.FirstOrDefault() is { } approval) Answer(approval, decision);
+        if (_approvals.FirstOrDefault() is not { } approval) return;
+        if (decision == "allow" && !ApprovalRules.IslandCanAllow(approval.Command)) return;
+        Answer(approval, decision);
     }
 
     void Answer(Approval approval, string decision)

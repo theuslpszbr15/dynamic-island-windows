@@ -50,9 +50,11 @@ atrapalhar: os cliques passam por ela.
 - **Vários monitores:** fica na tela principal, numa tela escolhida ou segue a janela ativa (respeita a escala de cada monitor).
 - Some sozinha com app em tela cheia e não rouba o foco.
 - **Atalhos:** `Ctrl+Alt+D` esconde/mostra a ilha, `Ctrl+Alt+M` mídia, `Ctrl+Alt+T` timer, `Ctrl+Alt+A` agentes, `Ctrl+Alt+C` agenda.
+  Dá para trocar as teclas em *Configurações → Geral*; se outro app já usa um atalho, a ilha avisa.
 - **Esconder:** `Ctrl+Alt+D`, clique no ícone da bandeja ou *Esconder por 1 hora* no menu. Escondida, nada aparece (nem avisos).
 - **Vídeos não incomodam:** YouTube, Netflix, Prime Video, Twitch… não abrem aviso nem deixam a pílula aberta (dá para ligar em *Mostrar na ilha → Vídeos*).
-- **Atualizações:** avisa quando sai uma versão nova aqui no GitHub e se atualiza com um clique (o arquivo é conferido pelo SHA-256 da release).
+- **Atualizações:** avisa quando sai uma versão nova aqui no GitHub e se atualiza com um clique. O arquivo precisa bater com o
+  SHA-256 da release (sem ele, a atualização é ignorada) e, se a ilha instalada for assinada, a nova versão precisa ter a mesma assinatura.
 
 ## Configurações
 
@@ -120,12 +122,23 @@ pedido exato que ainda está esperando. Comandos com mais de 500 caracteres só 
 Redes de visitante/corporativas costumam isolar os aparelhos, e o Windows pode pedir para liberar a ilha no firewall.
 Desenho do protocolo inspirado no [Coucou](https://github.com/Louis-CFM/coucou) (MIT); código e mascote são nossos.
 
-Compilar: JDK 17+ e Android SDK 35, `cd android` e `gradlew assembleRelease`.
+Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e reconecta sozinho, sem parear de novo.
+
+Compilar: JDK 17+ e Android SDK 35, `cd android` e `gradlew assembleRelease`. Para publicar, assine com uma chave própria:
+crie `android/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`; fica fora do git) ou use as
+variáveis `DI_STORE_FILE`, `DI_STORE_PASSWORD`, `DI_KEY_ALIAS` e `DI_KEY_PASSWORD`. Sem chave, o release usa a chave de debug
+da máquina, e esse APK não atualiza por cima de um assinado em outro lugar.
 
 ## Desenvolvimento
 
 `DynamicIsland.exe --snapshot <pasta>` renderiza todos os estados da ilha em PNG com dados de
 demonstração (foi assim que as imagens acima foram geradas).
+
+Testes: `dotnet test tests/DynamicIsland.Tests` (Windows) e `cd android && gradlew testReleaseUnitTest`. O GitHub Actions
+roda os dois em cada push e pull request. Falhas ficam em `%APPDATA%\DynamicIsland\error.log`; as configurações são salvas
+de forma atômica, com a versão anterior em `settings.json.bak`.
+
+Para um fork: troque `UpdateRepository` em `DynamicIsland.csproj` (atualizações e links) e `Company` (nome em *Aplicativos*).
 
 | Arquivo | Conteúdo |
 |---|---|
@@ -143,3 +156,5 @@ demonstração (foi assim que as imagens acima foram geradas).
 | `Services/VolumeService.cs` | Volume via Core Audio |
 | `Services/BatteryService.cs` | Eventos de energia |
 | `Services/AgentHub.cs`, `AgentCli.cs` | Pipe dos agentes e CLI dos hooks |
+| `Services/AtomicFile.cs`, `Log.cs` | Salvamento atômico (com .bak) e o `error.log` |
+| `Hotkeys.cs` | Atalhos globais: ações, teclas padrão e formato salvo nas configurações |

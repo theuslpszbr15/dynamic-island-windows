@@ -325,9 +325,9 @@
                         </Grid>
 
                         <!-- Claude Code asking for permission: answer from the island -->
-                        <Grid x:Name="ApprovalPanel" Height="112" VerticalAlignment="Top" Margin="16,0,16,0" Visibility="Collapsed">
+                        <Grid x:Name="ApprovalPanel" Height="128" VerticalAlignment="Top" Margin="16,0,16,0" Visibility="Collapsed">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="62" />
+                                <RowDefinition Height="78" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <Viewbox x:Name="ApprovalPetBox" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -339,7 +339,9 @@
                                     <Run Text=" esperando seu OK" Foreground="#FFFF9F0A" FontWeight="SemiBold" />
                                     <Run x:Name="ApprovalElapsed" Foreground="{DynamicResource Muted}" FontSize="12" />
                                 </TextBlock>
-                                <TextBlock x:Name="ApprovalDetail" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                <!-- the exact command being allowed, wrapped: up to 3 lines, never cut silently (see IslandCanAllow) -->
+                                <TextBlock x:Name="ApprovalDetail" FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                           TextTrimming="CharacterEllipsis" MaxHeight="48" Margin="0,2,0,0" />
                             </StackPanel>
                             <Grid Grid.Row="1" Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
@@ -353,10 +355,10 @@
                                         <TextBlock Text="Negar" />
                                     </StackPanel>
                                 </Button>
-                                <Button Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FF30D158" Foreground="Black" Click="ApprovalAllow_Click">
+                                <Button x:Name="ApprovalAllow" Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FF30D158" Foreground="Black" Click="ApprovalAllow_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                        <TextBlock Text="Permitir" />
+                                        <TextBlock x:Name="ApprovalAllowText" Text="Permitir" />
                                     </StackPanel>
                                 </Button>
                             </Grid>

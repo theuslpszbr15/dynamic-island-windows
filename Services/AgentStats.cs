@@ -27,12 +27,12 @@ public static class AgentStats
         get
         {
             if (_days != null) return _days;
-            try
+            Dictionary<string, DayStats>? Parse(string json)
             {
-                if (File.Exists(FilePath))
-                    _days = JsonSerializer.Deserialize<Dictionary<string, DayStats>>(File.ReadAllText(FilePath));
+                try { return JsonSerializer.Deserialize<Dictionary<string, DayStats>>(json); }
+                catch { return null; }
             }
-            catch { }
+            if (AtomicFile.ReadAllText(FilePath, json => Parse(json) != null) is { } text) _days = Parse(text);
             return _days ??= [];
         }
     }
@@ -72,10 +72,9 @@ public static class AgentStats
             // keep three months
             var cutoff = DateTime.Today.AddDays(-90).ToString("yyyy-MM-dd");
             foreach (var old in _days.Keys.Where(k => string.CompareOrdinal(k, cutoff) < 0).ToList()) _days.Remove(old);
-            Directory.CreateDirectory(IslandSettings.Folder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(_days));
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_days));
         }
-        catch { }
+        catch (Exception ex) { Log.Error("AgentStats.Save", ex); }
     }
 
     /// <summary>The 7 days ending yesterday (on Monday that's last Monday–Sunday).</summary>

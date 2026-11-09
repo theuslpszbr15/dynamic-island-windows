@@ -110,7 +110,7 @@ public static class AgentCli
     }
 
     // What exactly is being allowed, for the phone (the island shows the one-line version).
-    static string FullCommand(string? tool, JsonElement input)
+    internal static string FullCommand(string? tool, JsonElement input)
     {
         string? Arg(string name) => input.ValueKind == JsonValueKind.Object ? Str(input, name) : null;
         var text = Arg("command") is { } shell ? "$ " + shell
@@ -120,7 +120,7 @@ public static class AgentCli
     }
 
     // What kind of step a tool is, which file it touches and, for edits, a short "-old / +new" diff.
-    static (string? Step, string? File, string? Diff) Inspect(string? tool, JsonElement input)
+    internal static (string? Step, string? File, string? Diff) Inspect(string? tool, JsonElement input)
     {
         string? Arg(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object ? Str(e, name) : null;
         var path = Arg(input, "file_path") ?? Arg(input, "filePath") ?? Arg(input, "path") ?? Arg(input, "notebook_path");
@@ -158,7 +158,7 @@ public static class AgentCli
     }
 
     /// <summary>The changed lines only (common first/last lines dropped), at most 4 removed and 5 added.</summary>
-    static string? Diff(string before, string after)
+    internal static string? Diff(string before, string after)
     {
         var a = before.ReplaceLineEndings("\n").Split('\n').ToList();
         var b = after.ReplaceLineEndings("\n").Split('\n').ToList();
@@ -193,7 +193,7 @@ public static class AgentCli
         _ => agent,
     };
 
-    static string DescribeTool(string? tool, JsonElement input)
+    internal static string DescribeTool(string? tool, JsonElement input)
     {
         string? Arg(string name) => input.ValueKind == JsonValueKind.Object ? Str(input, name) : null;
         string File(string? path) => string.IsNullOrEmpty(path) ? "arquivo" : System.IO.Path.GetFileName(path);

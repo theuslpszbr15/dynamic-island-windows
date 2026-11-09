@@ -14,8 +14,8 @@ namespace DynamicIsland;
 /// <summary>All of the island's settings in one window: a section list on the left, live changes on the right.</summary>
 public sealed class SettingsWindow : Window
 {
-    const string ReleasesUrl = "https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest";
-    const string ApkUrl = ReleasesUrl + "/download/DynamicIsland-Android.apk";
+    static string ReleasesUrl => Services.Updater.RepositoryUrl + "/releases/latest";
+    static string ApkUrl => ReleasesUrl + "/download/DynamicIsland-Android.apk";
 
     static readonly Brush Ground = Frozen(0xFF141416), Panel = Frozen(0xFF1C1C1F), CardBg = Frozen(0xFF222226),
         Line = Frozen(0xFF2E2E33), Muted = Frozen(0xFF9A9AA0), Accent = Frozen(0xFF0A84FF), Hover = Frozen(0xFF2A2A2F);
@@ -126,7 +126,7 @@ public sealed class SettingsWindow : Window
         var hide = new Button { Content = "Esconder por 1 hora", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 12, 0) };
         hide.Click += (_, _) => { _app.HideFor(TimeSpan.FromHours(1)); Render(); };
         page.Children.Add(Card("Ilha",
-            Toggle("Esconder a ilha", "Some da tela, inclusive os avisos. Também com Ctrl+Alt+D ou clicando no ícone da bandeja.",
+            Toggle("Esconder a ilha", $"Some da tela, inclusive os avisos. Também com {Hotkeys.Keys(S, "hide")} ou clicando no ícone da bandeja.",
                 _app.IslandHidden, _ => _app.ToggleHidden(), hide),
             Choice("Formato", "Pílula flutuando abaixo do topo ou colada na borda, como um notch.",
                 [(IslandShape.Pill, "Pílula flutuante"), (IslandShape.Notch, "Notch no topo")], S.Shape, _app.SetShape),
@@ -144,28 +144,56 @@ public sealed class SettingsWindow : Window
                 [(5, "5 minutos"), (15, "15 minutos"), (25, "25 minutos (pomodoro)"), (45, "45 minutos"), (60, "1 hora")],
                 S.TimerMinutes, m => { S.TimerMinutes = m; S.Save(); })));
 
+        // Click a shortcut and press the new keys (Ctrl, Alt or Win + a letter, digit or F-key); Backspace restores
+        // the default. Keys another app already owns are flagged instead of failing silently.
         var keys = new Grid { Margin = new Thickness(0, 4, 0, 4) };
-        keys.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+        keys.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
         keys.ColumnDefinitions.Add(new ColumnDefinition());
-        (string Key, string What)[] shortcuts =
-        [
-            ("Ctrl+Alt+D", "esconder / mostrar a ilha"), ("Ctrl+Alt+M", "abrir mídia"), ("Ctrl+Alt+T", "abrir o timer"),
-            ("Ctrl+Alt+A", "abrir agentes"), ("Ctrl+Alt+C", "abrir a agenda"),
-        ];
-        for (var i = 0; i < shortcuts.Length; i++)
+        var conflicts = _app.Island.HotkeyConflicts;
+        for (var i = 0; i < Hotkeys.All.Length; i++)
         {
-            keys.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });
-            var key = new Border
+            var action = Hotkeys.All[i];
+            var current = Hotkeys.Keys(S, action.Key);
+            var taken = conflicts.Contains(current);
+            keys.RowDefinitions.Add(new RowDefinition { Height = new GridLength(34) });
+            var box = new TextBox
             {
-                Background = Hover, CornerRadius = new CornerRadius(6), Padding = new Thickness(8, 2, 8, 2),
-                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock { Text = shortcuts[i].Key, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5 },
+                Text = current, IsReadOnly = true, IsReadOnlyCaretVisible = false, Cursor = Cursors.Hand,
+                Width = 136, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+                FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5, Padding = new Thickness(8, 3, 8, 3),
+                Background = Hover, Foreground = taken ? Brushes.Orange : Brushes.White, BorderThickness = new Thickness(1),
+                BorderBrush = taken ? Brushes.Orange : Line, ToolTip = "Clique e pressione as novas teclas. Backspace volta ao padrão.",
             };
-            var what = new TextBlock { Text = shortcuts[i].What, VerticalAlignment = VerticalAlignment.Center, Foreground = Muted };
-            Grid.SetRow(key, i);
+            box.GotKeyboardFocus += (_, _) => { box.Text = "pressione…"; box.BorderBrush = Accent; };
+            box.LostKeyboardFocus += (_, _) => { box.Text = Hotkeys.Keys(S, action.Key); box.BorderBrush = taken ? Brushes.Orange : Line; };
+            box.PreviewKeyDown += (_, e) =>
+            {
+                e.Handled = true;
+                var key = e.Key == Key.System ? e.SystemKey : e.Key;
+                if (key == Key.Escape) { Keyboard.ClearFocus(); return; }
+                string? chosen = key is Key.Back or Key.Delete ? action.Default : Hotkeys.Format(Keyboard.Modifiers, key);
+                if (chosen == null) return; // only modifiers so far, or a key that can't be a shortcut
+                if (Hotkeys.All.Any(other => other != action && Hotkeys.Keys(S, other.Key) == chosen))
+                {
+                    box.Text = "já usado aqui";
+                    return;
+                }
+                if (chosen == action.Default) S.Hotkeys.Remove(action.Key);
+                else S.Hotkeys[action.Key] = chosen;
+                S.Save();
+                _app.Island.RegisterHotkeys();
+                Keyboard.ClearFocus();
+                Dispatcher.BeginInvoke(new Action(Render)); // shows the new keys and whether they are free
+            };
+            var what = new TextBlock
+            {
+                Text = taken ? $"{action.Label} · em uso por outro app, escolha outra" : action.Label,
+                VerticalAlignment = VerticalAlignment.Center, Foreground = taken ? Brushes.Orange : Muted,
+            };
+            Grid.SetRow(box, i);
             Grid.SetRow(what, i);
             Grid.SetColumn(what, 1);
-            keys.Children.Add(key);
+            keys.Children.Add(box);
             keys.Children.Add(what);
         }
         page.Children.Add(Card("Atalhos de teclado", keys));
@@ -174,19 +202,19 @@ public sealed class SettingsWindow : Window
     void Look(Panel page)
     {
         var themes = new WrapPanel();
-        foreach (var (name, color) in IslandThemes.All)
+        foreach (var (id, name, color) in IslandThemes.All)
         {
-            var selected = S.Theme == name;
+            var selected = S.Theme == id;
             var swatch = new Border
             {
                 Width = 150, Height = 74, CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 0, 10, 10),
                 BorderThickness = new Thickness(selected ? 2.5 : 1), BorderBrush = selected ? Accent : Line, Cursor = Cursors.Hand,
-                Background = name == IslandThemes.Glass
+                Background = id == IslandThemes.Glass
                     ? new LinearGradientBrush(Color.FromRgb(0x5B, 0x6E, 0x8C), Color.FromRgb(0x2A, 0x2F, 0x3A), 45)
                     : new SolidColorBrush(color),
                 ToolTip = name,
             };
-            var light = name == IslandThemes.Light;
+            var light = id == IslandThemes.Light;
             var inner = new Grid();
             inner.Children.Add(new Border
             {
@@ -201,7 +229,7 @@ public sealed class SettingsWindow : Window
                 Foreground = light ? Brushes.Black : Brushes.White,
             });
             swatch.Child = inner;
-            swatch.MouseLeftButtonUp += (_, _) => { _app.SetTheme(name); Render(); };
+            swatch.MouseLeftButtonUp += (_, _) => { _app.SetTheme(id); Render(); };
             themes.Children.Add(swatch);
         }
         page.Children.Add(Card("Tema", Note("A cor da ilha. Vidro desfoca o que está atrás dela (e some de prints e do compartilhamento de tela)."), themes));
@@ -444,12 +472,12 @@ public sealed class SettingsWindow : Window
         var data = new Button { Content = "Abrir pasta", Style = (Style)Resources["Action"] };
         data.Click += (_, _) => Open(IslandSettings.Folder);
         var github = new Button { Content = "Abrir no GitHub", Style = (Style)Resources["Action"] };
-        github.Click += (_, _) => Open("https://github.com/theuslpszbr15/dynamic-island-windows");
+        github.Click += (_, _) => Open(Services.Updater.RepositoryUrl);
         page.Children.Add(Card("Este computador",
             Row(Installer.IsInstalled ? "Instalada" : "Não instalada",
                 Installer.IsInstalled ? Installer.InstallDir : "Instale para ganhar atalho no menu Iniciar e iniciar com o Windows.", install),
             Row("Dados e configurações", IslandSettings.Folder, data),
-            Row("Código aberto", "github.com/theuslpszbr15/dynamic-island-windows", github)));
+            Row("Código aberto", Services.Updater.RepositoryUrl[8..], github)));
     }
 
     // ───────────────────────── building blocks ─────────────────────────

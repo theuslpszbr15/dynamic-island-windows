@@ -53,6 +53,11 @@ class LinkService : Service() {
                 // stopped on purpose (pause / unpair): the UI already says so
                 if (!running) break
                 Link.update { it.copy(status = LinkStatus.Offline, message = e.message) }
+                // The PC may just have a new address: ask the network before waiting to retry.
+                if (rediscover(pairing)) {
+                    attempt = 0
+                    continue
+                }
             } finally {
                 Link.client = null
                 client.close()
@@ -65,6 +70,14 @@ class LinkService : Service() {
             try { Thread.sleep(wait) } catch (_: InterruptedException) { break }
         }
         stopSelf()
+    }
+
+    /** True when the paired PC answered from a different address (saved, so the next try goes there). */
+    private fun rediscover(pairing: Pairing): Boolean {
+        val found = try { Discovery.find(pairing) } catch (_: Exception) { null } ?: return false
+        if (found.host == pairing.host && found.port == pairing.port) return false
+        PairingStore.save(this, found)
+        return true
     }
 
     private val listener = object : LinkClient.Listener {

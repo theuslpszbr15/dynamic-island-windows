@@ -30,6 +30,8 @@ public sealed class IslandSettings
     /// <summary>The paired phone sees the file tray and can open its items on this PC.</summary>
     public bool PhoneTray { get; set; } = true;
     public bool CheckUpdates { get; set; } = true;
+    /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
+    public Dictionary<string, string> Hotkeys { get; set; } = [];
     public bool DesktopPet { get; set; }
     public double? DesktopPetX { get; set; }
     public double? DesktopPetY { get; set; }
@@ -53,62 +55,73 @@ public sealed class IslandSettings
     public static IslandSettings Load()
     {
         var settings = new IslandSettings();
-        try
+        // A damaged settings.json falls back to settings.json.bak (the previous save) instead of the defaults.
+        IslandSettings? Parse(string json)
         {
-            if (File.Exists(FilePath))
-                settings = JsonSerializer.Deserialize<IslandSettings>(File.ReadAllText(FilePath), Options) ?? new();
+            try { return JsonSerializer.Deserialize<IslandSettings>(json, Options); }
+            catch { return null; }
         }
-        catch { }
+        if (Services.AtomicFile.ReadAllText(FilePath, json => Parse(json) != null) is { } text)
+            settings = Parse(text)!;
         // 2: Coco was only the old default, so files from before Bit move to Bit once.
-        if (settings.Version < 2)
+        // 3: the theme is stored by id instead of its Portuguese name.
+        if (settings.Version < 3)
         {
-            if (settings.Mascot == PetSpecies.Coco) settings.Mascot = PetSpecies.Bit;
-            settings.Version = 2;
+            if (settings.Version < 2 && settings.Mascot == PetSpecies.Coco) settings.Mascot = PetSpecies.Bit;
+            settings.Version = 3;
+            settings.Theme = IslandThemes.Normalize(settings.Theme);
             settings.Save();
         }
+        else settings.Theme = IslandThemes.Normalize(settings.Theme);
         return settings;
     }
 
     public void Save()
     {
         if (ReadOnly) return;
-        try
-        {
-            Directory.CreateDirectory(Folder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Options));
-        }
-        catch { }
+        try { Services.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(this, Options)); }
+        catch (Exception ex) { Services.Log.Error("IslandSettings.Save", ex); }
     }
 }
 
 public static class IslandThemes
 {
-    public const string Default = "Obsidiana";
-    public const string Glass = "Vidro (desfocado)";
-    public const string Light = "Porcelana (claro)";
+    // settings.json stores the Id, which never changes; Name is only what the user sees (and can be renamed or
+    // translated freely). Older settings files stored the Name: IslandSettings.Load migrates them.
+    public const string Default = "obsidian";
+    public const string Glass = "glass";
+    public const string Light = "porcelain";
 
     // Deep tones keep the island's white text and the album/agent colours readable; the one light theme
     // flips the text brushes (Ink/Muted/Track) to dark instead.
     // Glass is a translucent tint over a real blur of what is behind the island.
-    public static readonly (string Name, Color Color)[] All =
+    public static readonly (string Id, string Name, Color Color)[] All =
     [
-        (Glass, Color.FromArgb(0x66, 0x10, 0x10, 0x14)),
-        (Light, Color.FromRgb(0xF2, 0xF2, 0xF7)),
-        ("Obsidiana", Color.FromRgb(0x00, 0x00, 0x00)),
-        ("Grafite", Color.FromRgb(0x1C, 0x1C, 0x1E)),
-        ("Ardósia", Color.FromRgb(0x1E, 0x25, 0x33)),
-        ("Oceano", Color.FromRgb(0x0A, 0x1F, 0x36)),
-        ("Floresta", Color.FromRgb(0x0F, 0x26, 0x1C)),
-        ("Café", Color.FromRgb(0x2B, 0x1D, 0x15)),
-        ("Ameixa", Color.FromRgb(0x2A, 0x16, 0x33)),
-        ("Cereja", Color.FromRgb(0x33, 0x0F, 0x18)),
+        (Glass, "Vidro (desfocado)", Color.FromArgb(0x66, 0x10, 0x10, 0x14)),
+        (Light, "Porcelana (claro)", Color.FromRgb(0xF2, 0xF2, 0xF7)),
+        (Default, "Obsidiana", Color.FromRgb(0x00, 0x00, 0x00)),
+        ("graphite", "Grafite", Color.FromRgb(0x1C, 0x1C, 0x1E)),
+        ("slate", "Ardósia", Color.FromRgb(0x1E, 0x25, 0x33)),
+        ("ocean", "Oceano", Color.FromRgb(0x0A, 0x1F, 0x36)),
+        ("forest", "Floresta", Color.FromRgb(0x0F, 0x26, 0x1C)),
+        ("coffee", "Café", Color.FromRgb(0x2B, 0x1D, 0x15)),
+        ("plum", "Ameixa", Color.FromRgb(0x2A, 0x16, 0x33)),
+        ("cherry", "Cereja", Color.FromRgb(0x33, 0x0F, 0x18)),
     ];
 
-    public static Color Of(string name)
+    public static Color Of(string id)
     {
-        foreach (var (n, c) in All)
-            if (n == name) return c;
+        foreach (var (i, _, c) in All)
+            if (i == id) return c;
         return Colors.Black;
+    }
+
+    /// <summary>The id for a stored value that may be an old display name ("Vidro (desfocado)"); unknown → Default.</summary>
+    public static string Normalize(string? stored)
+    {
+        foreach (var (id, name, _) in All)
+            if (id == stored || name == stored) return id;
+        return Default;
     }
 }
 

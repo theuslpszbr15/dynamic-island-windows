@@ -16,7 +16,7 @@ public static partial class LyricsService
     static HttpClient CreateClient()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("DynamicIsland (github.com/theuslpszbr15/dynamic-island-windows)");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"DynamicIsland ({Updater.RepositoryUrl[8..]})");
         return http;
     }
 

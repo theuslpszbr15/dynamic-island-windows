@@ -133,7 +133,7 @@ public partial class IslandWindow
         CompactPet.React(PetView.Mood.Dizzy, 3);
         await Shot("21-pet-dizzy");
 
-        _settings.Theme = "Ameixa";
+        _settings.Theme = "plum";
         ApplyShape();
         OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
             TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now));
@@ -141,7 +141,7 @@ public partial class IslandWindow
         SetExpanded(true, PageMedia);
         await Shot("22-theme-ameixa");
         SetExpanded(false);
-        _settings.Theme = "Oceano";
+        _settings.Theme = "ocean";
         ApplyShape();
         await Shot("23-theme-oceano-dance");
 

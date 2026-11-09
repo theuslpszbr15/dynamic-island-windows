@@ -21,6 +21,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- the test project lives under tests/ and builds on its own -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="System.IO" />
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
@@ -28,6 +35,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\DynamicIsland.ico" LogicalName="DynamicIsland.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- GitHub "owner/name" that updates, links and the lyrics User-Agent point to: change it here in a fork. -->
+    <AssemblyMetadata Include="UpdateRepository" Value="theuslpszbr15/dynamic-island-windows" />
+    <InternalsVisibleTo Include="DynamicIsland.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
@@ -50,7 +51,7 @@ public static class Installer
             key.SetValue("DisplayName", "Dynamic Island");
             key.SetValue("DisplayIcon", InstalledExe);
             key.SetValue("DisplayVersion", typeof(Installer).Assembly.GetName().Version?.ToString(3) ?? "1.0.0");
-            key.SetValue("Publisher", "theuslpszbr15");
+            key.SetValue("Publisher", typeof(Installer).Assembly.GetCustomAttribute<AssemblyCompanyAttribute>()?.Company ?? "Dynamic Island");
             key.SetValue("InstallLocation", InstallDir);
             key.SetValue("UninstallString", $"\"{InstalledExe}\" --uninstall");
             key.SetValue("EstimatedSize", (int)(bytes / 1024), RegistryValueKind.DWord);

@@ -28,7 +28,9 @@ public sealed class PhoneLink : IDisposable
 {
     public const int Version = 1;
     public const int DefaultPort = 47900;
-    const int MaxLine = 64 * 1024, MaxPeers = 6;
+    // MaxPeers counts paired phones; connections still in the TLS/hello stage have their own small budget (and
+    // per address), so someone on the network opening sockets can't lock the real phone out.
+    const int MaxLine = 64 * 1024, MaxPeers = 6, MaxPending = 4, MaxPendingPerAddress = 2;
     static readonly TimeSpan HelloTimeout = TimeSpan.FromSeconds(10), IdleTimeout = TimeSpan.FromMinutes(20);
 
     static string SecretFile => Path.Combine(IslandSettings.Folder, "phone-link.bin");
@@ -37,6 +39,7 @@ public sealed class PhoneLink : IDisposable
     readonly object _gate = new();
     readonly List<Peer> _peers = [];
     TcpListener? _listener;
+    UdpClient? _discovery;
     CancellationTokenSource? _cts;
     X509Certificate2? _cert;
     byte[] _pfx = [];
@@ -77,6 +80,7 @@ public sealed class PhoneLink : IDisposable
         if (_listener == null) throw new IOException("Nenhuma porta livre para a ligação com o celular.");
         _cts = new CancellationTokenSource();
         _ = AcceptLoop(_listener, _cts.Token);
+        StartDiscovery(_cts.Token);
     }
 
     public void Stop()
@@ -84,6 +88,8 @@ public sealed class PhoneLink : IDisposable
         _cts?.Cancel();
         _listener?.Stop();
         _listener = null;
+        _discovery?.Dispose();
+        _discovery = null;
         lock (_gate)
         {
             foreach (var peer in _peers) peer.Close();
@@ -189,7 +195,12 @@ public sealed class PhoneLink : IDisposable
             catch { return; }
             var remote = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
             bool full;
-            lock (_gate) full = _peers.Count >= MaxPeers;
+            lock (_gate)
+            {
+                var pending = _peers.Where(p => !p.Authenticated).ToList();
+                full = _peers.Count(p => p.Authenticated) >= MaxPeers || pending.Count >= MaxPending
+                       || (remote != null && pending.Count(p => remote.Equals(p.Address)) >= MaxPendingPerAddress);
+            }
             if (remote == null || !IsLocal(remote) || full)
             {
                 client.Dispose();
@@ -277,6 +288,49 @@ public sealed class PhoneLink : IDisposable
         }
     }
 
+    // ───────────────────────── discovery ─────────────────────────
+
+    // When the PC's address changes (DHCP), the paired phone broadcasts {"type":"discover","fp":…} on UDP
+    // DefaultPort and the PC with that certificate answers with its TCP port. Nothing secret is sent: the phone
+    // still accepts only the pinned certificate, so a fake answer can at most send it to a dead end.
+    void StartDiscovery(CancellationToken cancel)
+    {
+        try
+        {
+            // Exclusive bind (no SO_REUSEADDR), so no other program can take over the answers.
+            var udp = new UdpClient(new IPEndPoint(IPAddress.Any, DefaultPort));
+            _discovery = udp;
+            _ = DiscoveryLoop(udp, cancel);
+        }
+        catch (SocketException ex) { Log.Error("PhoneLink.Discovery", ex); } // the link still works by address
+    }
+
+    async Task DiscoveryLoop(UdpClient udp, CancellationToken cancel)
+    {
+        var reply = Encoding.UTF8.GetBytes(new JsonObject
+        {
+            ["type"] = "here", ["v"] = Version, ["fp"] = Fingerprint, ["port"] = Port,
+        }.ToJsonString());
+        while (!cancel.IsCancellationRequested)
+        {
+            UdpReceiveResult packet;
+            try { packet = await udp.ReceiveAsync(cancel); }
+            catch (OperationCanceledException) { return; }
+            catch (ObjectDisposedException) { return; }
+            catch (SocketException) { continue; } // e.g. ICMP port unreachable from an earlier reply
+            try
+            {
+                if (packet.Buffer.Length > 512 || !IsLocal(packet.RemoteEndPoint.Address)) continue;
+                using var doc = JsonDocument.Parse(packet.Buffer);
+                if (Str(doc.RootElement, "type") != "discover" || Str(doc.RootElement, "fp") is not { } fp
+                    || !SameSecret(fp, Fingerprint)) continue;
+                await udp.SendAsync(reply, packet.RemoteEndPoint, cancel);
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception) { } // malformed packet from the network: ignore
+        }
+    }
+
     static string? Str(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
@@ -331,7 +385,7 @@ public sealed class PhoneLink : IDisposable
                 return;
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Error("PhoneLink.LoadSecrets (the phone will need to pair again)", ex); }
 
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest("CN=Dynamic Island", key, HashAlgorithmName.SHA256);
@@ -346,12 +400,14 @@ public sealed class PhoneLink : IDisposable
     {
         if (_cert == null) return;
         var json = new JsonObject { ["token"] = _token, ["pfx"] = Convert.ToBase64String(_pfx) }.ToJsonString();
-        Directory.CreateDirectory(IslandSettings.Folder);
-        File.WriteAllBytes(SecretFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser));
+        // A half-written secret would unpair the phone, so it is replaced atomically like settings.json.
+        AtomicFile.WriteAllBytes(SecretFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser),
+            backup: false);
     }
 
     sealed class Peer(TcpClient client)
     {
+        public IPAddress? Address { get; } = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
         readonly SemaphoreSlim _write = new(1, 1);
         readonly byte[] _buffer = new byte[8192];
         readonly MemoryStream _line = new();

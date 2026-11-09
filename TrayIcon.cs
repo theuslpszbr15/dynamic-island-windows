@@ -33,7 +33,7 @@ sealed class TrayIcon : IDisposable
         var shows = new WinForms.ToolStripMenuItem("Mostrar na ilha");
         shows.DropDownItems.AddRange([notifications, lyrics, clipboard, lockKeys, videos]);
         var settings = new WinForms.ToolStripMenuItem("Configurações…", null, (_, _) => app.ShowSettings()) { Font = new Font(WinForms.Control.DefaultFont, FontStyle.Bold) };
-        var hide = new WinForms.ToolStripMenuItem("Esconder a ilha", null, (_, _) => app.ToggleHidden()) { ShortcutKeyDisplayString = "Ctrl+Alt+D" };
+        var hide = new WinForms.ToolStripMenuItem("Esconder a ilha", null, (_, _) => app.ToggleHidden()) { ShortcutKeyDisplayString = Hotkeys.Keys(app.Settings, "hide") };
         var hideHour = new WinForms.ToolStripMenuItem("Esconder por 1 hora", null, (_, _) => app.HideFor(TimeSpan.FromHours(1)));
         var outfit = new WinForms.ToolStripMenuItem("Roupinha do mascote");
         var desktopPet = new WinForms.ToolStripMenuItem("Mascote na área de trabalho", null, (_, _) => app.ToggleDesktopPet());
@@ -78,10 +78,10 @@ sealed class TrayIcon : IDisposable
                     Checked = app.Settings.Mascot == species,
                 });
             theme.DropDownItems.Clear();
-            foreach (var (name, _) in IslandThemes.All)
-                theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, null, (_, _) => app.SetTheme(name))
+            foreach (var (id, name, _) in IslandThemes.All)
+                theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, null, (_, _) => app.SetTheme(id))
                 {
-                    Checked = app.Settings.Theme == name,
+                    Checked = app.Settings.Theme == id,
                 });
             notifications.Checked = app.Settings.ShowNotifications;
             pill.Checked = app.Settings.Shape == IslandShape.Pill;

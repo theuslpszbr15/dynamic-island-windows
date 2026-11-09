@@ -21,6 +21,12 @@ public partial class App : Application
     {
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandled;
+        // Background failures (pipe, phone link, fire-and-forget tasks) used to vanish; now they leave a trace.
+        TaskScheduler.UnobservedTaskException += (_, args) => { Log.Error("Background task", args.Exception); args.SetObserved(); };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex) Log.Error("Fatal", ex);
+        };
         // Layered windows are read back to system memory anyway; software rendering avoids loading
         // the GPU driver's D3D9 stack (hundreds of MB on some Intel drivers) for a tiny overlay.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
@@ -162,7 +168,7 @@ public partial class App : Application
     public void HideFor(TimeSpan duration)
     {
         _window.SetUserHidden(true, duration);
-        _tray.Balloon("Ilha escondida", $"Volta sozinha em {duration.TotalMinutes:0} min. Ctrl+Alt+D ou clique no ícone para mostrar antes.");
+        _tray.Balloon("Ilha escondida", $"Volta sozinha em {duration.TotalMinutes:0} min. {Hotkeys.Keys(Settings, "hide")} ou clique no ícone para mostrar antes.");
     }
 
     public void ToggleUpdates()
@@ -459,7 +465,7 @@ public partial class App : Application
         }
 
         var hide = Item("Esconder a ilha", ToggleHidden, IslandHidden);
-        hide.InputGestureText = "Ctrl+Alt+D";
+        hide.InputGestureText = Hotkeys.Keys(Settings, "hide");
         menu.Items.Add(Item("Configurações…", () => ShowSettings()));
         menu.Items.Add(new Separator());
         menu.Items.Add(hide);
@@ -469,8 +475,8 @@ public partial class App : Application
         menu.Items.Add(Item("Notch no topo", () => SetShape(IslandShape.Notch), Settings.Shape == IslandShape.Notch));
         menu.Items.Add(Item("Recolher quando ocioso", ToggleDiscreet, Settings.DiscreetIdle));
         var themes = new MenuItem { Header = "Tema" };
-        foreach (var (name, _) in IslandThemes.All)
-            themes.Items.Add(Item(name, () => SetTheme(name), Settings.Theme == name));
+        foreach (var (id, name, _) in IslandThemes.All)
+            themes.Items.Add(Item(name, () => SetTheme(id), Settings.Theme == id));
         menu.Items.Add(themes);
         var mascots = new MenuItem { Header = "Mascote" };
         foreach (var (species, label) in Mascots)
@@ -522,13 +528,7 @@ public partial class App : Application
 
     void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        try
-        {
-            Directory.CreateDirectory(IslandSettings.Folder);
-            File.AppendAllText(System.IO.Path.Combine(IslandSettings.Folder, "error.log"),
-                $"[{DateTime.Now:O}] {e.Exception}{Environment.NewLine}");
-        }
-        catch { }
+        Log.Error("UI thread", e.Exception);
         e.Handled = true;
     }
 }

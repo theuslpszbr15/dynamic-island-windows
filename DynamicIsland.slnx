@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="DynamicIsland.csproj" />
+  <Project Path="tests/DynamicIsland.Tests/DynamicIsland.Tests.csproj" />
 </Solution>

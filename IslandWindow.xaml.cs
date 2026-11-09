@@ -258,7 +258,7 @@ public partial class IslandWindow : Window
             case Transient.NowPlaying: return new(360, 62);
             case Transient.AgentAlert:
             case Transient.Notification: return new(400, 78);
-            case Transient.Approval: return new(440, 112);
+            case Transient.Approval: return new(440, 128);
             case Transient.Info: return new(340, 40);
         }
         if (IsHandle) return new(110, 8);
@@ -515,6 +515,24 @@ public partial class IslandWindow : Window
                                    || (_transient == Transient.Info && _infoAction != null)
                                    || (!_settings.DiscreetIdle && !IsHandle));
         SetClickThrough(!interactive);
+        AdjustPollRate(bounds, local, over || button);
+    }
+
+    // 30 Hz only when the pointer is near the island or something is going on; 10 Hz otherwise (the mascot's
+    // eyes only track direction from far away) and 4 Hz while hidden. Was 30 Hz all the time.
+    static readonly TimeSpan PollFast = TimeSpan.FromMilliseconds(33), PollIdle = TimeSpan.FromMilliseconds(100),
+        PollHidden = TimeSpan.FromMilliseconds(250);
+    const double PollNearDistance = 300;
+
+    void AdjustPollRate(Rect bounds, Point cursor, bool busy)
+    {
+        var near = bounds;
+        near.Inflate(PollNearDistance, PollNearDistance);
+        var interval = _hiddenFullscreen ? PollHidden
+            : busy || near.Contains(cursor) || _expanded || _dragOver || _draggingOut || _menuOpen || _animating
+              || _transient != Transient.None ? PollFast
+            : PollIdle;
+        if (_pollTimer.Interval != interval) _pollTimer.Interval = interval;
     }
 
     void ScheduleClose(double seconds)

@@ -162,6 +162,16 @@ public sealed class AgentStep(string kind) : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
+public static class ApprovalRules
+{
+    // What the island's approval card can show whole (3 wrapped lines). Anything longer, or on several lines,
+    // could hide part of what Allow would run, so the island only offers Deny and the terminal asks as usual.
+    public const int IslandCommandLimit = 120;
+
+    public static bool IslandCanAllow(string command) =>
+        command.Length <= IslandCommandLimit && command.IndexOfAny(['\r', '\n']) < 0;
+}
+
 /// <summary>Damped spring used to animate the island's size.</summary>
 sealed class Spring(double value)
 {
