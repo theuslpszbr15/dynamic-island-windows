@@ -6,6 +6,8 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
+using System.Windows.Shell;
 using DynamicIsland.Services;
 using QRCoder;
 
@@ -55,8 +57,22 @@ public sealed class SettingsWindow : Window
         Icon = BitmapFrame.Create(typeof(SettingsWindow).Assembly.GetManifestResourceStream("DynamicIsland.ico")!);
         Resources.MergedDictionaries.Add(Styles());
 
+        // No Windows title bar: a dark bar of our own (mac-style dots, like Maestri) that still drags, snaps,
+        // resizes and double-click maximizes through WindowChrome.
+        WindowChrome.SetWindowChrome(this, new WindowChrome
+        {
+            CaptionHeight = CaptionHeight,
+            ResizeBorderThickness = new Thickness(6),
+            GlassFrameThickness = new Thickness(0, 0, 0, 1), // keeps the DWM shadow on Windows 10/11
+            CornerRadius = new CornerRadius(0),
+            UseAeroCaptionButtons = false,
+        });
+
         var sidebar = new DockPanel { Background = Panel };
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 22, 16, 16) };
+        var lights = TrafficLights();
+        DockPanel.SetDock(lights, Dock.Top);
+        sidebar.Children.Add(lights);
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 4, 16, 16) };
         header.Children.Add(new Viewbox { Width = 38, Height = 38, Child = new PetView { FixedSpecies = PetSpecies.Bit, BaseMood = PetView.Mood.Happy } });
         var name = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         name.Children.Add(new TextBlock { Text = "Dynamic Island", FontSize = 16, FontWeight = FontWeights.SemiBold });
@@ -70,14 +86,81 @@ public sealed class SettingsWindow : Window
         var root = new Grid { Background = Ground };
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
         root.ColumnDefinitions.Add(new ColumnDefinition());
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(CaptionHeight) });
+        root.RowDefinitions.Add(new RowDefinition());
+        Grid.SetRowSpan(sidebar, 2);
         root.Children.Add(sidebar);
+        // The window's name, centered in the content side of the bar (drag area, not clickable).
+        var caption = new TextBlock
+        {
+            Text = "Configurações", FontSize = 12.5, Foreground = Muted, HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false,
+        };
+        Grid.SetColumn(caption, 1);
+        root.Children.Add(caption);
         Grid.SetColumn(_scroll, 1);
+        Grid.SetRow(_scroll, 1);
         root.Children.Add(_scroll);
-        Content = root;
+        _scroll.Padding = new Thickness(34, 6, 34, 30);
+        // A hairline edge, since there is no Windows frame any more; maximized, WPF overhangs the screen by
+        // the resize border, so the content is pulled back in.
+        var frame = new Border { BorderBrush = Line, BorderThickness = new Thickness(1), Child = root };
+        Content = frame;
+        void Fit()
+        {
+            frame.BorderThickness = WindowState == WindowState.Maximized ? new Thickness(0) : new Thickness(1);
+            frame.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
+        }
+        StateChanged += (_, _) => Fit();
+        Activated += (_, _) => SetLightsActive(true);
+        Deactivated += (_, _) => SetLightsActive(false);
 
         if (_app.Island.Phone is { } link) link.PhonesChanged += OnPhones;
         Closed += (_, _) => { if (_app.Island.Phone is { } l) l.PhonesChanged -= OnPhones; };
         Render();
+    }
+
+    const double CaptionHeight = 40;
+    readonly List<(Ellipse Dot, Brush On)> _lights = [];
+    static readonly Brush LightOff = Frozen(0xFF3A3A3F), LightGlyph = Frozen(0x99000000);
+
+    /// <summary>Close, minimize and maximize as three colored dots; their symbols show on hover.</summary>
+    FrameworkElement TrafficLights()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(18, 14, 0, 0), Height = CaptionHeight - 14 };
+        var glyphs = new List<TextBlock>();
+        void Add(uint color, string glyph, string tip, Action click)
+        {
+            var on = Frozen(color);
+            var dot = new Ellipse { Width = 12, Height = 12, Fill = on };
+            var symbol = new TextBlock
+            {
+                Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 6.5, Foreground = LightGlyph,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0,
+            };
+            glyphs.Add(symbol);
+            var hit = new Grid { Width = 12, Height = 12, Margin = new Thickness(0, 0, 8, 0), Background = Brushes.Transparent, ToolTip = tip, Cursor = Cursors.Hand };
+            hit.Children.Add(dot);
+            hit.Children.Add(symbol);
+            WindowChrome.SetIsHitTestVisibleInChrome(hit, true);
+            hit.MouseLeftButtonDown += (_, e) => e.Handled = true; // don't start a window drag
+            hit.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
+            row.Children.Add(hit);
+            _lights.Add((dot, on));
+        }
+        Add(0xFFFF5F57, "", "Fechar", Close);
+        Add(0xFFFEBC2E, "", "Minimizar", () => WindowState = WindowState.Minimized);
+        Add(0xFF28C840, "", "Maximizar", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
+        WindowChrome.SetIsHitTestVisibleInChrome(row, true);
+        row.MouseEnter += (_, _) => { foreach (var g in glyphs) g.Opacity = 1; foreach (var (dot, on) in _lights) dot.Fill = on; };
+        row.MouseLeave += (_, _) => { foreach (var g in glyphs) g.Opacity = 0; SetLightsActive(IsActive); };
+        return row;
+    }
+
+    // Like macOS: the dots go grey when the window isn't in front.
+    void SetLightsActive(bool active)
+    {
+        foreach (var (dot, on) in _lights) dot.Fill = active ? on : LightOff;
     }
 
     void OnPhones()
@@ -720,6 +803,39 @@ public sealed class SettingsWindow : Window
                       </Border>
                     </Popup>
                   </Grid>
+                </ControlTemplate>
+              </Setter.Value>
+            </Setter>
+          </Style>
+          <!-- A thin dark scrollbar instead of the light Windows one: just a rounded thumb, wider on hover. -->
+          <Style x:Key="ThumbBar" TargetType="Thumb">
+            <Setter Property="Template">
+              <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                  <Border x:Name="T" CornerRadius="3" Background="#3A3A40" />
+                  <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="T" Property="Background" Value="#55555C" /></Trigger>
+                    <Trigger Property="IsDragging" Value="True"><Setter TargetName="T" Property="Background" Value="#6A6A72" /></Trigger>
+                  </ControlTemplate.Triggers>
+                </ControlTemplate>
+              </Setter.Value>
+            </Setter>
+          </Style>
+          <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="MinWidth" Value="10" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+              <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                  <Grid Background="Transparent">
+                    <Track x:Name="PART_Track" IsDirectionReversed="True" Margin="2,4,2,4">
+                      <Track.Thumb><Thumb x:Name="Th" Style="{StaticResource ThumbBar}" Width="5" HorizontalAlignment="Right" /></Track.Thumb>
+                    </Track>
+                  </Grid>
+                  <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Th" Property="Width" Value="7" /></Trigger>
+                  </ControlTemplate.Triggers>
                 </ControlTemplate>
               </Setter.Value>
             </Setter>
