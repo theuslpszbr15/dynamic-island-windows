@@ -51,8 +51,10 @@ public partial class IslandWindow : Window
     string? _trackKey;
     IntPtr _hwnd;
 
+    readonly CancellationTokenSource _privacyWatch = new();
     readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
+    bool _eqPlaying;
     readonly Border[] _dots = new Border[6];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
@@ -148,6 +150,11 @@ public partial class IslandWindow : Window
         _guardTimer.Start();
         _pollTimer.Start();
         _watchTimer.Start();
+        PrivacyMonitor.Watch(() =>
+        {
+            var state = PrivacyMonitor.Read();
+            Dispatcher.InvokeAsync(() => OnPrivacy(state));
+        }, _privacyWatch.Token);
 
         _volume.Start();
         _battery.Start();
@@ -200,7 +207,7 @@ public partial class IslandWindow : Window
     {
         if (_settings.Monitor == "active" && !_expanded && !_hover && TargetScreen().DeviceName != _screen?.DeviceName)
             PositionWindow();
-        OnPrivacy(PrivacyMonitor.Read());
+        if (!PrivacyMonitor.Watching) OnPrivacy(PrivacyMonitor.Read()); // fallback when the registry can't be watched
     }
 
     public async void ApplyNotifications()
@@ -213,6 +220,7 @@ public partial class IslandWindow : Window
     {
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         StopExtras();
+        _privacyWatch.Cancel();
         _notifications.Stop();
         _glassTimer?.Stop();
         _hub.Dispose();
@@ -368,12 +376,16 @@ public partial class IslandWindow : Window
         CompactAgent.Visibility = Vis(kind == CompactKind.Agent);
         CompactTimer.Visibility = Vis(kind == CompactKind.Timer);
         if (kind == CompactKind.Agent) UpdateCompactAgent();
-        if ((kind == CompactKind.Agent) != _compactPulsing)
+        // Looping animations only run where they can be seen: one behind a hidden panel (or a hidden island)
+        // still has the whole software-rendered window redrawn every frame.
+        var compactPulse = kind == CompactKind.Agent && !expanded && !transient && !handle && !_hiddenFullscreen;
+        if (compactPulse != _compactPulsing)
         {
-            _compactPulsing = kind == CompactKind.Agent;
+            _compactPulsing = compactPulse;
             Pulse((ScaleTransform)CompactOrb.RenderTransform, _compactPulsing);
         }
         UpdatePet();
+        ApplyEq();
     }
 
     Color? HandleColor() => Kind() switch
@@ -731,6 +743,7 @@ public partial class IslandWindow : Window
             _hiddenFullscreen = hide;
             Root.IsHitTestVisible = !hide;
             Root.BeginAnimation(OpacityProperty, new DoubleAnimation(hide ? 0 : 1, TimeSpan.FromMilliseconds(200)));
+            UpdateLayers(); // pauses or resumes the looping animations
         }
         if (!hide && _hwnd != IntPtr.Zero)
             Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
@@ -848,10 +861,27 @@ public partial class IslandWindow : Window
 
     void SetEqPlaying(bool playing)
     {
+        _eqPlaying = playing;
+        ApplyEq();
+    }
+
+    // The compact bars and the "now playing" bars each bounce only while their panel is on screen.
+    void ApplyEq()
+    {
+        var live = _eqPlaying && !_hiddenFullscreen && !_expanded;
+        AnimateEq(CompactEq, live && _transient == Transient.None && !IsHandle && Kind() == CompactKind.Media);
+        AnimateEq(NowEq, live && _transient == Transient.NowPlaying);
+    }
+
+    static void AnimateEq(Panel host, bool playing)
+    {
+        if (host.Tag is bool current && current == playing) return;
+        host.Tag = playing;
         double[] periods = [0.42, 0.58, 0.36, 0.5];
-        for (var i = 0; i < _eqBars.Count; i++)
+        var bars = host.Children.OfType<Rectangle>().ToList();
+        for (var i = 0; i < bars.Count; i++)
         {
-            var scale = (ScaleTransform)_eqBars[i].RenderTransform;
+            var scale = (ScaleTransform)bars[i].RenderTransform;
             if (!playing)
             {
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.3, Quick));

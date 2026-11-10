@@ -46,13 +46,23 @@ public partial class IslandWindow
         report.Add($"privacy registry read:        {watch.Elapsed.TotalMilliseconds / reads:0.00} ms each");
 
         await Task.Delay(PerfSettleMs);
-        var process = Process.GetCurrentProcess();
-        process.Refresh();
-        var info = GC.GetGCMemoryInfo();
-        report.Add($"memory: working set={process.WorkingSet64 / 1048576.0:0.0}MB private={process.PrivateMemorySize64 / 1048576.0:0.0}MB " +
-                   $"managed heap={info.HeapSizeBytes / 1048576.0:0.0}MB committed={info.TotalCommittedBytes / 1048576.0:0.0}MB");
+        report.Add("memory:                       " + Memory());
+
+        // What the idle trim gives back after a quiet stretch.
+        _lastActivity = DateTime.Now - TrimAfter - TimeSpan.FromMinutes(1);
+        TrimWhenIdle();
+        await Task.Delay(PerfSettleMs);
+        report.Add("memory after idle trim:       " + Memory());
 
         File.WriteAllLines(System.IO.Path.Combine(folder, "perf-idle.txt"), report);
+    }
+
+    static string Memory()
+    {
+        using var process = Process.GetCurrentProcess();
+        var info = GC.GetGCMemoryInfo();
+        return $"working set={process.WorkingSet64 / 1048576.0:0.0}MB private={process.PrivateMemorySize64 / 1048576.0:0.0}MB " +
+               $"managed heap={info.HeapSizeBytes / 1048576.0:0.0}MB committed={info.TotalCommittedBytes / 1048576.0:0.0}MB";
     }
 
     /// <summary>CPU used by this process over a quiet stretch, as a share of one core.</summary>

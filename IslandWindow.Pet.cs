@@ -129,11 +129,13 @@ public partial class IslandWindow
         }
 
         var transient = !_expanded && _transient != Transient.None;
-        CompactPet.Active = !_expanded && !transient && !IsHandle;
-        HeaderPet.Active = _expanded;
-        AlertPet.Active = _transient == Transient.AgentAlert;
-        ApprovalPet.Active = _transient == Transient.Approval;
-        AgentPet.Active = _expanded && _page == PageAgents;
+        // A hidden island (fullscreen app, or hidden by the user) keeps its pets still.
+        var seen = !_hiddenFullscreen;
+        CompactPet.Active = seen && !_expanded && !transient && !IsHandle;
+        HeaderPet.Active = seen && _expanded;
+        AlertPet.Active = seen && _transient == Transient.AgentAlert;
+        ApprovalPet.Active = seen && _transient == Transient.Approval;
+        AgentPet.Active = seen && _expanded && _page == PageAgents;
         ((App)Application.Current).DesktopPet?.Follow(mood, tint);
     }
 

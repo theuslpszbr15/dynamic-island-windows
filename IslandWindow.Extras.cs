@@ -500,6 +500,21 @@ public partial class IslandWindow
         try { ShowBluetooth(await BluetoothBattery.ListAsync()); }
         catch { }
         OfferRecap();
+        TrimWhenIdle();
+    }
+
+    // After a couple of quiet minutes, return what opening pages, settings and album art left behind.
+    // Once per quiet stretch: the next activity re-arms it.
+    static readonly TimeSpan TrimAfter = TimeSpan.FromMinutes(2);
+    DateTime _trimmedAt;
+
+    void TrimWhenIdle()
+    {
+        var now = DateTime.Now;
+        if (_expanded || _hover || _transient != Transient.None || now - _lastActivity < TrimAfter || _trimmedAt > _lastActivity) return;
+        _trimmedAt = now;
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        Native.TrimWorkingSet();
     }
 
     void ShowBluetooth(List<BluetoothDevice> devices)

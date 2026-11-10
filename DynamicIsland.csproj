@@ -18,7 +18,13 @@
     <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <!-- A tiny, mostly idle heap: no background GC thread, and compact rather than grow. -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- the test project lives under tests/ and builds on its own -->

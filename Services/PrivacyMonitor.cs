@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 
 namespace DynamicIsland.Services;
 
@@ -23,6 +25,67 @@ public static class PrivacyMonitor
     };
 
     public static PrivacyState Read() => new(InUse("microphone"), InUse("webcam"));
+
+    /// <summary>True while a <see cref="Watch"/> thread is delivering changes; otherwise callers poll <see cref="Read"/>.</summary>
+    public static bool Watching { get; private set; }
+
+    [DllImport("advapi32.dll")]
+    static extern int RegNotifyChangeKeyValue(SafeRegistryHandle key, bool watchSubtree, int filter, SafeWaitHandle signal, bool asynchronous);
+
+    const int NotifyName = 0x1, NotifyLastSet = 0x4;
+
+    /// <summary>
+    /// Calls <paramref name="changed"/> on a worker thread once now and again whenever Windows rewrites the
+    /// microphone/camera data, so nothing polls the registry (it used to be read every 0.75 s).
+    /// </summary>
+    public static void Watch(Action changed, CancellationToken cancel)
+    {
+        var keys = new List<RegistryKey>();
+        foreach (var capability in new[] { "microphone", "webcam" })
+        {
+            try { if (Registry.CurrentUser.OpenSubKey(Root + capability) is { } key) keys.Add(key); }
+            catch { }
+        }
+        if (keys.Count == 0) return;
+        Watching = true;
+        new Thread(() => WatchLoop(keys, changed, cancel)) { IsBackground = true, Name = "PrivacyWatch" }.Start();
+    }
+
+    static void WatchLoop(List<RegistryKey> keys, Action changed, CancellationToken cancel)
+    {
+        var signals = keys.Select(_ => new AutoResetEvent(false)).ToList();
+        var armed = new bool[keys.Count];
+        var waits = signals.Cast<WaitHandle>().Append(cancel.WaitHandle).ToArray();
+        try
+        {
+            while (!cancel.IsCancellationRequested)
+            {
+                // Arm before reading, so a change in between is never missed. Each key is armed once per change:
+                // registrations on the same key would otherwise pile up.
+                for (var i = 0; i < keys.Count; i++)
+                {
+                    if (armed[i]) continue;
+                    if (RegNotifyChangeKeyValue(keys[i].Handle, true, NotifyName | NotifyLastSet, signals[i].SafeWaitHandle, true) != 0) return;
+                    armed[i] = true;
+                }
+                changed();
+                var fired = WaitHandle.WaitAny(waits);
+                if (fired == keys.Count) return;
+                armed[fired] = false;
+                // Windows writes the start and stop times in a quick burst; read once it has landed.
+                Thread.Sleep(150);
+                for (var i = 0; i < keys.Count; i++)
+                    if (armed[i] && signals[i].WaitOne(0)) armed[i] = false;
+            }
+        }
+        catch (Exception ex) { Log.Error("PrivacyMonitor.Watch", ex); }
+        finally
+        {
+            Watching = false;
+            foreach (var key in keys) key.Dispose();
+            foreach (var signal in signals) signal.Dispose();
+        }
+    }
 
     static List<string> InUse(string capability)
     {
