@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +12,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -23,6 +25,8 @@ class MainActivity : FragmentActivity() {
     /** A link waiting for the user's "yes, pair with this PC". */
     private val pendingPairing = mutableStateOf<Pairing?>(null)
     private val focused = mutableStateOf<String?>(null)
+    /** "Permitir" tapped on a notification: ask for the fingerprint as soon as the screen is up. */
+    private var allowOnResume: String? = null
 
     private val scanner = registerForActivityResult(ScanContract()) { result ->
         result.contents?.let(::offerPairing)
@@ -72,6 +76,7 @@ class MainActivity : FragmentActivity() {
                     onUnpair = ::unpair,
                     onRetry = { Link.resume(this) },
                     onPause = { Link.pause(this) },
+                    onFixNotifications = ::openNotificationSettings,
                 )
             }
         }
@@ -82,9 +87,36 @@ class MainActivity : FragmentActivity() {
         handle(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        val off = Notifications.approvalsBlocked(this)
+        Link.update { if (it.notificationsOff == off) it else it.copy(notificationsOff = off) }
+        val fingerprint = allowOnResume ?: return
+        allowOnResume = null
+        val approval = Link.state.value.approvals.firstOrNull { it.fingerprint == fingerprint }
+        if (approval == null) Toast.makeText(this, "Esse pedido já expirou ou foi respondido no PC.", Toast.LENGTH_LONG).show()
+        else if (!approval.truncated) allow(approval)
+    }
+
     private fun handle(intent: Intent?) {
-        intent?.data?.toString()?.let(::offerPairing)
-        intent?.getStringExtra(Notifications.EXTRA_FINGERPRINT)?.let { focused.value = it }
+        if (intent == null) return
+        intent.data?.toString()?.let(::offerPairing)
+        val fingerprint = intent.getStringExtra(Notifications.EXTRA_FINGERPRINT) ?: return
+        focused.value = fingerprint
+        if (intent.getBooleanExtra(Notifications.EXTRA_ALLOW, false)) allowOnResume = fingerprint
+        // consumed: a later recreation (rotation) must not ask again
+        intent.removeExtra(Notifications.EXTRA_ALLOW)
+    }
+
+    private fun openNotificationSettings() {
+        val app = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        // the app itself is allowed but the requests' channel was silenced: open that channel instead
+        val target = if (NotificationManagerCompat.from(this).areNotificationsEnabled())
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, Notifications.APPROVAL_CHANNEL)
+        else app
+        try { startActivity(target) } catch (_: Exception) { startActivity(app) }
     }
 
     private fun offerPairing(link: String) {

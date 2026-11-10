@@ -87,7 +87,12 @@ class LinkService : Service() {
             showStatus("Ligado a $desktop")
         }
 
-        override fun onSessions(sessions: List<Session>) = Link.update { it.copy(sessions = sessions) }
+        override fun onSessions(sessions: List<Session>) {
+            val before = Link.state.value.sessions
+            Link.update { it.copy(sessions = sessions) }
+            SessionAlerts.settled(before, sessions).forEach { Notifications.cancelSessionAlert(this@LinkService, it) }
+            SessionAlerts.changes(before, sessions).forEach { Notifications.showSessionAlert(this@LinkService, it) }
+        }
 
         override fun onTray(items: List<TrayItem>) = Link.update { it.copy(tray = items) }
 
@@ -99,6 +104,7 @@ class LinkService : Service() {
         override fun onResolved(fingerprint: String) {
             Link.update { s -> s.copy(approvals = s.approvals.filterNot { it.fingerprint == fingerprint }) }
             Notifications.cancelApproval(this@LinkService, fingerprint)
+            Link.confirmed(this@LinkService, fingerprint)
         }
     }
 

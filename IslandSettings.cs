@@ -23,6 +23,8 @@ public sealed class IslandSettings
     public bool ShowLyrics { get; set; } = true;
     public bool ShowClipboard { get; set; } = true;
     public bool ShowLockKeys { get; set; } = true;
+    /// <summary>A permission request first shows as a small pill; hovering or clicking it opens Allow / Deny.</summary>
+    public bool QuietApprovals { get; set; } = true;
     /// <summary>Videos (YouTube, Netflix…) don't pop up or keep the pill open; still on the media page.</summary>
     public bool QuietVideos { get; set; } = true;
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>

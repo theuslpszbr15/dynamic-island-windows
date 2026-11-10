@@ -41,7 +41,7 @@ public partial class IslandWindow : Window
     TimeSpan _lastFrame;
 
     readonly Spring _top = new(8);
-    bool _expanded, _hover, _dragOver, _draggingOut, _menuOpen, _ready, _hiddenFullscreen, _compactPulsing;
+    bool _expanded, _hover, _dragOver, _draggingOut, _menuOpen, _ready, _hiddenFullscreen, _compactPulsing, _pillPulsing;
     bool _clickThrough, _dwellBlocked, _dragCandidate;
     DateTime _lastDragOver, _lastWheel, _hoverSince;
     DateTime? _buttonSince;
@@ -258,7 +258,7 @@ public partial class IslandWindow : Window
             case Transient.NowPlaying: return new(360, 62);
             case Transient.AgentAlert:
             case Transient.Notification: return new(400, 78);
-            case Transient.Approval: return new(440, 128);
+            case Transient.Approval: return ApprovalQuiet ? new(310, 40) : new(440, 128);
             case Transient.Info: return new(340, 40);
         }
         if (IsHandle) return new(110, 8);
@@ -358,7 +358,14 @@ public partial class IslandWindow : Window
         AlertPanel.Visibility = Vis(_transient == Transient.AgentAlert);
         NotifyPanel.Visibility = Vis(_transient == Transient.Notification);
         PrivacyPanel.Visibility = Vis(_transient == Transient.Privacy);
-        ApprovalPanel.Visibility = Vis(_transient == Transient.Approval);
+        var approval = _transient == Transient.Approval;
+        ApprovalPanel.Visibility = Vis(approval && !ApprovalQuiet);
+        ApprovalPill.Visibility = Vis(approval && ApprovalQuiet);
+        if ((approval && ApprovalQuiet) != _pillPulsing)
+        {
+            _pillPulsing = approval && ApprovalQuiet;
+            Pulse((ScaleTransform)ApprovalPillOrb.RenderTransform, _pillPulsing);
+        }
         InfoPanel.Visibility = Vis(_transient == Transient.Info);
 
         var kind = Kind();
@@ -510,6 +517,10 @@ public partial class IslandWindow : Window
         var answering = _transient == Transient.Approval;
         if (over && !_expanded && !button && !_dwellBlocked && !answering && (now - _hoverSince).TotalSeconds >= dwell)
             SetExpanded(true);
+        // the quiet pill opens into Allow / Deny on a deliberate hover (not just because the cursor was already there)
+        var hoverStart = _hoverSince > _approvalShownAt ? _hoverSince : _approvalShownAt;
+        if (over && answering && ApprovalQuiet && !button && !_dwellBlocked && (now - hoverStart).TotalSeconds >= dwell)
+            OpenApproval();
 
         var interactive = over && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
                                    || (_transient == Transient.Info && _infoAction != null)
@@ -545,13 +556,19 @@ public partial class IslandWindow : Window
     void CloseTick()
     {
         _hoverTimer.Stop();
-        if (!_hover && !_dragOver && !_draggingOut && !_menuOpen) SetExpanded(false);
+        if (_hover || _dragOver || _draggingOut || _menuOpen) return;
+        SetExpanded(false);
+        CloseApproval();
     }
 
     void Island_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_expanded) return;
-        if (_transient == Transient.Approval) return;
+        if (_transient == Transient.Approval)
+        {
+            if (ApprovalQuiet) OpenApproval();
+            return;
+        }
         if (_transient == Transient.Info)
         {
             var action = _infoAction;

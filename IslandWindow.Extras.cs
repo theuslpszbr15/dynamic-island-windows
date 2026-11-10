@@ -34,6 +34,11 @@ public partial class IslandWindow
 
     static readonly TimeSpan ApprovalWait = TimeSpan.FromSeconds(54);
     readonly List<Approval> _approvals = [];
+    /// <summary>The quiet pill was opened into the full Allow / Deny panel.</summary>
+    bool _approvalOpen;
+    DateTime _approvalShownAt;
+
+    bool ApprovalQuiet => _settings.QuietApprovals && !_approvalOpen;
     Action? _infoAction;
     bool _userHidden, _extrasStarted;
     DateTime? _unhideAt;
@@ -287,6 +292,11 @@ public partial class IslandWindow
         ApprovalPetBox.Visibility = Vis(PetOn);
         ApprovalPet.Tint(AgentSession.Waiting);
         ApprovalPet.BaseMood = PetView.Mood.Waiting;
+        var waiting = _approvals.Count;
+        ApprovalPillText.Text = waiting > 1 ? $"{waiting} pedidos de permissão" : $"{approval.Agent} quer permissão";
+        // a new request starts quiet again, unless the user is looking at the open panel right now
+        if (!(_approvalOpen && _hover)) _approvalOpen = false;
+        if (_transient != Transient.Approval) _approvalShownAt = DateTime.Now;
         if (_expanded) SetExpanded(false);
         var left = ApprovalWait - (DateTime.Now - approval.Since);
         ShowTransient(Transient.Approval, Math.Max(1, left.TotalSeconds));
@@ -298,12 +308,35 @@ public partial class IslandWindow
         if (_approvals.FirstOrDefault() is not { } approval) return;
         var left = ApprovalWait - (DateTime.Now - approval.Since);
         ApprovalElapsed.Text = left > TimeSpan.Zero ? $"  {(int)left.TotalSeconds}s" : "";
+        ApprovalPillTime.Text = left > TimeSpan.Zero ? $"{(int)left.TotalSeconds}s" : "";
+    }
+
+    void OpenApproval()
+    {
+        if (_transient != Transient.Approval || _approvalOpen) return;
+        _approvalOpen = true;
+        Retarget();
+    }
+
+    /// <summary>Back to the pill when the pointer leaves an opened quiet request.</summary>
+    void CloseApproval()
+    {
+        if (_transient != Transient.Approval || !_approvalOpen || !_settings.QuietApprovals) return;
+        _approvalOpen = false;
+        Retarget();
+    }
+
+    public void ApprovalStyleChanged()
+    {
+        _approvalOpen = false;
+        if (_transient == Transient.Approval) Retarget();
     }
 
     void NextApprovalOrClose()
     {
         _transientTimer.Stop();
         _transient = Transient.None;
+        if (_approvals.Count == 0) _approvalOpen = false;
         if (_approvals.Count > 0) ShowApproval();
         else Retarget();
     }

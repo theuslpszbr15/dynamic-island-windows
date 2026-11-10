@@ -233,6 +233,9 @@ public partial class IslandWindow
             await hook.StandardInput.WriteAsync("""{"hook_event_name":"PermissionRequest","session_id":"s9","cwd":"C:\\dev\\dynamic-island","tool_name":"Bash","tool_input":{"command":"git push origin main"}}""");
             hook.StandardInput.Close();
             await Task.Delay(1500);
+            await Shot("28-approval-pill");
+            OpenApproval();
+            await Task.Delay(600);
             await Shot("28-approval");
             Answer("allow");
             var output = await hook.StandardOutput.ReadToEndAsync();

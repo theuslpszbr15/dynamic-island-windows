@@ -92,10 +92,11 @@ fun AppScreen(
     onUnpair: () -> Unit,
     onRetry: () -> Unit,
     onPause: () -> Unit,
+    onFixNotifications: () -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(Ground).statusBarsPadding().navigationBarsPadding()) {
         if (state.pairing == null) PairScreen(onScan, onPaste)
-        else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onPause, onScan)
+        else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onPause, onScan, onFixNotifications)
     }
     if (pending != null) {
         AlertDialog(
@@ -166,6 +167,7 @@ private fun HomeScreen(
     onRetry: () -> Unit,
     onPause: () -> Unit,
     onScan: () -> Unit,
+    onFixNotifications: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(state.initialTab) }
     var confirmUnpair by remember { mutableStateOf(false) }
@@ -195,7 +197,7 @@ private fun HomeScreen(
             }
         }
         Box(Modifier.weight(1f)) {
-            if (tab == 0) AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan)
+            if (tab == 0) AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan, onFixNotifications)
             else TrayTab(state, onOpen)
         }
         NavigationBar(containerColor = Card) {
@@ -237,10 +239,15 @@ private fun AgentsTab(
     onUnpair: () -> Unit,
     onRetry: () -> Unit,
     onScan: () -> Unit,
+    onFixNotifications: () -> Unit,
 ) {
     val approvals = state.approvals.sortedByDescending { it.fingerprint == focused }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.height(4.dp)) }
+        if (state.notificationsOff) item {
+            Notice("As notificações estão desligadas: os pedidos de permissão chegam sem aviso e só aparecem com o app aberto.",
+                "Ativar notificações", onFixNotifications)
+        }
         when (state.status) {
             LinkStatus.AuthFailed -> item {
                 Notice("O PC trocou o código de pareamento. Escaneie o código novo.", "Escanear", onScan)

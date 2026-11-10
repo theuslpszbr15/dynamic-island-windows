@@ -283,6 +283,8 @@ public sealed class SettingsWindow : Window
             Toggle("GitHub Copilot (VS Code e CLI)", "Cria ~/.copilot/hooks/dynamic-island.json. Vale para chats novos.",
                 App.CopilotConnected, _ => _app.ToggleCopilotHooks()),
             Row("Claude Code", "Copia os hooks para colar em ~/.claude/settings.json. Inclui o PermissionRequest: os pedidos de permissão aparecem na ilha (e no celular) com Permitir / Negar.", copy),
+            Toggle("Pedido de permissão discreto", "O pedido aparece como uma pílula pequena, sem abrir a ilha. Passe o mouse ou clique nela para ver o comando e responder.",
+                S.QuietApprovals, _ => _app.ToggleQuietApprovals()),
             Row("Qualquer script", "DynamicIsland.exe agent --name \"Build\" --state working --text \"dotnet build\"", null)));
 
         var week = AgentStats.LastWeek();

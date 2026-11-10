@@ -324,6 +324,20 @@
                                        HorizontalAlignment="Right" VerticalAlignment="Center" />
                         </Grid>
 
+                        <!-- quiet permission request: a pill that opens into ApprovalPanel on hover or click -->
+                        <Grid x:Name="ApprovalPill" Height="40" VerticalAlignment="Top" Margin="16,0,18,0" Visibility="Collapsed">
+                            <Ellipse x:Name="ApprovalPillOrb" Width="10" Height="10" Fill="#FFFF9F0A" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <ScaleTransform />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <TextBlock x:Name="ApprovalPillText" FontSize="12.5" FontWeight="SemiBold" Margin="20,0,44,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ApprovalPillTime" FontSize="12" Foreground="{DynamicResource Muted}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
                         <!-- Claude Code asking for permission: answer from the island -->
                         <Grid x:Name="ApprovalPanel" Height="128" VerticalAlignment="Top" Margin="16,0,16,0" Visibility="Collapsed">
                             <Grid.RowDefinitions>

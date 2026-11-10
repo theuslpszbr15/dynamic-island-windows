@@ -27,7 +27,7 @@ atrapalhar: os cliques passam por ela.
 |---|---|
 | **Mascotes** — o **Bit** (gatinho de capuz, o mascote da ilha), o **Coco** (coquinho), a **Pipoca** (gatinha) ou o **Bu** (fantasminha). Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. | <img src="docs/img/25-bit-moods.png" width="380"> |
 | **PatPat** — **Shift + clique** no mascote (na ilha ou na área de trabalho) e uma mãozinha em pixel art faz carinho na cabeça dele: 5 quadros em 300 ms, o mascote amassa, fecha os olhos feliz e solta coraçõezinhos. Segure para continuar o afago. Ideia do mod de Minecraft [PatPat](https://github.com/LopyMine/PatPat); o sprite é nosso. | <img src="docs/img/43-patpat.png" width="380"> |
-| **Permitir / Negar** — quando o Claude Code pede permissão (rodar um comando, editar um arquivo), a pergunta aparece na ilha com dois botões. Sem resposta em ~55 s, ele pergunta no terminal como sempre. | <img src="docs/img/28-approval.png" width="380"> |
+| **Permitir / Negar** — quando o Claude Code pede permissão (rodar um comando, editar um arquivo), a pergunta aparece na ilha como uma pílula discreta, sem abrir a ilha; passe o mouse ou clique nela para ver o comando e responder (dá para trocar por o painel aberto direto em *Configurações → Agentes*). Sem resposta em ~55 s, ele pergunta no terminal como sempre. | <img src="docs/img/28-approval.png" width="380"> |
 | **Roupinhas** — gorro, chapéu de festa, gorro de Natal, chapéu de palha, óculos escuros e coroa. No modo automático o mascote se veste sozinho no Natal, nas festas juninas e no Ano-Novo. O mascote também pode morar na **área de trabalho**: arraste para onde quiser; ele corre até a ilha quando um agente chama. | <img src="docs/img/34-outfits.png" width="380"> |
 | **Agentes ao vivo** — o mascote do agente, os passos (Leitura, Edição, Terminal…) e o diff da última edição; com vários agentes, a lista de todos com o mascote de cada um. | <img src="docs/img/10b-agent-detail.png" width="380"> |
 | **Vidro (desfocado)** — "liquid glass" estilo iOS 26: o fundo atrás da ilha é fosco no meio e se curva como uma lente nas bordas, com brilho na borda, além de 8 cores sólidas (Obsidiana, Grafite, Ardósia, Oceano, Floresta, Café, Ameixa, Cereja) e o tema claro **Porcelana**. | <img src="docs/img/26-glass-media.png" width="190"> <img src="docs/img/35-light-media.png" width="190"> |
@@ -105,7 +105,7 @@ Conexões de rede (todas opcionais): letras no `lrclib.net`, clima no `wttr.in` 
 
 O app **Dynamic Island para Android** (pasta [android/](android), Kotlin + Jetpack Compose, com o Bit) é um app
 normal: liga o celular à ilha do PC, recebe os pedidos de permissão do Claude Code e mostra seus agentes. **Negar**
-funciona direto na notificação; **Permitir** pede a digital ou o bloqueio de tela. A aba **Bandeja do PC** mostra o que
+funciona direto na notificação; **Permitir** abre a digital ou o bloqueio de tela na hora, e o app avisa se a resposta chegou ao PC. O celular também avisa quando um agente termina ou fica esperando você, e volta a se ligar ao PC sozinho depois de reiniciar. A aba **Bandeja do PC** mostra o que
 está fixado na bandeja de arquivos da ilha e abre o item no PC com um toque (também pede a digital).
 Serve para qualquer Android 11+.
 

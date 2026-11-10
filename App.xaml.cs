@@ -109,6 +109,13 @@ public partial class App : Application
         Settings.Save();
     }
 
+    public void ToggleQuietApprovals()
+    {
+        Settings.QuietApprovals = !Settings.QuietApprovals;
+        Settings.Save();
+        _window.ApprovalStyleChanged();
+    }
+
     public void ToggleQuietVideos()
     {
         Settings.QuietVideos = !Settings.QuietVideos;
