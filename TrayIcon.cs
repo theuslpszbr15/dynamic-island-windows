@@ -51,6 +51,7 @@ sealed class TrayIcon : IDisposable
         var exit = new WinForms.ToolStripMenuItem("Sair", null, (_, _) => app.Quit());
 
         var menu = new WinForms.ContextMenuStrip();
+        var renderer = new IslandMenuRenderer(() => app.Settings.Theme);
         menu.Items.AddRange([settings, new WinForms.ToolStripSeparator(), hide, hideHour, new WinForms.ToolStripSeparator(), shape, theme, pet, outfit, desktopPet, discreet, monitor, shows, recap, startup, new WinForms.ToolStripSeparator(),
             copilot, hooks, phone, new WinForms.ToolStripSeparator(), update, install, exit]);
         menu.Opening += (_, _) =>
@@ -78,10 +79,11 @@ sealed class TrayIcon : IDisposable
                     Checked = app.Settings.Mascot == species,
                 });
             theme.DropDownItems.Clear();
-            foreach (var (id, name, _) in IslandThemes.All)
-                theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, null, (_, _) => app.SetTheme(id))
+            foreach (var (id, name, color) in IslandThemes.All)
+                theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, IslandMenuRenderer.SwatchSlot, (_, _) => app.SetTheme(id))
                 {
                     Checked = app.Settings.Theme == id,
+                    Tag = color,  // painted as a colour dot by IslandMenuRenderer
                 });
             notifications.Checked = app.Settings.ShowNotifications;
             pill.Checked = app.Settings.Shape == IslandShape.Pill;
@@ -94,7 +96,10 @@ sealed class TrayIcon : IDisposable
                 {
                     Checked = app.Settings.Monitor == id,
                 });
+            // submenus were just rebuilt: give them the theme's look too
+            IslandMenuRenderer.Style(menu, renderer);
         };
+        IslandMenuRenderer.Style(menu, renderer);
 
         _image = CreateIcon();
         _icon = new WinForms.NotifyIcon

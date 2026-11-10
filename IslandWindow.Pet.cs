@@ -24,6 +24,7 @@ public partial class IslandWindow
         EarLeft.Fill = EarRight.Fill = ground;
         ApplyGlass();
         ApplyInk(_settings.Theme == IslandThemes.Light);
+        MenuPalette.For(_settings.Theme).ApplyToResources();
 
         var pet = PetOn;
         PetView.SetDefaultSpecies(_settings.Mascot);

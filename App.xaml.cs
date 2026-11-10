@@ -475,8 +475,19 @@ public partial class App : Application
         menu.Items.Add(Item("Notch no topo", () => SetShape(IslandShape.Notch), Settings.Shape == IslandShape.Notch));
         menu.Items.Add(Item("Recolher quando ocioso", ToggleDiscreet, Settings.DiscreetIdle));
         var themes = new MenuItem { Header = "Tema" };
-        foreach (var (id, name, _) in IslandThemes.All)
-            themes.Items.Add(Item(name, () => SetTheme(id), Settings.Theme == id));
+        foreach (var (id, name, color) in IslandThemes.All)
+        {
+            var item = Item(name, () => SetTheme(id), Settings.Theme == id);
+            item.Icon = new System.Windows.Shapes.Ellipse
+            {
+                Width = 12,
+                Height = 12,
+                Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(color.R, color.G, color.B)),
+                Stroke = (System.Windows.Media.Brush)FindResource("MenuBorder"),
+                StrokeThickness = 1,
+            };
+            themes.Items.Add(item);
+        }
         menu.Items.Add(themes);
         var mascots = new MenuItem { Header = "Mascote" };
         foreach (var (species, label) in Mascots)

@@ -274,7 +274,7 @@ public sealed class MediaService(Dispatcher ui)
         try
         {
             if (System.Diagnostics.Process.GetProcessById(source.ProcessId).MainModule?.FileName is { } exe)
-                icon = Native.ShellIcon(exe) as BitmapSource;
+                icon = AppIcons.ForFile(exe, 256);
         }
         catch { }
         return new MediaSnapshot(title, artist, icon, icon != null ? ColorUtil.Accent(icon) : DefaultAccent,
@@ -352,7 +352,7 @@ public sealed class MediaService(Dispatcher ui)
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = 240;
+            bitmap.DecodePixelWidth = 400;
             bitmap.StreamSource = memory;
             bitmap.EndInit();
             bitmap.Freeze();

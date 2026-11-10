@@ -202,9 +202,13 @@ static class Native
     const uint SHGFI_SYSICONINDEX = 0x4000, SHGFI_ICON = 0x100;
     const int SHIL_EXTRALARGE = 2, ILD_TRANSPARENT = 1;
 
-    /// <summary>48px shell icon for a file or folder (falls back to 32px).</summary>
-    public static ImageSource? ShellIcon(string path)
+    /// <summary>
+    /// Shell icon for a file or folder: <paramref name="px"/> pixels from the shell's image factory when it
+    /// has one, else the 48px image list (falls back to 32px).
+    /// </summary>
+    public static ImageSource? ShellIcon(string path, int px = 96)
     {
+        if (Services.AppIcons.ForFile(path, px) is { } sharp) return sharp;
         var info = new SHFILEINFO();
         var size = (uint)Marshal.SizeOf<SHFILEINFO>();
         IntPtr hIcon = IntPtr.Zero;
