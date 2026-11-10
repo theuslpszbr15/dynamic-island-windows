@@ -16,6 +16,7 @@ public partial class App : Application
     TrayIcon _tray = null!;
 
     public string? SnapshotFolder { get; init; }
+    public string? PerfFolder { get; init; }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -37,6 +38,16 @@ public partial class App : Application
             _window = new IslandWindow(Settings) { SnapshotMode = true };
             _window.Show();
             await _window.RunSnapshotsAsync(SnapshotFolder);
+            Shutdown();
+            return;
+        }
+
+        if (PerfFolder != null)
+        {
+            Settings = new IslandSettings { ReadOnly = true, DiscreetIdle = false };
+            _window = new IslandWindow(Settings) { SnapshotMode = true };
+            _window.Show();
+            await _window.RunPerfAsync(PerfFolder);
             Shutdown();
             return;
         }

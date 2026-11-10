@@ -18,6 +18,13 @@ public static class Program
             return devApp.Run();
         }
 
+        if (args.Length > 1 && args[0] == "--perf")
+        {
+            var perfApp = new App { PerfFolder = args[1] };
+            perfApp.InitializeComponent();
+            return perfApp.Run();
+        }
+
         if (args.Length > 0 && args[0] == "--uninstall")
         {
             Installer.Uninstall();
