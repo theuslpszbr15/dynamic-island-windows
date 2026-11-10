@@ -426,29 +426,40 @@ public partial class IslandWindow
         MediaSources.Children.Clear();
         var sources = _media.Sources;
         if (sources.Count < 2) return;
+        var px = (int)Math.Ceiling(16 * VisualTreeHelper.GetDpi(this).DpiScaleX);
         foreach (var source in sources)
         {
-            var chip = new Border
-            {
-                Width = 24,
-                Height = 24,
-                CornerRadius = new CornerRadius(12),
-                Margin = new Thickness(0, 0, 4, 0),
-                Background = new SolidColorBrush(Color.FromArgb(0xE6, 0x1C, 0x1C, 0x1E)),
-                BorderThickness = new Thickness(1.5),
-                Cursor = Cursors.Hand,
-                Tag = source.Id,
-                ToolTip = source.Playing ? source.Name + " (tocando)" : source.Name,
-                Child = new TextBlock
+            UIElement face = AppIcons.ForAppId(source.Id, Math.Max(px, 32)) is { } icon
+                ? new Image
+                {
+                    Source = Upscaler.Fit(icon, px),
+                    Width = 16,
+                    Height = 16,
+                    Stretch = Stretch.Uniform,
+                }
+                : new TextBlock
                 {
                     Text = source.Name[..1].ToUpperInvariant(),
                     FontSize = 11,
                     FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.White,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
-                },
+                };
+            RenderOptions.SetBitmapScalingMode(face, BitmapScalingMode.HighQuality);
+            var chip = new Border
+            {
+                Width = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(7),
+                Margin = new Thickness(4, 0, 0, 0),
+                BorderThickness = new Thickness(1.5),
+                Cursor = Cursors.Hand,
+                Tag = source.Id,
+                ToolTip = source.Playing ? source.Name + " (tocando)" : source.Name,
+                Child = face,
             };
+            chip.SetResourceReference(Border.BackgroundProperty, "Card");
+            if (face is TextBlock letter) letter.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
             chip.MouseLeftButtonUp += (_, e) =>
             {
                 e.Handled = true;
@@ -459,11 +470,31 @@ public partial class IslandWindow
         HighlightSourceChips();
     }
 
+    BitmapSource? _artSource, _artSharp;
+    int _artPx;
+
+    // Small covers (browsers often publish ~100 px) are enlarged once for the big art on the media page.
+    BitmapSource SharpArt(BitmapSource art, double dips)
+    {
+        var px = (int)Math.Ceiling(dips * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        if (!ReferenceEquals(art, _artSource) || _artSharp == null || px != _artPx)
+        {
+            _artSource = art;
+            _artPx = px;
+            _artSharp = Upscaler.Fit(art, px);
+        }
+        return _artSharp;
+    }
+
     void HighlightSourceChips()
     {
         var accent = new SolidColorBrush(_mediaSnap?.Accent ?? MediaService.DefaultAccent);
         foreach (var chip in MediaSources.Children.OfType<Border>())
-            chip.BorderBrush = (string)chip.Tag == _media.CurrentId ? accent : Brushes.Transparent;
+        {
+            var current = (string)chip.Tag == _media.CurrentId;
+            chip.BorderBrush = current ? accent : Brushes.Transparent;
+            chip.Opacity = current ? 1 : 0.6;
+        }
     }
 
     // ───────────────────────── brightness & bluetooth ─────────────────────────

@@ -807,7 +807,7 @@ public partial class IslandWindow : Window
         MediaArtist.Text = m.Artist;
         MediaSource.Text = string.IsNullOrEmpty(m.Source) ? "" : "Tocando no " + m.Source;
         MediaArt.Background = m.Art != null
-            ? new ImageBrush(m.Art) { Stretch = Stretch.UniformToFill }
+            ? new ImageBrush(SharpArt(m.Art, MediaArt.Width)) { Stretch = Stretch.UniformToFill }
             : new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1E));
         MediaArtGlyph.Visibility = Vis(m.Art == null);
         PlayButton.Content = m.IsPlaying ? "\uE769" : "\uE768";
