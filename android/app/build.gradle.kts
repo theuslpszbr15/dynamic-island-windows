@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -22,7 +24,7 @@ android {
     // or the same values in DI_STORE_FILE, DI_STORE_PASSWORD, DI_KEY_ALIAS, DI_KEY_PASSWORD (CI secrets).
     // Without one the release falls back to this machine's debug key, which can't update an APK signed
     // anywhere else, so published APKs must always come from the release key.
-    val releaseKey = java.util.Properties().apply {
+    val releaseKey = Properties().apply {
         val file = rootProject.file("keystore.properties")
         if (file.exists()) file.inputStream().use { load(it) }
         System.getenv("DI_STORE_FILE")?.let { setProperty("storeFile", it) }
