@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -6,7 +6,6 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 using System.Windows.Shell;
 using DynamicIsland.Services;
 using QRCoder;
@@ -57,8 +56,8 @@ public sealed class SettingsWindow : Window
         Icon = BitmapFrame.Create(typeof(SettingsWindow).Assembly.GetManifestResourceStream("DynamicIsland.ico")!);
         Resources.MergedDictionaries.Add(Styles());
 
-        // No Windows title bar: a dark bar of our own (mac-style dots, like Maestri) that still drags, snaps,
-        // resizes and double-click maximizes through WindowChrome.
+        // No Windows title bar: a dark bar of our own (flat buttons, like Obsidian and Maestri) that still drags,
+        // snaps, resizes and double-click maximizes through WindowChrome.
         WindowChrome.SetWindowChrome(this, new WindowChrome
         {
             CaptionHeight = CaptionHeight,
@@ -69,10 +68,7 @@ public sealed class SettingsWindow : Window
         });
 
         var sidebar = new DockPanel { Background = Panel };
-        var lights = TrafficLights();
-        DockPanel.SetDock(lights, Dock.Top);
-        sidebar.Children.Add(lights);
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 4, 16, 16) };
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 18, 16, 16) };
         header.Children.Add(new Viewbox { Width = 38, Height = 38, Child = new PetView { FixedSpecies = PetSpecies.Bit, BaseMood = PetView.Mood.Happy } });
         var name = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         name.Children.Add(new TextBlock { Text = "Dynamic Island", FontSize = 16, FontWeight = FontWeights.SemiBold });
@@ -90,18 +86,23 @@ public sealed class SettingsWindow : Window
         root.RowDefinitions.Add(new RowDefinition());
         Grid.SetRowSpan(sidebar, 2);
         root.Children.Add(sidebar);
-        // The window's name, centered in the content side of the bar (drag area, not clickable).
-        var caption = new TextBlock
+        // The bar over the content: same tone as the sidebar with a hairline under it (like Obsidian's tab
+        // strip), the window's name on the left (drag area) and the buttons on the right.
+        var bar = new Border { Background = Panel, BorderBrush = Line, BorderThickness = new Thickness(0, 0, 0, 1) };
+        var barContent = new Grid();
+        barContent.Children.Add(new TextBlock
         {
-            Text = "Configurações", FontSize = 12.5, Foreground = Muted, HorizontalAlignment = HorizontalAlignment.Center,
+            Text = "Configurações", FontSize = 12.5, Foreground = Muted, Margin = new Thickness(16, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false,
-        };
-        Grid.SetColumn(caption, 1);
-        root.Children.Add(caption);
+        });
+        barContent.Children.Add(CaptionButtons());
+        bar.Child = barContent;
+        Grid.SetColumn(bar, 1);
+        root.Children.Add(bar);
         Grid.SetColumn(_scroll, 1);
         Grid.SetRow(_scroll, 1);
         root.Children.Add(_scroll);
-        _scroll.Padding = new Thickness(34, 6, 34, 30);
+        _scroll.Padding = new Thickness(34, 22, 34, 30);
         // A hairline edge, since there is no Windows frame any more; maximized, WPF overhangs the screen by
         // the resize border, so the content is pulled back in.
         var frame = new Border { BorderBrush = Line, BorderThickness = new Thickness(1), Child = root };
@@ -110,57 +111,63 @@ public sealed class SettingsWindow : Window
         {
             frame.BorderThickness = WindowState == WindowState.Maximized ? new Thickness(0) : new Thickness(1);
             frame.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
+            if (_maxGlyph != null)
+            {
+                _maxGlyph.Text = WindowState == WindowState.Maximized ? "" : "";
+                ((FrameworkElement)_maxGlyph.Parent).ToolTip = WindowState == WindowState.Maximized ? "Restaurar" : "Maximizar";
+            }
         }
         StateChanged += (_, _) => Fit();
-        Activated += (_, _) => SetLightsActive(true);
-        Deactivated += (_, _) => SetLightsActive(false);
+        Activated += (_, _) => SetCaptionActive(true);
+        Deactivated += (_, _) => SetCaptionActive(false);
 
         if (_app.Island.Phone is { } link) link.PhonesChanged += OnPhones;
         Closed += (_, _) => { if (_app.Island.Phone is { } l) l.PhonesChanged -= OnPhones; };
         Render();
     }
 
-    const double CaptionHeight = 40;
-    readonly List<(Ellipse Dot, Brush On)> _lights = [];
-    static readonly Brush LightOff = Frozen(0xFF3A3A3F), LightGlyph = Frozen(0x99000000);
+    const double CaptionHeight = 38;
+    static readonly Brush CloseHover = Frozen(0xFFE81123), CaptionIdle = Frozen(0xFFB4B4BA);
+    TextBlock? _maxGlyph;
+    readonly List<TextBlock> _captionGlyphs = [];
 
-    /// <summary>Close, minimize and maximize as three colored dots; their symbols show on hover.</summary>
-    FrameworkElement TrafficLights()
+    /// <summary>Minimize, maximize and close as flat, thin buttons on the right (like Obsidian and Maestri):
+    /// grey symbols, a soft highlight on hover, red under close.</summary>
+    FrameworkElement CaptionButtons()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(18, 14, 0, 0), Height = CaptionHeight - 14 };
-        var glyphs = new List<TextBlock>();
-        void Add(uint color, string glyph, string tip, Action click)
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
+        TextBlock Add(string glyph, string tip, Brush hover, Action click)
         {
-            var on = Frozen(color);
-            var dot = new Ellipse { Width = 12, Height = 12, Fill = on };
             var symbol = new TextBlock
             {
-                Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 6.5, Foreground = LightGlyph,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0,
+                Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 10, Foreground = CaptionIdle,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             };
-            glyphs.Add(symbol);
-            var hit = new Grid { Width = 12, Height = 12, Margin = new Thickness(0, 0, 8, 0), Background = Brushes.Transparent, ToolTip = tip, Cursor = Cursors.Hand };
-            hit.Children.Add(dot);
-            hit.Children.Add(symbol);
-            WindowChrome.SetIsHitTestVisibleInChrome(hit, true);
-            hit.MouseLeftButtonDown += (_, e) => e.Handled = true; // don't start a window drag
-            hit.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
-            row.Children.Add(hit);
-            _lights.Add((dot, on));
+            _captionGlyphs.Add(symbol);
+            var button = new Border { Width = 46, Height = CaptionHeight, Background = Brushes.Transparent, Child = symbol, ToolTip = tip };
+            WindowChrome.SetIsHitTestVisibleInChrome(button, true);
+            button.MouseEnter += (_, _) => { button.Background = hover; symbol.Foreground = Brushes.White; };
+            button.MouseLeave += (_, _) => { button.Background = Brushes.Transparent; symbol.Foreground = IsActive ? CaptionIdle : Muted; };
+            button.MouseLeftButtonDown += (_, e) => { e.Handled = true; button.CaptureMouse(); }; // no window drag
+            button.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                button.ReleaseMouseCapture();
+                if (button.IsMouseOver) click();
+            };
+            row.Children.Add(button);
+            return symbol;
         }
-        Add(0xFFFF5F57, "", "Fechar", Close);
-        Add(0xFFFEBC2E, "", "Minimizar", () => WindowState = WindowState.Minimized);
-        Add(0xFF28C840, "", "Maximizar", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
-        WindowChrome.SetIsHitTestVisibleInChrome(row, true);
-        row.MouseEnter += (_, _) => { foreach (var g in glyphs) g.Opacity = 1; foreach (var (dot, on) in _lights) dot.Fill = on; };
-        row.MouseLeave += (_, _) => { foreach (var g in glyphs) g.Opacity = 0; SetLightsActive(IsActive); };
+        Add("", "Minimizar", Hover, () => WindowState = WindowState.Minimized);
+        _maxGlyph = Add("", "Maximizar", Hover, () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
+        Add("", "Fechar", CloseHover, Close);
         return row;
     }
 
-    // Like macOS: the dots go grey when the window isn't in front.
-    void SetLightsActive(bool active)
+    // Symbols dim when the window isn't in front, like the system bar.
+    void SetCaptionActive(bool active)
     {
-        foreach (var (dot, on) in _lights) dot.Fill = active ? on : LightOff;
+        foreach (var g in _captionGlyphs) g.Foreground = active ? CaptionIdle : Muted;
     }
 
     void OnPhones()
