@@ -80,6 +80,42 @@ class RelayPairingTest {
         assertTrue(RelayWire.closeError(4429) is RelayException)
         assertTrue(RelayWire.closeError(4400) is RelayException)
         assertNotNull(RelayWire.closeError(1011))
+        // the public relay's limits and its check of the PC's key
+        assertEquals(RelayWire.LIMIT_MESSAGE, RelayWire.closeError(4429, "daily limit")!!.message)
+        assertEquals(RelayWire.LIMIT_MESSAGE, RelayWire.closeError(4429, "rate limit")!!.message)
+        assertTrue(RelayWire.LIMIT_MESSAGE.contains("seu próprio relay"))
+        assertTrue(RelayWire.closeError(4429, "room full")!!.message!!.contains("Aparelhos demais"))
+        assertTrue(RelayWire.closeError(4401)!!.message!!.contains("Parear de novo"))
+    }
+
+    @Test fun theQrOfThePublicRelayHasNoKey() {
+        val p = Pairing.parse("$base&relay=wss%3A%2F%2Fdynamic-island-relay.brendoribeiron.workers.dev")!!
+        assertEquals("wss://dynamic-island-relay.brendoribeiron.workers.dev", p.relay)
+        assertNull(p.relayKey)
+        assertEquals(p, Pairing.fromJson(p.toJson()))
+        // and an old QR with rk= still pairs (an own relay with a key)
+        assertEquals(key, Pairing.parse("$base&relay=wss%3A%2F%2Frelay.example.com&rk=$key")!!.relayKey)
+    }
+
+    @Test fun filesThroughTheRelayStopAt10Mb() {
+        assertTrue(FileOffer.fitsRoute(FileOffer.RELAY_MAX_BYTES, Route.Relay))
+        assertTrue(!FileOffer.fitsRoute(FileOffer.RELAY_MAX_BYTES + 1, Route.Relay))
+        assertTrue(FileOffer.fitsRoute(FileOffer.MAX_BYTES, Route.Lan))
+        assertTrue(FileOffer.RELAY_TOO_BIG.contains("10 MB"))
+    }
+
+    @Test fun pingsRarelyThroughTheRelay() {
+        assertEquals(LinkClient.PING_EVERY_MS, LinkClient.pingEvery(Route.Lan))
+        assertEquals(300_000L, LinkClient.pingEvery(Route.Relay))
+        assertTrue(LinkClient.RELAY_READ_TIMEOUT_MS > LinkClient.RELAY_PING_EVERY_MS)
+        val pairing = Pairing.parse(base)!!
+        fun attempts(route: Route, times: List<Long>) = LinkClient(pairing, "teste", route).let { c ->
+            times.count { t -> try { c.pingIfDue(t) } catch (_: IOException) { true } } // no connection: the try still counts
+        }
+        val minute = (0L..10L).map { 1_000_000L + it * 20_000L } // a ping tick every 20 s for ~3 minutes
+        assertEquals(1, attempts(Route.Relay, minute))
+        assertEquals(minute.size, attempts(Route.Lan, minute))
+        assertEquals(2, attempts(Route.Relay, listOf(1_000_000L, 1_200_000L, 1_300_000L)))
     }
 }
 
@@ -220,6 +256,32 @@ class RelayLinkTest {
         relay.start()
         val error = runCatching { LinkClient(pairing(), "teste", Route.Relay).run(Quiet()) }.exceptionOrNull()
         assertTrue("$error", error is RelayException && error.message!!.contains("Chave do relay"))
+    }
+
+    @Test fun withoutAKeyNothingIsSentButTheRoom() {
+        relay.enqueue(bridge())
+        relay.start()
+        val client = LinkClient(pairing().copy(relayKey = null), "teste", Route.Relay)
+        val welcomed = CountDownLatch(1)
+        var failure: Throwable? = null
+        val worker = thread {
+            try { client.run(object : Quiet() { override fun onWelcome(desktop: String) = welcomed.countDown() }) } catch (t: Throwable) { failure = t }
+        }
+        assertTrue("no welcome ($failure)", welcomed.await(10, TimeUnit.SECONDS))
+        client.close()
+        worker.join(3000)
+        val upgrade = relay.takeRequest(1, TimeUnit.SECONDS)!!
+        assertEquals("/phone/${pairing().room()}", upgrade.path)
+        assertNull(upgrade.getHeader("Authorization"))
+    }
+
+    @Test fun saysWhenTheRelayLimitIsHit() {
+        relay.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.close(4429, "daily limit") }
+        }))
+        relay.start()
+        val error = runCatching { LinkClient(pairing(), "teste", Route.Relay).run(Quiet()) }.exceptionOrNull()
+        assertTrue("$error", error is RelayException && error.message == RelayWire.LIMIT_MESSAGE)
     }
 
     @Test fun saysWhenThePcIsNotThere() {

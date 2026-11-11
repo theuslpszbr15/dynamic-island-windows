@@ -177,10 +177,18 @@ public partial class App : Application
         if (Settings.PhoneLink) ShowPhonePairing();
     }
 
-    /// <summary>Saves the relay (already checked with PhoneLink.NormalizeRelay, or "" for off) and reconnects.</summary>
+    /// <summary>Saves the user's own relay (already checked with PhoneLink.NormalizeRelay) and reconnects.</summary>
     public void SetPhoneRelay(string relay)
     {
         Settings.PhoneRelay = relay;
+        Settings.Save();
+        _window.ApplyPhoneLink();
+    }
+
+    /// <summary>Public relay, own relay or none; reconnects.</summary>
+    public void SetPhoneRelayMode(PhoneRelayMode mode)
+    {
+        Settings.PhoneRelayMode = mode;
         Settings.Save();
         _window.ApplyPhoneLink();
     }

@@ -39,7 +39,19 @@ public sealed partial class PhoneLink : IDisposable
     // relay have no address and a budget of their own.
     const int MaxLine = 64 * 1024, MaxPeers = 6, MaxPending = 4, MaxPendingPerAddress = 2, MaxPendingRelay = 4;
     static readonly TimeSpan HelloTimeout = TimeSpan.FromSeconds(10), IdleTimeout = TimeSpan.FromMinutes(20);
+    // Keepalives on relay sockets are WebSocket pings (and the text "ping" on the control socket): the relay's runtime
+    // answers both without waking the room, so an idle link costs nothing there.
     static readonly TimeSpan RelayPing = TimeSpan.FromSeconds(20), RelayMaxBackoff = TimeSpan.FromSeconds(60);
+    static readonly TimeSpan RelayKeepAlive = TimeSpan.FromSeconds(30), RelayKeepAliveTimeout = TimeSpan.FromSeconds(30);
+    /// <summary>A relay that never sends the challenge is one from before it: after this long the PC counts as in.</summary>
+    static readonly TimeSpan RelayChallengeWait = TimeSpan.FromSeconds(5);
+
+    /// <summary>The relay every new pairing uses unless the user picks their own (Configurações → Celular).</summary>
+    public const string PublicRelay = "wss://dynamic-island-relay.brendoribeiron.workers.dev";
+    /// <summary>The relay's close codes: the PC didn't prove the room's key, and a limit was hit.</summary>
+    public const int RelayWrongKey = 4401, RelayLimit = 4429;
+    public const string RelayLimitMessage = "Limite do repasse atingido. Tente mais tarde ou use seu próprio repasse.";
+    public const string RelayWrongKeyMessage = "O repasse não reconheceu este PC. Use \"Parear de novo\" nas Configurações.";
 
     static string SecretFile => Path.Combine(IslandSettings.Folder, "phone-link.bin");
 
@@ -99,17 +111,57 @@ public sealed partial class PhoneLink : IDisposable
         RestartRelay();
     }
 
-    /// <summary>Sets the relay (any form <see cref="NormalizeRelay"/> accepts; "" turns it off) and reconnects.</summary>
-    public void SetRelay(string? relay)
+    /// <summary>Sets the relay (any form <see cref="NormalizeRelay"/> accepts; "" turns it off) and reconnects.
+    /// <paramref name="own"/>: the user's own relay, which gets the relay key (<see cref="RelayKey"/>); the public
+    /// relay never does.</summary>
+    public void SetRelay(string? relay, bool own = true)
     {
         var normalized = NormalizeRelay(relay) ?? "";
-        if (normalized == Relay) return;
+        if (normalized == Relay && own == _relayOwn) return;
         Relay = normalized;
+        _relayOwn = own;
         if (Running) RestartRelay();
     }
 
-    /// <summary>The relay's access key, sent as "Authorization: Bearer …" on every relay connection: keeps strangers
-    /// from using the relay as a free tunnel. It is not what protects the link (TLS and the token do); phones get it
+    bool _relayOwn = true;
+
+    /// <summary>The key relay connections send ("" = none): only an own relay gets one.</summary>
+    string RelayKeyInUse => _relayOwn ? _relayKey : "";
+
+    /// <summary>Why the relay won't take this PC right now (a limit, an unknown key), or null. In words for the screen.</summary>
+    public string? RelayProblem { get; private set; }
+    /// <summary>Raised on the UI thread when <see cref="RelayProblem"/> appears (once per problem).</summary>
+    public event Action<string>? RelayTrouble;
+
+    void SetRelayProblem(string? problem)
+    {
+        if (RelayProblem == problem) return;
+        RelayProblem = problem;
+        _ = _ui.InvokeAsync(() =>
+        {
+            PhonesChanged?.Invoke();
+            if (problem != null) RelayTrouble?.Invoke(problem);
+        });
+        if (problem == RelayLimitMessage) _ = ForgetProblemLater(problem);
+    }
+
+    // A limit passes (the minute, or the day): the next try finds out again.
+    async Task ForgetProblemLater(string problem)
+    {
+        await Task.Delay(TimeSpan.FromMinutes(15));
+        if (RelayProblem == problem) SetRelayProblem(null);
+    }
+
+    /// <summary>A relay close code in words for the island, or null when it isn't one the person can act on.</summary>
+    public static string? RelayCloseMessage(int? code) => code switch
+    {
+        RelayLimit => RelayLimitMessage,
+        RelayWrongKey => RelayWrongKeyMessage,
+        _ => null,
+    };
+
+    /// <summary>The relay's access key for an own relay, sent as "Authorization: Bearer …" on every relay connection: keeps
+    /// strangers from using it as a free tunnel. It is not what protects the link (TLS and the token do); phones get it
     /// in the QR (rk=) or in the welcome, inside the authenticated TLS. Stored with the token (DPAPI).</summary>
     public string RelayKey
     {
@@ -174,6 +226,8 @@ public sealed partial class PhoneLink : IDisposable
     public void PairAgain()
     {
         _token = NewToken();
+        _relaySeed = Ed25519.NewSeed(); // a new room gets a new key on the relay too
+        SetRelayProblem(null);
         SaveSecrets();
         ForgetOffers();
         lock (_gate)
@@ -186,10 +240,10 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     public string PairingLink() =>
-        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay, _relayKey);
+        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay, RelayKeyInUse);
 
     /// <summary>The QR code's link. <paramref name="relay"/> and <paramref name="relayKey"/> ("" = none) are
-    /// optional parameters; the key only goes along with a relay.</summary>
+    /// optional parameters; the key only goes along with a relay (an own relay with a key: the public one has none).</summary>
     public static string BuildPairingLink(string host, int port, string fingerprint, string token, string name, string relay, string relayKey = "") =>
         $"dynamicisland://pair?v={Version}&host={host}&port={port}&fp={fingerprint}&token={token}" +
         $"&name={Uri.EscapeDataString(name)}" +
@@ -360,7 +414,7 @@ public sealed partial class PhoneLink : IDisposable
             {
                 ["type"] = "welcome", ["v"] = Version, ["desktop"] = Environment.MachineName, ["os"] = "windows",
                 ["relay"] = Relay, // phones paired before the relay learn it here, without a new QR code
-                ["relayKey"] = Relay.Length > 0 ? _relayKey : "", // only ever sent here, after the token checked out
+                ["relayKey"] = Relay.Length > 0 ? RelayKeyInUse : "", // only ever sent here, after the token checked out
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
@@ -508,6 +562,14 @@ public sealed partial class PhoneLink : IDisposable
                 _relayKey = data["relayKey"]?.GetValue<string>() is { } rk && ValidRelayKey(rk) ? rk : "";
                 _pfx = Convert.FromBase64String(data["pfx"]!.GetValue<string>());
                 _cert = X509CertificateLoader.LoadPkcs12(_pfx, null, X509KeyStorageFlags.UserKeySet);
+                // Pairings from before the relay's challenge get their key now; the relay keeps the first one it sees.
+                var seed = data["relaySeed"]?.GetValue<string>() is { } s ? Convert.FromBase64String(s) : [];
+                if (seed.Length == 32) _relaySeed = seed;
+                else
+                {
+                    _relaySeed = Ed25519.NewSeed();
+                    SaveSecrets();
+                }
                 return;
             }
         }
@@ -519,13 +581,21 @@ public sealed partial class PhoneLink : IDisposable
         _pfx = created.Export(X509ContentType.Pkcs12);
         _cert = X509CertificateLoader.LoadPkcs12(_pfx, null, X509KeyStorageFlags.UserKeySet);
         _token = NewToken();
+        _relaySeed = Ed25519.NewSeed();
         SaveSecrets();
     }
+
+    /// <summary>The Ed25519 private key (seed) that proves to the relay this PC owns the room; one per pairing.</summary>
+    byte[] _relaySeed = [];
 
     void SaveSecrets()
     {
         if (_cert == null) return;
-        var json = new JsonObject { ["token"] = _token, ["pfx"] = Convert.ToBase64String(_pfx), ["relayKey"] = _relayKey }.ToJsonString();
+        var json = new JsonObject
+        {
+            ["token"] = _token, ["pfx"] = Convert.ToBase64String(_pfx), ["relayKey"] = _relayKey,
+            ["relaySeed"] = Convert.ToBase64String(_relaySeed),
+        }.ToJsonString();
         // A half-written secret would unpair the phone, so it is replaced atomically like settings.json.
         AtomicFile.WriteAllBytes(SecretFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser),
             backup: false);
@@ -573,10 +643,8 @@ public sealed partial class PhoneLink : IDisposable
         var failures = 0;
         while (!cancel.IsCancellationRequested)
         {
-            using (var ws = new ClientWebSocket())
+            using (var ws = NewRelaySocket())
             {
-                ws.Options.KeepAliveInterval = RelayPing;
-                if (_relayKey.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + _relayKey);
                 try
                 {
                     using (var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel))
@@ -584,11 +652,17 @@ public sealed partial class PhoneLink : IDisposable
                         connect.CancelAfter(TimeSpan.FromSeconds(15));
                         await ws.ConnectAsync(new Uri($"{relay}/pc/{room}"), connect.Token);
                     }
-                    if (generation == _relayGeneration) SetRelayConnected(true);
                     backoff = TimeSpan.FromSeconds(2);
                     failures = 0;
                     using var pinger = CancellationTokenSource.CreateLinkedTokenSource(cancel);
                     _ = PingLoop(ws, pinger.Token);
+                    // The relay sends a challenge and lets the PC in once it is signed ("ready"); a relay from before the
+                    // challenge never sends one, and then the PC is in as soon as it connects.
+                    var challenged = false;
+                    _ = Task.Delay(RelayChallengeWait, pinger.Token).ContinueWith(t =>
+                    {
+                        if (!t.IsCanceled && !challenged && generation == _relayGeneration) SetRelayConnected(true);
+                    }, TaskScheduler.Default);
                     try
                     {
                         while (ws.State == WebSocketState.Open && !cancel.IsCancellationRequested)
@@ -599,13 +673,26 @@ public sealed partial class PhoneLink : IDisposable
                             try
                             {
                                 using var doc = JsonDocument.Parse(text);
-                                if (Str(doc.RootElement, "type") == "incoming" && Str(doc.RootElement, "conn") is { } conn && ValidConn(conn))
-                                    _ = AcceptRelay(relay, room, conn, cancel);
+                                switch (Str(doc.RootElement, "type"))
+                                {
+                                    case "challenge" when !challenged && AnswerChallenge(text, room, _relaySeed) is { } answer:
+                                        challenged = true;
+                                        await ws.SendAsync(Encoding.UTF8.GetBytes(answer), WebSocketMessageType.Text, true, cancel);
+                                        break;
+                                    case "ready":
+                                        if (generation == _relayGeneration) SetRelayConnected(true);
+                                        SetRelayProblem(null);
+                                        break;
+                                    case "incoming" when Str(doc.RootElement, "conn") is { } conn && ValidConn(conn):
+                                        _ = AcceptRelay(relay, room, conn, cancel);
+                                        break;
+                                }
                             }
                             catch (JsonException) { } // not for us
                         }
                     }
                     finally { pinger.Cancel(); }
+                    if (RelayCloseMessage((int?)ws.CloseStatus) is { } problem) SetRelayProblem(problem);
                 }
                 catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return; }
                 catch (Exception ex)
@@ -619,6 +706,39 @@ public sealed partial class PhoneLink : IDisposable
             catch (OperationCanceledException) { return; }
             backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, RelayMaxBackoff.Ticks));
         }
+    }
+
+    /// <summary>A socket for the relay: WebSocket pings every 30 s (dead links found in a minute, the room stays asleep),
+    /// and the relay key only for an own relay.</summary>
+    ClientWebSocket NewRelaySocket()
+    {
+        var ws = new ClientWebSocket();
+        ws.Options.KeepAliveInterval = RelayKeepAlive;
+        ws.Options.KeepAliveTimeout = RelayKeepAliveTimeout;
+        if (RelayKeyInUse.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + RelayKeyInUse);
+        return ws;
+    }
+
+    /// <summary>The answer to the relay's {"type":"challenge","nonce":…} for <paramref name="room"/>: the pairing's
+    /// Ed25519 public key and its signature on "dynamicisland-relay-auth|room|nonce". Null if it isn't a challenge.</summary>
+    public static string? AnswerChallenge(string message, string room, byte[] seed)
+    {
+        string? nonce;
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            if (Str(doc.RootElement, "type") != "challenge") return null;
+            nonce = Str(doc.RootElement, "nonce");
+        }
+        catch (JsonException) { return null; }
+        if (nonce is not { Length: 64 } || !nonce.All(char.IsAsciiHexDigitLower) || seed.Length != 32) return null;
+        var signature = Ed25519.Sign(seed, Encoding.UTF8.GetBytes($"dynamicisland-relay-auth|{room}|{nonce}"));
+        return new JsonObject
+        {
+            ["type"] = "auth",
+            ["key"] = Convert.ToHexString(Ed25519.PublicKey(seed)).ToLowerInvariant(),
+            ["sig"] = Convert.ToHexString(signature).ToLowerInvariant(),
+        }.ToJsonString();
     }
 
     // A text "ping" every 20 s: the relay answers "pong" without waking up, and idle NATs keep the socket.
@@ -658,7 +778,7 @@ public sealed partial class PhoneLink : IDisposable
     async Task AcceptRelay(string relay, string room, string conn, CancellationToken cancel)
     {
         Peer peer;
-        var ws = new ClientWebSocket();
+        var ws = NewRelaySocket();
         lock (_gate)
         {
             if (_peers.Count(p => p.Authenticated) >= MaxPeers || _peers.Count(p => !p.Authenticated && p.Relay && !p.Fetching) >= MaxPendingRelay)
@@ -673,8 +793,6 @@ public sealed partial class PhoneLink : IDisposable
         {
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             connect.CancelAfter(HelloTimeout);
-            ws.Options.KeepAliveInterval = RelayPing;
-            if (_relayKey.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + _relayKey);
             await ws.ConnectAsync(new Uri($"{relay}/pc/{room}/{conn}"), connect.Token);
         }
         catch
@@ -684,6 +802,8 @@ public sealed partial class PhoneLink : IDisposable
             return;
         }
         await Serve(peer, cancel);
+        // The relay cut the tunnel over a limit: say so once (the phone hears the same from its side).
+        try { if (RelayCloseMessage((int?)ws.CloseStatus) is { } problem) SetRelayProblem(problem); } catch { }
     }
 
     /// <summary>The data WebSocket as a byte stream: each write is one binary frame, reads return frame data

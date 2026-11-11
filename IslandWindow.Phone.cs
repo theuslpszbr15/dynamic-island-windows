@@ -32,8 +32,9 @@ public partial class IslandWindow
             _phone.IncomingOffer += OnPhoneIncoming;
             _phone.IncomingText += OnPhoneText;
             _phone.IncomingDone += OnPhoneIncomingDone;
+            _phone.RelayTrouble += OnRelayTrouble;
         }
-        _phone.SetRelay(_settings.PhoneRelay);
+        _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);
         if (_phone.Running) return;
         try { _phone.Start(); PhoneError = null; }
         catch (Exception ex)
@@ -52,6 +53,14 @@ public partial class IslandWindow
     {
         if (!viaRelay || SnapshotMode) return;
         ShowInfo("", "Celular conectado pela internet", device.Length > 0 ? device : "Android",
+            action: () => ((App)System.Windows.Application.Current).ShowSettings("phone"), seconds: 6);
+    }
+
+    // The relay refused this PC (a limit, or a key it doesn't know): once per problem, not on every retry.
+    void OnRelayTrouble(string message)
+    {
+        if (SnapshotMode) return;
+        ShowInfo("", "Repasse do celular", message, glyphColor: Meter.Red,
             action: () => ((App)System.Windows.Application.Current).ShowSettings("phone"), seconds: 6);
     }
 

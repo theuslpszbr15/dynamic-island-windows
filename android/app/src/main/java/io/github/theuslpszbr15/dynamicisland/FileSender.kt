@@ -74,6 +74,7 @@ object FileSender {
         val folder = File(outbox(context), id).apply { mkdirs() }
         val items = mutableListOf<OfferItem>()
         val files = mutableListOf<File>()
+        var total = 0L
         try {
             uris.forEachIndexed { i, uri ->
                 val name = FileOffer.safeName(displayName(context, uri) ?: "arquivo")
@@ -89,7 +90,9 @@ object FileSender {
                             val n = source.read(buffer)
                             if (n == -1) break
                             size += n
+                            total += n
                             if (size > limit) throw IllegalStateException("$name é grande demais (${FileOffer.limitText(name)}).")
+                            if (!FileOffer.fitsRoute(total, client.route)) throw IllegalStateException(FileOffer.RELAY_TOO_BIG)
                             digest.update(buffer, 0, n)
                             out.write(buffer, 0, n)
                         }

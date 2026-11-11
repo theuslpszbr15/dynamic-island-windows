@@ -132,6 +132,8 @@ object Link {
         val c = client
         val pairing = _state.value.pairing
         if (c == null || pairing == null) return tell(app, "Sem conexão com o PC agora. Mande de novo quando ligar.")
+        // Too big for the relay: the offer stays, so it can still be taken once on the PC's Wi-Fi.
+        if (!FileOffer.fitsRoute(offer.totalBytes, c.route)) return tell(app, FileOffer.RELAY_TOO_BIG)
         update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
         FileReceiver.receive(app, pairing, c.route, offer)
     }
@@ -170,10 +172,11 @@ object Link {
         }
     }
 
+    /** Called every [LinkClient.PING_EVERY_MS]; the client decides whether a ping is due on its route. */
     fun ping() {
         val c = client ?: return
         io.execute {
-            try { c.ping() } catch (_: Exception) {}
+            try { c.pingIfDue() } catch (_: Exception) {}
         }
     }
 }

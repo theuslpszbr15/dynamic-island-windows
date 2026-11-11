@@ -7,6 +7,8 @@ namespace DynamicIsland;
 
 public enum IslandShape { Pill, Notch }
 
+public enum PhoneRelayMode { Public, Own, Off }
+
 public sealed class IslandSettings
 {
     public IslandShape Shape { get; set; } = IslandShape.Pill;
@@ -29,8 +31,20 @@ public sealed class IslandSettings
     public bool QuietVideos { get; set; } = true;
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
-    /// <summary>The relay for connecting the phone away from home (wss://host, see relay/); "" = off.</summary>
+    /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay
+    /// (<see cref="PhoneRelay"/>) or not at all.</summary>
+    public PhoneRelayMode PhoneRelayMode { get; set; } = PhoneRelayMode.Public;
+    /// <summary>The user's own relay (wss://host, see relay/), used when <see cref="PhoneRelayMode"/> is Own.</summary>
     public string PhoneRelay { get; set; } = "";
+
+    /// <summary>The relay the link should use right now ("" = none).</summary>
+    [JsonIgnore]
+    public string EffectivePhoneRelay => PhoneRelayMode switch
+    {
+        PhoneRelayMode.Public => Services.PhoneLink.PublicRelay,
+        PhoneRelayMode.Own => PhoneRelay,
+        _ => "",
+    };
     /// <summary>The paired phone sees the file tray and can open its items on this PC.</summary>
     public bool PhoneTray { get; set; } = true;
     /// <summary>Files can be sent to the paired phone (dropped on the island's "celular" side, or from the tray).</summary>
@@ -71,15 +85,26 @@ public sealed class IslandSettings
             settings = Parse(text)!;
         // 2: Coco was only the old default, so files from before Bit move to Bit once.
         // 3: the theme is stored by id instead of its Portuguese name.
-        if (settings.Version < 3)
+        // 4: the public relay is the default for new pairings (see MigrateRelay).
+        if (settings.Version < 4)
         {
             if (settings.Version < 2 && settings.Mascot == PetSpecies.Coco) settings.Mascot = PetSpecies.Bit;
-            settings.Version = 3;
+            settings.MigrateRelay(existing: settings.Version > 0);
+            settings.Version = 4;
             settings.Theme = IslandThemes.Normalize(settings.Theme);
             settings.Save();
         }
         else settings.Theme = IslandThemes.Normalize(settings.Theme);
         return settings;
+    }
+
+    /// <summary>Before the public relay: a relay set by hand stays the user's own; someone who already used the phone
+    /// link without a relay keeps it off (their traffic doesn't start going through a relay they never chose).
+    /// Everyone else, and every new install, gets the public relay.</summary>
+    internal void MigrateRelay(bool existing)
+    {
+        if (!existing) return;
+        PhoneRelayMode = PhoneRelay.Length > 0 ? PhoneRelayMode.Own : PhoneLink ? PhoneRelayMode.Off : PhoneRelayMode.Public;
     }
 
     public void Save()

@@ -46,6 +46,13 @@ data class FileOffer(val id: String, val items: List<OfferItem>, val receivedAt:
 
         fun limitText(name: String) = if (maxBytesFor(name) == MAX_VIDEO_BYTES) "vídeo até 60 MB" else "até 30 MB por arquivo"
 
+        /** Through the relay a batch carries at most 10 MB in all (the relay has a daily budget); the PC uses the same rule. */
+        const val RELAY_MAX_BYTES = 10L * 1024 * 1024
+        const val RELAY_TOO_BIG = "Pela internet o limite é 10 MB por envio. No mesmo Wi-Fi do PC vai até 30 MB por arquivo."
+
+        /** Whether a batch of [totalBytes] may go over [route]. */
+        fun fitsRoute(totalBytes: Long, route: Route) = route != Route.Relay || totalBytes <= RELAY_MAX_BYTES
+
         fun parse(o: JSONObject, now: Long = System.currentTimeMillis()): FileOffer? {
             val id = o.optString("id")
             val list = o.optJSONArray("items") ?: return null

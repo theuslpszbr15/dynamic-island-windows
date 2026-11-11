@@ -396,8 +396,37 @@ public sealed class SettingsWindow : Window
         page.Children.Add(Card("Semana passada", numbers, Row("Resumo da semana", "Toda segunda a ilha oferece o resumo; dá para salvar como imagem. Fica só no seu PC.", open)));
     }
 
-    /// <summary>The relay address for connecting away from home, and whether the PC is in its room.</summary>
+    /// <summary>How the phone reaches the PC away from home (public relay, own relay or none), and whether the PC is in
+    /// its room.</summary>
     Border RelayCard(IslandWindow island)
+    {
+        var mode = Choice("Repasse", "Público: funciona só escaneando o código. Próprio: um repasse seu no Cloudflare.",
+            [(PhoneRelayMode.Public, "Público (padrão)"), (PhoneRelayMode.Own, "Usar meu próprio repasse"), (PhoneRelayMode.Off, "Desligado")],
+            S.PhoneRelayMode, m => { _app.SetPhoneRelayMode(m); Render(); });
+        var state = Note("");
+        void State(string text, Brush color) { state.Text = text; state.Foreground = color; }
+        var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+        var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
+        if (S.PhoneRelayMode == PhoneRelayMode.Off) State("Desligado: o celular só conecta na mesma rede.", Muted);
+        else if (!S.PhoneLink || island.Phone is not { Running: true } running) State("Ligue a ligação com o celular para usar o repasse.", Muted);
+        else if (running.RelayProblem is { } problem) State(problem, orange);
+        else if (running.RelayConnected) State("✓ Conectado ao repasse: o celular alcança este PC de qualquer rede.", green);
+        else if (S.EffectivePhoneRelay.Length == 0) State("Coloque o endereço do seu repasse abaixo.", Muted);
+        else State("Conectando ao repasse… (sem internet" + (S.PhoneRelayMode == PhoneRelayMode.Own ? ", endereço ou chave errada?)" : "?)"), orange);
+
+        const string about = "O repasse só passa adiante os dados já criptografados entre o celular e este PC: não vê o código de " +
+                             "pareamento nem os comandos, e não consegue aprovar nada.";
+        if (S.PhoneRelayMode != PhoneRelayMode.Own)
+            return Card("Fora de casa (pela internet)",
+                Note(about + (S.PhoneRelayMode == PhoneRelayMode.Public
+                    ? " O público é grátis e tem limites (50 MB por dia, arquivos até 10 MB); para mais, use o seu próprio."
+                    : "")),
+                mode, state);
+        return OwnRelayCard(island, mode, state, about);
+    }
+
+    /// <summary>The user's own relay: its address and its optional access key (the old way, before the public relay).</summary>
+    Border OwnRelayCard(IslandWindow island, FrameworkElement mode, TextBlock state, string about)
     {
         var box = new TextBox
         {
@@ -405,12 +434,8 @@ public sealed class SettingsWindow : Window
             Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
             BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = "Ex.: wss://dynamic-island-relay.seu-usuario.workers.dev",
         };
-        var status = Note("");
+        var status = state;
         void Show(string text, Brush color) { status.Text = text; status.Foreground = color; }
-        if (S.PhoneRelay.Length == 0) Show("Desligado: o celular só conecta na mesma rede.", Muted);
-        else if (!S.PhoneLink || island.Phone is not { Running: true } link) Show("Ligue a ligação com o celular para usar o repasse.", Muted);
-        else if (link.RelayConnected) Show("✓ Conectado ao repasse: o celular alcança este PC de qualquer rede.", new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58)));
-        else Show("Conectando ao repasse… (sem internet, endereço ou chave errada?)", new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A)));
 
         // The relay's access key: masked, pasted in, kept with the pairing secrets (DPAPI), never shown in full.
         var key = new PasswordBox
@@ -448,7 +473,7 @@ public sealed class SettingsWindow : Window
         void Apply()
         {
             var text = box.Text.Trim();
-            var relay = text.Length == 0 ? "" : PhoneLink.NormalizeRelay(text);
+            var relay = PhoneLink.NormalizeRelay(text);
             if (relay == null)
             {
                 Show("Endereço inválido: use wss://seu-repasse.workers.dev (só o endereço, sem caminho nem porta).", Brushes.Orange);
@@ -463,12 +488,11 @@ public sealed class SettingsWindow : Window
         edit.Children.Add(box);
         edit.Children.Add(save);
         return Card("Fora de casa (pela internet)",
-            Note("Um repasse seu no Cloudflare deixa o celular alcançar este PC no 4G ou em outra rede. Ele só passa adiante " +
-                 "os dados já criptografados: não vê o código de pareamento nem os comandos, e não consegue aprovar nada. " +
-                 "Como publicar: pasta relay/ do projeto."),
-            Row("Endereço do repasse", "Vazio = desligado. O celular recebe o endereço sozinho.", edit),
-            Row("Chave do repasse", hasKey ? "Salva (protegida no Windows). O celular recebe junto com o endereço."
-                                           : "Só quem tem a chave usa o seu repasse. O celular recebe junto com o endereço.", keyEdit),
+            Note(about + " Seu próprio repasse no Cloudflare não tem os limites do público. Como publicar: pasta relay/ do projeto."),
+            mode,
+            Row("Endereço do repasse", "Ex.: wss://seu-repasse.workers.dev. O celular recebe o endereço sozinho.", edit),
+            Row("Chave do repasse (opcional)", hasKey ? "Salva (protegida no Windows). O celular recebe junto com o endereço."
+                                                      : "Só quem tem a chave usa o seu repasse. O celular recebe junto com o endereço.", keyEdit),
             status);
     }
 

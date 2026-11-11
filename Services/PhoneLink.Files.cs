@@ -35,6 +35,14 @@ public sealed partial class PhoneLink
 
     /// <summary>60 MB for videos, 30 MB for everything else (the phone uses the same rule).</summary>
     public static long MaxBytesFor(string name) => VideoExtensions.Contains(Path.GetExtension(name)) ? MaxVideoBytes : MaxFileBytes;
+
+    /// <summary>Through the relay a batch carries at most 10 MB in all (the relay has a daily budget per pairing);
+    /// on the local network the limits above apply. The phone uses the same rule.</summary>
+    public const long RelayMaxBatchBytes = 10L * 1024 * 1024;
+    public const string RelayTooBigMessage = "Pela internet o limite é 10 MB por envio. Na mesma rede Wi-Fi vai até 30 MB por arquivo.";
+
+    /// <summary>Whether a batch of <paramref name="totalBytes"/> may go over this route.</summary>
+    public static bool FitsRoute(long totalBytes, bool viaRelay) => !viaRelay || totalBytes <= RelayMaxBatchBytes;
     const int MaxOffers = 5, MaxTransfers = 2;
     static readonly TimeSpan OfferLifetime = TimeSpan.FromMinutes(10), TransferTimeout = TimeSpan.FromMinutes(5);
     /// <summary>How long a phone's offer waits for a click on the island, and then for its bytes.</summary>
@@ -91,6 +99,10 @@ public sealed partial class PhoneLink
             if (!info.Exists) return "Não encontrado";
             if (info.Length > MaxBytesFor(path)) return MaxBytesFor(path) == MaxVideoBytes ? "Vídeo: máx. 60 MB" : "Máx. 30 MB cada";
         }
+        // Every phone is away (on the relay): don't offer what none of them could fetch.
+        bool allRelay;
+        lock (_gate) allRelay = _peers.Where(p => p.Authenticated).All(p => p.Relay);
+        if (!FitsRoute(paths.Sum(p => new FileInfo(p).Length), allRelay)) return "Pela internet: máx. 10 MB";
         lock (_gate)
             if (_offers.Count >= MaxOffers) return "Espere os outros";
 
@@ -195,6 +207,11 @@ public sealed partial class PhoneLink
             await peer.SendAsync("""{"type":"error","code":"file","message":"Esse envio não vale mais. Mande de novo pelo PC."}""");
             return;
         }
+        if (!FitsRoute(offer.Items.Sum(i => i.Size), peer.Relay))
+        {
+            await peer.SendAsync(FileError(RelayTooBigMessage));
+            return;
+        }
         if (!TakeTransfer())
         {
             await peer.SendAsync("""{"type":"error","code":"file","message":"O PC já está enviando outros arquivos. Tente de novo daqui a pouco."}""");
@@ -270,6 +287,8 @@ public sealed partial class PhoneLink
             }
             // a long text travels alone
             if (items.Count == 0 || (items.Any(i => i.IsText) && items.Count > 1)) { Answer(peer, id!, false); return; }
+            // the phone checks this first; a phone that didn't gets a plain "no"
+            if (!FitsRoute(items.Sum(i => i.Size), peer.Relay)) { Answer(peer, id!, false); return; }
         }
         else return;
 
@@ -324,6 +343,9 @@ public sealed partial class PhoneLink
         Answer(waiting.From, id, false);
     }
 
+    static string FileError(string message) =>
+        new JsonObject { ["type"] = "error", ["code"] = "file", ["message"] = message }.ToJsonString();
+
     static void Answer(Peer peer, string id, bool accept) =>
         _ = peer.SendAsync(new JsonObject { ["type"] = accept ? "sendAccept" : "sendDecline", ["id"] = id }.ToJsonString());
 
@@ -338,6 +360,11 @@ public sealed partial class PhoneLink
         if (batch == null)
         {
             await peer.SendAsync("""{"type":"error","code":"file","message":"O PC não aceitou esse envio (ou ele expirou)."}""");
+            return;
+        }
+        if (!FitsRoute(batch.Offer.TotalBytes, peer.Relay))
+        {
+            await peer.SendAsync(FileError(RelayTooBigMessage));
             return;
         }
         if (!TakeTransfer())

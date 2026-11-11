@@ -112,18 +112,20 @@ class RelayWire private constructor() : WebSocketListener(), Pipe {
         if (bytes.size > 0) chunks.offer(bytes.toByteArray())
     }
 
-    // only binary belongs in the tunnel; text would mean something is wrong with the relay
+    // only binary belongs in the tunnel; text would mean something is wrong with the relay. The one exception is the
+    // relay's keepalive answer ("pong" to a text "ping"), which carries nothing.
     override fun onMessage(webSocket: WebSocket, text: String) {
+        if (text == "pong") return
         end(RelayException("O relay mandou algo inesperado"))
         webSocket.cancel()
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-        end(closeError(code))
+        end(closeError(code, reason))
         webSocket.close(1000, null)
     }
 
-    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end(closeError(code))
+    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end(closeError(code, reason))
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = end(when {
         response?.code == 401 -> RelayException("Chave do relay inválida: conecte uma vez na rede de casa para atualizar")
@@ -152,6 +154,8 @@ class RelayWire private constructor() : WebSocketListener(), Pipe {
         private val END = ByteArray(0)
 
         // OkHttp checks the relay's certificate against the system CAs; the PC's own pin is checked inside.
+        // Keepalive: WebSocket pings every 30 s, which the relay's runtime answers without waking the room (free, and a
+        // dead link is noticed within a minute); the link's own ping inside TLS goes much less often through the relay.
         private val http by lazy {
             OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
@@ -159,11 +163,14 @@ class RelayWire private constructor() : WebSocketListener(), Pipe {
                 .build()
         }
 
-        /** The relay's close codes, in words for the screen; null for a normal close. */
-        fun closeError(code: Int): IOException? = when (code) {
+        const val LIMIT_MESSAGE = "Limite do relay atingido: tente mais tarde ou use seu próprio relay"
+
+        /** The relay's close codes (and 4429's reason), in words for the screen; null for a normal close. */
+        fun closeError(code: Int, reason: String = ""): IOException? = when (code) {
             1000, 1001 -> null
             4404 -> RelayException("O PC não está no relay: confira se a ilha está aberta e com internet")
-            4429 -> RelayException("Aparelhos demais ligados a esse PC pelo relay")
+            4429 -> RelayException(if (reason == "room full") "Aparelhos demais ligados a esse PC pelo relay" else LIMIT_MESSAGE)
+            4401 -> RelayException("O relay não reconheceu o PC: na ilha, use Parear de novo e escaneie o código")
             4400 -> RelayException("O relay recusou a conexão")
             else -> IOException("O relay fechou a conexão ($code)")
         }

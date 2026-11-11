@@ -14,3 +14,13 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# New connections per IP address per minute (Cloudflare's Rate Limiting binding; approximate, per location).
+# Keep `limit` equal to IP_CONNECTIONS_PER_MINUTE in src/index.ts, which is also the fallback when the binding is missing.
+[[ratelimits]]
+name = "PER_IP"
+namespace_id = "4729001"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60

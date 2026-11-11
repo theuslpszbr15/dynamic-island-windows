@@ -106,7 +106,7 @@ class LinkClient(
                 "welcome" -> {
                     if (o.optInt("v") != 1) throw IOException("Versão diferente no PC; atualize os dois.")
                     // the PC answers every ping, so silence this long means the link is gone
-                    link.setReadTimeout(READ_TIMEOUT_MS)
+                    link.setReadTimeout(if (route == Route.Relay) RELAY_READ_TIMEOUT_MS else READ_TIMEOUT_MS)
                     if (o.has("relay")) {
                         val relay = Pairing.relayOrigin(o.optString("relay"))
                         listener.onRelay(relay, if (relay == null) null else Pairing.relayKeyOrNull(o.optString("relayKey")))
@@ -292,6 +292,17 @@ class LinkClient(
 
     fun ping() = send(JSONObject().put("type", "ping"))
 
+    @Volatile private var lastPing = 0L
+
+    /** Pings the PC if it is time: every [PING_EVERY_MS] on the LAN, every [RELAY_PING_EVERY_MS] through the relay
+     * (each ping there wakes the relay up; the relay's own keepalive needs nothing from here). True if it sent one. */
+    fun pingIfDue(now: Long = System.currentTimeMillis()): Boolean {
+        if (now - lastPing < pingEvery(route)) return false
+        lastPing = now
+        ping()
+        return true
+    }
+
     /** Opens a tray item on the PC (only ids the PC sent; it looks the path up itself). */
     fun open(id: String) = send(JSONObject().put("type", "open").put("id", id))
 
@@ -344,7 +355,12 @@ class LinkClient(
         /** While a file comes in, this long without a byte means the transfer is stuck. */
         const val FETCH_READ_TIMEOUT_MS = 30_000
         const val PING_EVERY_MS = 20_000L
+        /** Through the relay the link's own ping is rare: about every 5 minutes, with the read timeout a bit longer. */
+        const val RELAY_PING_EVERY_MS = 300_000L
+        const val RELAY_READ_TIMEOUT_MS = 360_000
         const val MAX_LINE = 64 * 1024
+
+        fun pingEvery(route: Route) = if (route == Route.Relay) RELAY_PING_EVERY_MS else PING_EVERY_MS
         const val MAX_COMMAND = 500
 
         fun sha256Hex(bytes: ByteArray): String = hex(MessageDigest.getInstance("SHA-256").digest(bytes))
