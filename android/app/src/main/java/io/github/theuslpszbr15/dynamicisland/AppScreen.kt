@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -170,6 +171,7 @@ private fun HomeScreen(
     onFixNotifications: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(state.initialTab) }
+    val records by History.records.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
     LaunchedEffect(focused) { if (focused != null) tab = 0 }
     val mood = when {
@@ -197,8 +199,12 @@ private fun HomeScreen(
             }
         }
         Box(Modifier.weight(1f)) {
-            if (tab == 0) AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan, onFixNotifications)
-            else TrayTab(state, onOpen)
+            when (tab) {
+                0 -> AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan, onFixNotifications)
+                2 -> SendTab(state)
+                3 -> HistoryTab(records, state.status == LinkStatus.Connected)
+                else -> TrayTab(state, onOpen)
+            }
         }
         NavigationBar(containerColor = Card) {
             NavigationBarItem(
@@ -212,9 +218,21 @@ private fun HomeScreen(
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Blue.copy(alpha = 0.25f)),
             )
             NavigationBarItem(
+                selected = tab == 2, onClick = { tab = 2 },
+                icon = { Icon(painterResource(R.drawable.ic_tab_send), contentDescription = null) },
+                label = { Text("Enviar") },
+                colors = NavigationBarItemDefaults.colors(indicatorColor = Blue.copy(alpha = 0.25f)),
+            )
+            NavigationBarItem(
+                selected = tab == 3, onClick = { tab = 3 },
+                icon = { Icon(painterResource(R.drawable.ic_tab_history), contentDescription = null) },
+                label = { Text("Histórico") },
+                colors = NavigationBarItemDefaults.colors(indicatorColor = Blue.copy(alpha = 0.25f)),
+            )
+            NavigationBarItem(
                 selected = tab == 1, onClick = { tab = 1 },
                 icon = { Icon(painterResource(R.drawable.ic_tab_tray), contentDescription = null) },
-                label = { Text("Bandeja do PC") },
+                label = { Text("Bandeja") },
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Blue.copy(alpha = 0.25f)),
             )
         }

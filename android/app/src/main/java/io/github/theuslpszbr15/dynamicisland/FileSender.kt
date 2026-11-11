@@ -61,7 +61,8 @@ object FileSender {
     private val io = Executors.newFixedThreadPool(2)
     private val main by lazy { Handler(Looper.getMainLooper()) }
 
-    private class Pending(val id: String, val label: String, val items: List<OfferItem>, val files: List<File>, val folder: File?)
+    private class Pending(val id: String, val label: String, val items: List<OfferItem>, val files: List<File>, val folder: File?,
+                          val text: String? = null)
     private val pending = ConcurrentHashMap<String, Pending>()
 
     private fun outbox(context: Context) = File(context.cacheDir, "outbox")
@@ -111,13 +112,13 @@ object FileSender {
         if (text.length > FileOffer.MAX_TEXT_CHARS) return "Texto grande demais (até 100 mil caracteres)."
         val id = FileOffer.newId()
         if (text.length <= FileOffer.INLINE_TEXT_CHARS)
-            return ask(context, client, Pending(id, "Texto", emptyList(), emptyList(), null)) { client.sendText(id, text) }
+            return ask(context, client, Pending(id, "Texto", emptyList(), emptyList(), null, text)) { client.sendText(id, text) }
         val folder = File(outbox(context), id).apply { mkdirs() }
         val bytes = text.toByteArray(Charsets.UTF_8)
         if (bytes.size > FileOffer.MAX_TEXT_BYTES) return "Texto grande demais."
         val copy = File(folder, "0").apply { writeBytes(bytes) }
         val item = OfferItem("texto.txt", bytes.size.toLong(), LinkClient.sha256Hex(bytes), isText = true)
-        return ask(context, client, Pending(id, "Texto", listOf(item), listOf(copy), folder)) { client.sendOffer(id, listOf(item)) }
+        return ask(context, client, Pending(id, "Texto", listOf(item), listOf(copy), folder, text)) { client.sendOffer(id, listOf(item)) }
     }
 
     private fun ask(context: Context, client: LinkClient, p: Pending, send: () -> Unit): String {
@@ -130,8 +131,14 @@ object FileSender {
             return "Sem conexão com o PC agora."
         }
         Notifications.showFileProgress(app, p.id, "Esperando o PC aceitar", p.label, -1)
+        History.add(app, TransferRecord(p.id, System.currentTimeMillis(), sent = true, title = p.label,
+            bytes = p.text?.toByteArray(Charsets.UTF_8)?.size?.toLong() ?: p.items.sumOf { it.size },
+            count = maxOf(1, p.items.size), status = "Esperando o PC", text = p.text))
         main.postDelayed({
-            if (forget(p.id) != null) Notifications.showFileFailed(app, p.id, "O PC não respondeu", "Ninguém aceitou ${p.label} na ilha.")
+            if (forget(p.id) != null) {
+                History.setStatus(app, p.id, true, "Não aceito")
+                Notifications.showFileFailed(app, p.id, "O PC não respondeu", "Ninguém aceitou ${p.label} na ilha.")
+            }
         }, ANSWER_WAIT_MS)
         return "Pedido enviado: aceite na ilha do PC."
     }
@@ -143,17 +150,20 @@ object FileSender {
         val app = context.applicationContext
         val p = pending.remove(id) ?: return
         if (!accepted) {
+            History.setStatus(app, id, true, "Recusado")
             p.folder?.deleteRecursively()
             Notifications.showFileFailed(app, id, "O PC recusou", p.label)
             return
         }
         if (p.items.isEmpty()) { // a short text: it went with the offer
+            History.setStatus(app, id, true, "No PC")
             Notifications.showTransferDone(app, id, "Texto copiado no PC", "", null, null)
             return
         }
         val client = Link.client
         val pairing = Link.state.value.pairing
         if (client == null || pairing == null) {
+            History.setStatus(app, id, true, "Falhou")
             p.folder?.deleteRecursively()
             Notifications.showFileFailed(app, id, "Não deu para mandar ${p.label}", "A conexão com o PC caiu.")
             return
@@ -165,6 +175,7 @@ object FileSender {
         val total = p.items.sumOf { it.size }
         var lastShown = 0L
         Notifications.showFileProgress(context, p.id, "Mandando pro PC", p.label, 0)
+        History.setStatus(context, p.id, true, "Enviando")
         try {
             val outgoing = p.items.mapIndexed { i, item -> LinkClient.Outgoing(item) { p.files[i].inputStream() } }
             LinkClient(pairing, "${Build.MANUFACTURER} ${Build.MODEL}".take(40), route).push(p.id, outgoing) { done ->
@@ -173,9 +184,11 @@ object FileSender {
                     Notifications.showFileProgress(context, p.id, "Mandando pro PC", p.label, (done * 100 / total).toInt())
                 }
             }
+            History.setStatus(context, p.id, true, "No PC")
             Notifications.showTransferDone(context, p.id, if (p.items[0].isText) "Texto copiado no PC" else "Mandado pro PC",
                 if (p.items[0].isText) "" else "${p.label} · Downloads\\Dynamic Island", null, null)
         } catch (e: Exception) {
+            History.setStatus(context, p.id, true, "Falhou")
             Notifications.showFileFailed(context, p.id, "Não deu para mandar ${p.label}", e.message ?: "A conexão caiu.")
         } finally {
             p.folder?.deleteRecursively()

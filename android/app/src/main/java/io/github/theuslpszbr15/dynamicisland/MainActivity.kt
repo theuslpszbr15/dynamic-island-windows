@@ -36,6 +36,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Notifications.createChannels(this)
+        History.load(this)
         PairingStore.load(this)?.let { pairing ->
             val paused = PairingStore.isPaused(this)
             Link.update {
