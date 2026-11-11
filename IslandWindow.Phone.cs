@@ -11,6 +11,10 @@ public partial class IslandWindow
     PhoneLink? _phone;
 
     public PhoneLink? Phone => _phone;
+
+    TransferHistory? _history;
+    /// <summary>Recebidos / Enviados of the phone window (kept on disk, encrypted; in memory only in snapshot mode).</summary>
+    public TransferHistory History => _history ??= new TransferHistory(SnapshotMode ? null : TransferHistory.DefaultFile);
     public string? PhoneError { get; private set; }
 
     public void ApplyPhoneLink()
@@ -33,6 +37,7 @@ public partial class IslandWindow
             _phone.IncomingText += OnPhoneText;
             _phone.IncomingDone += OnPhoneIncomingDone;
             _phone.RelayTrouble += OnRelayTrouble;
+            _phone.History = History;
         }
         _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);
         if (_phone.Running) return;
@@ -160,51 +165,63 @@ public partial class IslandWindow
     public void UpdatePhoneSend() =>
         Resources["PhoneSendVisibility"] = CanSendToPhone ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
+    const string NoPhone = "Nenhum celular conectado";
+
+    public void SendToPhone(IReadOnlyList<string> paths) => _ = SendFilesToPhoneAsync(paths);
+
     /// <summary>Offers the files to the phone as one batch (one Aceitar there); the island says what happened.
-    /// Folders and big files are refused here (and again on the phone).</summary>
-    public async void SendToPhone(IReadOnlyList<string> paths)
+    /// Folders and big files are refused here (and again on the phone). Null when offered, otherwise why not.</summary>
+    public async Task<string?> SendFilesToPhoneAsync(IReadOnlyList<string> paths)
     {
         if (_phone == null || !CanSendToPhone)
         {
-            ShowInfo("\uE8EA", "Nenhum celular conectado", "", glyphColor: Meter.Red, seconds: 3);
-            return;
+            ShowInfo("\uE8EA", NoPhone, "", glyphColor: Meter.Red, seconds: 3);
+            return NoPhone;
         }
         var label = paths.Count == 1 ? System.IO.Path.GetFileName(paths[0].TrimEnd('\\', '/')) : $"{paths.Count} arquivos";
-        if (await _phone.OfferFilesAsync(paths) is { } error)
+        var error = await _phone.OfferFilesAsync(paths);
+        if (error != null)
             ShowInfo("\uE8EA", label, error, glyphColor: Meter.Red, seconds: 3);
         else
             ShowInfo("\uE8EA", label, "Aceite no celular", seconds: 3);
+        return error;
     }
 
-    public void SendTextToPhone(string text)
+    /// <summary>Null when sent, otherwise why not.</summary>
+    public string? SendTextToPhone(string text)
     {
         if (_phone == null || !CanSendToPhone)
         {
-            ShowInfo("\uE8EA", "Nenhum celular conectado", "", glyphColor: Meter.Red, seconds: 3);
-            return;
+            ShowInfo("\uE8EA", NoPhone, "", glyphColor: Meter.Red, seconds: 3);
+            return NoPhone;
         }
-        if (_phone.SendText(text) is { } error) ShowInfo("\uE8C8", "Texto", error, glyphColor: Meter.Red, seconds: 3);
+        var error = _phone.SendText(text);
+        if (error != null) ShowInfo("\uE8C8", "Texto", error, glyphColor: Meter.Red, seconds: 3);
         else ShowInfo("\uE8C8", Preview(text), "No celular", glyphColor: AgentSession.Done);
+        return error;
     }
 
-    /// <summary>Whatever is in the clipboard: files, an image (as a PNG) or text.</summary>
-    public void SendClipboardToPhone()
+    public void SendClipboardToPhone() => _ = SendClipboardToPhoneAsync();
+
+    /// <summary>Whatever is in the clipboard: files, an image (as a PNG) or text. Null when sent, otherwise why not.</summary>
+    public async Task<string?> SendClipboardToPhoneAsync()
     {
         try
         {
             if (System.Windows.Clipboard.GetData(System.Windows.DataFormats.FileDrop) is string[] { Length: > 0 } files)
-                SendToPhone(files);
-            else if (System.Windows.Clipboard.ContainsImage() && System.Windows.Clipboard.GetImage() is { } image)
-                SendToPhone([SaveClipboardImage(image)]);
-            else if (System.Windows.Clipboard.ContainsText())
-                SendTextToPhone(System.Windows.Clipboard.GetText());
-            else
-                ShowInfo("\uE8C8", "Nada copiado para enviar", "", seconds: 2);
+                return await SendFilesToPhoneAsync(files);
+            if (System.Windows.Clipboard.ContainsImage() && System.Windows.Clipboard.GetImage() is { } image)
+                return await SendFilesToPhoneAsync([SaveClipboardImage(image)]);
+            if (System.Windows.Clipboard.ContainsText())
+                return SendTextToPhone(System.Windows.Clipboard.GetText());
+            ShowInfo("\uE8C8", "Nada copiado para enviar", "", seconds: 2);
+            return "Nada copiado para enviar";
         }
         catch (Exception ex)
         {
             Log.Error("SendClipboardToPhone", ex);
             ShowInfo("\uE8C8", "Não deu para ler o que foi copiado", "", glyphColor: Meter.Red, seconds: 3);
+            return "Não deu para ler o que foi copiado";
         }
     }
 

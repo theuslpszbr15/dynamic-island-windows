@@ -33,6 +33,7 @@ object FileReceiver {
         val saved = mutableListOf<Pair<Uri, String>>()
         val pending = mutableMapOf<Int, Uri>()
         val texts = mutableMapOf<Int, ByteArrayOutputStream>()
+        var receivedText: String? = null
         var error: String? = null
         Notifications.showFileProgress(context, offer.id, "Recebendo do PC", offer.label, 0)
         var lastShown = 0L
@@ -54,8 +55,9 @@ object FileReceiver {
 
             override fun keep(index: Int, item: OfferItem) {
                 if (item.isText) {
-                    val text = texts.remove(index)!!.toByteArray().toString(Charsets.UTF_8)
-                    copy(context, text.take(FileOffer.MAX_TEXT_CHARS))
+                    val text = texts.remove(index)!!.toByteArray().toString(Charsets.UTF_8).take(FileOffer.MAX_TEXT_CHARS)
+                    receivedText = text
+                    copy(context, text)
                     return
                 }
                 val uri = pending.remove(index) ?: return
@@ -84,6 +86,15 @@ object FileReceiver {
             pending.values.forEach { try { resolver.delete(it, null, null) } catch (_: Exception) {} }
         }
         val ok = error == null
+        History.add(context, TransferRecord(offer.id, System.currentTimeMillis(), sent = false,
+            title = if (offer.isText) "Texto" else offer.label, bytes = offer.totalBytes, count = offer.items.size,
+            status = when {
+                !ok && saved.isNotEmpty() -> "Incompleto (${saved.size} de ${offer.items.size})"
+                !ok -> "Falhou"
+                offer.isText -> "Copiado"
+                else -> "Recebido"
+            },
+            uris = saved.map { it.first.toString() }, mimes = saved.map { it.second }, text = receivedText))
         when {
             !ok -> Notifications.showFileFailed(context, offer.id, "Não deu para receber ${offer.label}", error!!)
             offer.isText -> Notifications.showTransferDone(context, offer.id, "Texto do PC copiado", "Já está na área de transferência", null, null)

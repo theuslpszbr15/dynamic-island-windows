@@ -139,6 +139,21 @@ public partial class App : Application
     public IslandWindow Island => _window;
 
     SettingsWindow? _settingsWindow;
+    PhoneWindow? _phoneWindow;
+
+    /// <summary>The "Celular" window: send files, folders, text or the clipboard to the phone, and the history.</summary>
+    public void ShowPhoneWindow(string? page = null)
+    {
+        if (_phoneWindow == null)
+        {
+            _phoneWindow = new PhoneWindow(this);
+            _phoneWindow.Closed += (_, _) => _phoneWindow = null;
+            _phoneWindow.Show();
+        }
+        if (page != null) _phoneWindow.Navigate(page);
+        if (_phoneWindow.WindowState == WindowState.Minimized) _phoneWindow.WindowState = WindowState.Normal;
+        _phoneWindow.Activate();
+    }
 
     public void ShowSettings(string? page = null)
     {
@@ -551,6 +566,7 @@ public partial class App : Application
         shows.Items.Add(Item("Vídeos (YouTube, Netflix…)", ToggleQuietVideos, !Settings.QuietVideos));
         menu.Items.Add(shows);
         menu.Items.Add(Item("Resumo da semana", ShowRecap));
+        menu.Items.Add(Item("Enviar pro celular…", () => ShowPhoneWindow("send")));
         if (_window.PhoneReady)
             menu.Items.Add(Item("Mandar o que copiei pro celular", _window.SendClipboardToPhone));
         menu.Items.Add(new Separator());
@@ -560,6 +576,7 @@ public partial class App : Application
         var phone = new MenuItem { Header = "Celular Android" };
         phone.Items.Add(Item("Aprovar pelo celular", TogglePhoneLink, Settings.PhoneLink));
         phone.Items.Add(Item("Parear celular (QR)…", ShowPhonePairing));
+        phone.Items.Add(Item("Recebidos e enviados…", () => ShowPhoneWindow("received")));
         menu.Items.Add(phone);
         menu.Items.Add(new Separator());
         menu.Items.Add(Update is { } update

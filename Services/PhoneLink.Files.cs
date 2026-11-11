@@ -78,6 +78,9 @@ public sealed partial class PhoneLink
     /// <summary>Raised on the UI thread with a long text from the phone the person accepted (for the clipboard).</summary>
     public event Action<string>? IncomingText;
 
+    /// <summary>Where sent and received things are listed (the phone window's Recebidos / Enviados); null: nowhere.</summary>
+    public TransferHistory? History { get; set; }
+
     /// <summary>Downloads\Dynamic Island for this Windows user.</summary>
     public static string ReceiveFolder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Dynamic Island");
@@ -126,7 +129,7 @@ public sealed partial class PhoneLink
         return Offer(items.Count == 1 ? items[0].Name : $"{items.Count} arquivos", items);
     }
 
-    string? Offer(string label, List<FileEntry> items)
+    string? Offer(string label, List<FileEntry> items, string? text = null)
     {
         var offer = new FileOffer(NewOfferId(), label, items);
         lock (_gate)
@@ -142,6 +145,8 @@ public sealed partial class PhoneLink
             list.Add(o);
         }
         Broadcast(new JsonObject { ["type"] = "fileOffer", ["id"] = offer.Id, ["items"] = list }.ToJsonString());
+        History?.Add(new TransferEntry(offer.Id, DateTime.Now, true, text != null ? "Texto" : label, items.Sum(i => i.Size), items.Count,
+            "Esperando o celular", text != null ? [] : [.. items.Select(i => i.Path)], text));
         _ = ExpireLater(offer.Id);
         return null;
     }
@@ -156,13 +161,15 @@ public sealed partial class PhoneLink
         if (text.Length > MaxTextChars) return "Máx. 100 mil caracteres";
         if (text.Length <= InlineTextChars)
         {
-            Broadcast(new JsonObject { ["type"] = "text", ["id"] = NewOfferId(), ["text"] = text }.ToJsonString());
+            var id = NewOfferId();
+            Broadcast(new JsonObject { ["type"] = "text", ["id"] = id, ["text"] = text }.ToJsonString());
+            History?.Add(new TransferEntry(id, DateTime.Now, true, "Texto", Encoding.UTF8.GetByteCount(text), 1, "No celular", [], text));
             return null;
         }
         var bytes = Encoding.UTF8.GetBytes(text);
         if (bytes.Length > MaxTextBytes) return "Texto grande demais";
         var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        return Offer("Texto", [new FileEntry("", "texto.txt", bytes.Length, sha, default, bytes)]);
+        return Offer("Texto", [new FileEntry("", "texto.txt", bytes.Length, sha, default, bytes)], text);
     }
 
     async Task ExpireLater(string id)
@@ -178,6 +185,13 @@ public sealed partial class PhoneLink
         lock (_gate)
             if (!_offers.Remove(id, out offer)) return;
         Broadcast(new JsonObject { ["type"] = "fileCancel", ["id"] = id }.ToJsonString());
+        History?.SetStatus(id, true, outcome switch
+        {
+            FileOutcome.Received => "No celular",
+            FileOutcome.Declined => "Recusado",
+            FileOutcome.Expired => "Não aceito",
+            _ => "Falhou",
+        });
         _ = _ui.InvokeAsync(() => FileStatus?.Invoke(offer.Label, outcome));
     }
 
@@ -221,6 +235,7 @@ public sealed partial class PhoneLink
         {
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             limit.CancelAfter(TransferTimeout);
+            History?.SetStatus(offer.Id, true, "Enviando");
             _ = _ui.InvokeAsync(() => FileStatus?.Invoke(offer.Label, FileOutcome.Sending));
             for (var i = 0; i < offer.Items.Count; i++)
             {
@@ -332,6 +347,8 @@ public sealed partial class PhoneLink
             if (waiting.Offer.Text != null) _incoming.Remove(id);
         }
         Answer(waiting.From, id, true);
+        if (waiting.Offer.Text is { } text)
+            History?.Add(new TransferEntry(id, DateTime.Now, false, "Texto", Encoding.UTF8.GetByteCount(text), 1, "Copiado", [], text));
         return true;
     }
 
@@ -375,6 +392,7 @@ public sealed partial class PhoneLink
         var offer = batch.Offer;
         var label = offer.Items.Count == 1 ? (offer.Items[0].IsText ? "Texto" : offer.Items[0].Name) : $"{offer.Items.Count} arquivos";
         var saved = new List<string>();
+        string? received = null;
         var ok = false;
         try
         {
@@ -396,7 +414,7 @@ public sealed partial class PhoneLink
                 }
                 if (item.IsText)
                 {
-                    var text = await ReceiveText(peer, item, limit.Token);
+                    var text = received = await ReceiveText(peer, item, limit.Token);
                     _ = _ui.InvokeAsync(() => IncomingText?.Invoke(text));
                 }
                 else saved.Add(await ReceiveOne(peer, item, limit.Token));
@@ -409,6 +427,9 @@ public sealed partial class PhoneLink
         }
         finally { Interlocked.Decrement(ref _transfers); }
         try { await peer.SendAsync(new JsonObject { ["type"] = "saved", ["ok"] = ok, ["count"] = saved.Count }.ToJsonString()); } catch { }
+        History?.Add(new TransferEntry(offer.Id, DateTime.Now, false, label, offer.TotalBytes, offer.Items.Count,
+            !ok ? (saved.Count > 0 ? $"Incompleto ({saved.Count} de {offer.Items.Count})" : "Falhou") : received != null ? "Copiado" : "Recebido",
+            saved, received));
         var first = saved.FirstOrDefault();
         if (!ok || saved.Count > 0) _ = _ui.InvokeAsync(() => IncomingDone?.Invoke(label, first, ok));
     }

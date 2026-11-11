@@ -145,6 +145,8 @@ object Link {
 
     fun textFromPc(context: Context, id: String, text: String) {
         synchronized(texts) { texts[id] = text }
+        History.add(context, TransferRecord(id, System.currentTimeMillis(), sent = false, title = "Texto",
+            bytes = text.toByteArray(Charsets.UTF_8).size.toLong(), count = 1, status = "Recebido", text = text))
         Notifications.showText(context, id, text)
     }
 

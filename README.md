@@ -126,11 +126,13 @@ Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e recone
 
 **Arquivos, fotos, vídeos e textos entre o PC e o celular** (até 30 MB por arquivo, vídeo até 60 MB, até 20 de uma
 vez, texto até 100 mil caracteres):
-- PC → celular: com o celular ligado, arraste arquivos ou um texto até a ilha e solte no lado **Mandar pro celular**,
-  use o botão de celular num item da bandeja, ou **Mandar o que copiei pro celular** no menu da bandeja. O celular
+- PC → celular: a janela **Celular** (menu da bandeja → **Enviar pro celular…**), no estilo do LocalSend, tem **Arquivo**,
+  **Pasta**, **Texto** e **Colar**, e as listas **Recebidos** e **Enviados**. Também dá para arrastar arquivos ou um texto até
+  a ilha e soltar no lado **Mandar pro celular**, ou usar o botão de celular num item da bandeja. O celular
   pergunta antes (Aceitar pede o celular desbloqueado). Fotos vão para a Galeria (`Pictures/Dynamic Island`), vídeos
   para `Movies/Dynamic Island`, o resto para `Downloads/Dynamic Island`; texto vai para a área de transferência.
-- Celular → PC: em qualquer app, **Compartilhar → Mandar pro PC**. A ilha pergunta antes (clique para aceitar) e salva
+- Celular → PC: no app, a aba **Enviar** tem **Arquivo**, **Foto/vídeo**, **Texto** e **Colar**, e a aba **Histórico**
+  mostra o que foi recebido e enviado. De outros apps: **Compartilhar → Mandar pro PC**. A ilha pergunta antes (clique para aceitar) e salva
   em `Downloads\Dynamic Island`, marcado como vindo da internet (o Windows avisa antes de abrir um programa); texto
   vai para a área de transferência.
 
