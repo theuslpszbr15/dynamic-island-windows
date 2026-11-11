@@ -219,14 +219,15 @@ test("more than 30 new connections a minute in one room: 4429 rate limit", async
     const { s } = await pc(mf, r);
     await s.next();
     let refused = null;
-    for (let i = 0; i < 35 && !refused; i++) {
+    // a calendar-minute window: a run that crosses one gets a fresh 30
+    for (let i = 0; i < 65 && refused === null; i++) {
       const phone = await open(mf, `/phone/${r}`);
       const closed = await Promise.race([phone.closed, new Promise((res) => setTimeout(() => res(null), 50))]);
       if (closed && closed.code === 4429 && closed.reason === "rate limit") refused = i;
       else phone.ws.close(1000);
     }
     assert.notEqual(refused, null);
-    assert.ok(refused <= 30, `refused at ${refused}`);
+    assert.ok(refused >= 29 && refused <= 60, `refused at ${refused}`);
   } finally {
     await mf.dispose();
   }
@@ -237,13 +238,15 @@ test("more than 60 new connections a minute from one address: 4429 rate limit", 
   try {
     const ip = "198.51.100.7";
     let refusedAt = null;
-    for (let i = 0; i < 70 && refusedAt === null; i++) {
+    // the window is a calendar minute: a run that crosses one gets a fresh 60 (so between 60 and 120 pass)
+    for (let i = 0; i < 125 && refusedAt === null; i++) {
       const s = await open(mf, `/pc/${room()}`, { ip }); // a different room each time
       const first = await s.next().catch(() => null);
       if (first === null && s.close?.code === 4429) refusedAt = i;
       else s.ws.close(1000);
     }
-    assert.equal(refusedAt, 60);
+    assert.notEqual(refusedAt, null);
+    assert.ok(refusedAt >= 60 && refusedAt <= 120, `refused at ${refusedAt}`);
   } finally {
     await mf.dispose();
   }
