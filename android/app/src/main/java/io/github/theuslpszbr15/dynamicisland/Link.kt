@@ -21,6 +21,8 @@ data class LinkUi(
     val sessions: List<Session> = emptyList(),
     val approvals: List<Approval> = emptyList(),
     val tray: List<TrayItem> = emptyList(),
+    /** Connected through the relay (away from the PC's network). */
+    val viaRelay: Boolean = false,
     /** Notifications are off, so requests would arrive silently (the app shows how to turn them on). */
     val notificationsOff: Boolean = false,
     /** Which tab opens first (screenshots). */

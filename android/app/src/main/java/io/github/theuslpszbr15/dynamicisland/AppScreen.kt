@@ -253,7 +253,9 @@ private fun AgentsTab(
                 Notice("O PC trocou o código de pareamento. Escaneie o código novo.", "Escanear", onScan)
             }
             LinkStatus.Offline -> item {
-                Notice("Sem conexão. Confira se o PC está ligado, com a ilha aberta, na mesma rede Wi-Fi " +
+                Notice(if (state.pairing?.relay != null)
+                    "Sem conexão. Confira se o PC está ligado, com a ilha aberta e com internet."
+                else "Sem conexão. Confira se o PC está ligado, com a ilha aberta, na mesma rede Wi-Fi " +
                     "(redes de visitante costumam isolar os aparelhos).", "Tentar agora", onRetry)
             }
             LinkStatus.Paused -> item {
@@ -330,7 +332,7 @@ private fun TrayTile(item: TrayItem, onOpen: (TrayItem) -> Unit) {
 @Composable
 private fun StatusLine(state: LinkUi) {
     val (color, text) = when (state.status) {
-        LinkStatus.Connected -> Green to "Ligado"
+        LinkStatus.Connected -> Green to if (state.viaRelay) "Ligado pela internet" else "Ligado"
         LinkStatus.Connecting -> Orange to "Procurando o PC…"
         LinkStatus.Offline -> Red to (state.message ?: "Sem conexão")
         LinkStatus.AuthFailed -> Red to "Pareamento recusado"

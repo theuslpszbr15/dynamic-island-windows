@@ -44,11 +44,20 @@ data class TrayItem(val id: String, val name: String, val kind: String, val icon
     override fun hashCode() = id.hashCode()
 }
 
+/** How a connection reaches the PC: straight over the local network, or through the relay. */
+enum class Route { Lan, Relay }
+
 /**
  * One TLS connection to the PC (plain JVM code, so it can be tested off the phone). The PC's certificate is
- * accepted only if its SHA-256 is the one from the pairing QR code; then newline-delimited JSON.
+ * accepted only if its SHA-256 is the one from the pairing QR code; then newline-delimited JSON. Through the
+ * relay the TLS is the same, end to end: the relay only carries its bytes.
  */
-class LinkClient(private val pairing: Pairing, private val device: String) : Closeable {
+class LinkClient(
+    private val pairing: Pairing,
+    private val device: String,
+    val route: Route = Route.Lan,
+    private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
+) : Closeable {
 
     interface Listener {
         fun onWelcome(desktop: String)
@@ -57,10 +66,12 @@ class LinkClient(private val pairing: Pairing, private val device: String) : Clo
         fun onResolved(fingerprint: String)
         fun onTray(items: List<TrayItem>) {}
         fun onPong() {}
+        /** The PC said which relay to use (null: none); only ever heard inside the pinned TLS. */
+        fun onRelay(relay: String?, relayKey: String?) {}
     }
 
     private val writeLock = Any()
-    @Volatile private var socket: SSLSocket? = null
+    @Volatile private var pipe: Pipe? = null
     @Volatile private var output: OutputStream? = null
     @Volatile private var closed = false
 
@@ -68,17 +79,15 @@ class LinkClient(private val pairing: Pairing, private val device: String) : Clo
     fun run(listener: Listener) {
         val context = SSLContext.getInstance("TLS")
         context.init(null, arrayOf(PinningTrustManager(pairing.fingerprint)), SecureRandom())
-        val raw = Socket()
-        raw.connect(InetSocketAddress(pairing.host, pairing.port), CONNECT_TIMEOUT_MS)
-        val ssl = context.socketFactory.createSocket(raw, pairing.host, pairing.port, true) as SSLSocket
-        socket = ssl
-        if (closed) { ssl.close(); return }
-        ssl.soTimeout = HELLO_TIMEOUT_MS
-        ssl.startHandshake()
-        output = ssl.outputStream
+        val link = try {
+            if (route == Route.Lan) openLan(context) else openRelay(context)
+        } catch (e: Exception) {
+            if (closed) return else throw e
+        }
+        output = link.output
         send(JSONObject().put("type", "hello").put("v", 1).put("token", pairing.token).put("device", device))
 
-        val input = ssl.inputStream.buffered()
+        val input = link.input.buffered()
         while (!closed) {
             val line = readLine(input) ?: if (closed) return else throw EOFException("O PC fechou a conexão")
             val o = JSONObject(line)
@@ -86,7 +95,11 @@ class LinkClient(private val pairing: Pairing, private val device: String) : Clo
                 "welcome" -> {
                     if (o.optInt("v") != 1) throw IOException("Versão diferente no PC; atualize os dois.")
                     // the PC answers every ping, so silence this long means the link is gone
-                    ssl.soTimeout = READ_TIMEOUT_MS
+                    link.setReadTimeout(READ_TIMEOUT_MS)
+                    if (o.has("relay")) {
+                        val relay = Pairing.relayOrigin(o.optString("relay"))
+                        listener.onRelay(relay, if (relay == null) null else Pairing.relayKeyOrNull(o.optString("relayKey")))
+                    }
                     listener.onWelcome(o.optString("desktop", pairing.name))
                 }
                 "error" -> if (o.optString("code") == "auth") throw AuthException(o.optString("message"))
@@ -118,6 +131,35 @@ class LinkClient(private val pairing: Pairing, private val device: String) : Clo
         }
     }
 
+    private fun openLan(context: SSLContext): Pipe {
+        val raw = Socket()
+        raw.connect(InetSocketAddress(pairing.host, pairing.port), connectTimeoutMs)
+        val ssl = context.socketFactory.createSocket(raw, pairing.host, pairing.port, true) as SSLSocket
+        return started(SocketPipe(ssl)) { ssl.startHandshake() }
+    }
+
+    private fun openRelay(context: SSLContext): Pipe {
+        val relay = pairing.relay ?: throw IOException("Sem relay configurado")
+        val wire = RelayWire.open(relay, pairing.room(), pairing.relayKey, RELAY_TIMEOUT_MS)
+        val engine = context.createSSLEngine(pairing.host, pairing.port).apply { useClientMode = true }
+        val tls = TlsPipe(engine, wire)
+        return started(tls) { tls.handshake() }
+    }
+
+    /** Publishes [link] so [close] can reach it, then shakes hands (bounded by the hello timeout). */
+    private fun started(link: Pipe, handshake: () -> Unit): Pipe {
+        pipe = link
+        if (closed) { link.close(); throw IOException("Fechado") }
+        link.setReadTimeout(HELLO_TIMEOUT_MS)
+        try {
+            handshake()
+        } catch (e: Exception) {
+            try { link.close() } catch (_: Exception) {}
+            throw e
+        }
+        return link
+    }
+
     fun decide(fingerprint: String, allow: Boolean) =
         send(JSONObject().put("type", "decision").put("fingerprint", fingerprint).put("decision", if (allow) "allow" else "deny"))
 
@@ -137,7 +179,7 @@ class LinkClient(private val pairing: Pairing, private val device: String) : Clo
     override fun close() {
         closed = true
         try { send(JSONObject().put("type", "bye")) } catch (_: Exception) {}
-        try { socket?.close() } catch (_: Exception) {}
+        try { pipe?.close() } catch (_: Exception) {}
     }
 
     private fun readLine(input: InputStream): String? {
@@ -153,6 +195,9 @@ class LinkClient(private val pairing: Pairing, private val device: String) : Clo
 
     companion object {
         const val CONNECT_TIMEOUT_MS = 5_000
+        /** On Wi-Fi with a relay to fall back on, the LAN gets less time before the phone moves on. */
+        const val LAN_FIRST_TIMEOUT_MS = 2_000
+        const val RELAY_TIMEOUT_MS = 10_000
         const val HELLO_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 70_000
         const val PING_EVERY_MS = 20_000L
