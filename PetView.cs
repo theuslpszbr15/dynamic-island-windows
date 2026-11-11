@@ -641,14 +641,15 @@ public sealed class PetView : Canvas
                 _hop.BeginAnimation(TranslateTransform.YProperty, jump);
                 break;
             case Mood.Sleep:
-                Loop(_squash, ScaleTransform.ScaleYProperty, 1, 0.93, 1.6);
+                // The most common idle state, so it runs slow: 10 fps is plenty for a breath and a drifting "z".
+                Loop(_squash, ScaleTransform.ScaleYProperty, 1, 0.93, 1.6, SleepFps);
                 var drift = new DoubleAnimation(0, -5, TimeSpan.FromSeconds(2.2)) { RepeatBehavior = RepeatBehavior.Forever };
                 var fade = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever, Duration = TimeSpan.FromSeconds(2.2) };
                 fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
                 fade.KeyFrames.Add(new LinearDoubleKeyFrame(0.9, KeyTime.FromPercent(0.3)));
                 fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
-                Timeline.SetDesiredFrameRate(drift, 20);
-                Timeline.SetDesiredFrameRate(fade, 20);
+                Timeline.SetDesiredFrameRate(drift, SleepFps);
+                Timeline.SetDesiredFrameRate(fade, SleepFps);
                 ((TranslateTransform)_z.RenderTransform).BeginAnimation(TranslateTransform.YProperty, drift);
                 _z.BeginAnimation(OpacityProperty, fade);
                 break;
@@ -684,7 +685,9 @@ public sealed class PetView : Canvas
         _hop.BeginAnimation(TranslateTransform.YProperty, jump);
     }
 
-    static void Loop(Animatable target, DependencyProperty property, double from, double to, double seconds)
+    const int SleepFps = 10;
+
+    static void Loop(Animatable target, DependencyProperty property, double from, double to, double seconds, int fps = 30)
     {
         var loop = new DoubleAnimation(from, to, TimeSpan.FromSeconds(seconds))
         {
@@ -692,7 +695,7 @@ public sealed class PetView : Canvas
             RepeatBehavior = RepeatBehavior.Forever,
             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
         };
-        Timeline.SetDesiredFrameRate(loop, 30);
+        Timeline.SetDesiredFrameRate(loop, fps);
         target.BeginAnimation(property, loop);
     }
 

@@ -26,6 +26,15 @@ static class Native
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr hIcon);
 
+    [DllImport("kernel32.dll")]
+    static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll")]
+    static extern bool SetProcessWorkingSetSize(IntPtr process, nint minimum, nint maximum);
+
+    /// <summary>Hands the pages this process isn't using back to Windows; they come back on demand.</summary>
+    public static void TrimWorkingSet() => SetProcessWorkingSetSize(GetCurrentProcess(), -1, -1);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
 
