@@ -10,11 +10,30 @@
 //
 // Data sockets carry binary frames only: chunks of the TCP stream, no boundaries. A text frame there closes the
 // pair. Close codes: 4400 bad request, 4404 the PC isn't in the room, 4429 room full.
+// Every connection needs "Authorization: Bearer <RELAY_KEY>"; without it the answer is HTTP 401, no upgrade.
 
 import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
   ROOMS: DurableObjectNamespace<Room>;
+  /** Access key (secret): every connection must send "Authorization: Bearer <key>". Keeps strangers from using
+   * the relay as a free tunnel; set with `npx wrangler secret put RELAY_KEY`. Without it the relay refuses all. */
+  RELAY_KEY?: string;
+}
+
+/** Constant-time check of the Authorization header against RELAY_KEY. */
+function authorized(request: Request, env: Env): boolean {
+  const expected = env.RELAY_KEY ?? "";
+  if (expected.length < 16) return false; // no key configured: closed, not open
+  const header = request.headers.get("Authorization") ?? "";
+  const given = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const a = new TextEncoder().encode(given);
+  const b = new TextEncoder().encode(expected);
+  if (a.byteLength !== b.byteLength) {
+    crypto.subtle.timingSafeEqual(b, b); // same work either way
+    return false;
+  }
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 const PATH = /^\/(pc|phone)\/([0-9a-f]{64})(?:\/([0-9a-f]{32}))?$/;
@@ -53,6 +72,8 @@ function refuse(code: number, reason: string): Response {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!isUpgrade(request)) return new Response("Dynamic Island relay\n", { status: 426, headers: { "content-type": "text/plain" } });
+    // Before the upgrade and before anything touches a room.
+    if (!authorized(request, env)) return new Response("unauthorized\n", { status: 401, headers: { "content-type": "text/plain" } });
     const r = route(new URL(request.url));
     if (!r) return refuse(4400, "bad request");
     const stub = env.ROOMS.get(env.ROOMS.idFromName(r.room));

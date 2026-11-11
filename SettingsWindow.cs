@@ -410,7 +410,39 @@ public sealed class SettingsWindow : Window
         if (S.PhoneRelay.Length == 0) Show("Desligado: o celular só conecta na mesma rede.", Muted);
         else if (!S.PhoneLink || island.Phone is not { Running: true } link) Show("Ligue a ligação com o celular para usar o repasse.", Muted);
         else if (link.RelayConnected) Show("✓ Conectado ao repasse: o celular alcança este PC de qualquer rede.", new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58)));
-        else Show("Conectando ao repasse… (sem internet ou endereço errado?)", new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A)));
+        else Show("Conectando ao repasse… (sem internet, endereço ou chave errada?)", new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A)));
+
+        // The relay's access key: masked, pasted in, kept with the pairing secrets (DPAPI), never shown in full.
+        var key = new PasswordBox
+        {
+            Width = 186, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White,
+            CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+            Password = island.Phone?.RelayKey ?? "", ToolTip = "A chave RELAY_KEY do seu repasse",
+        };
+        var paste = new Button { Content = "Colar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        paste.Click += (_, _) => { try { if (Clipboard.ContainsText()) key.Password = Clipboard.GetText().Trim(); } catch { } };
+        var saveKey = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        void ApplyKey()
+        {
+            if (island.Phone is not { } phone)
+            {
+                Show("Ligue a ligação com o celular antes de salvar a chave.", Brushes.Orange);
+                return;
+            }
+            if (!phone.SetRelayKey(key.Password))
+            {
+                Show("Chave inválida: 16 a 128 letras, números, - ou _.", Brushes.Orange);
+                return;
+            }
+            Render();
+        }
+        saveKey.Click += (_, _) => ApplyKey();
+        key.KeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; ApplyKey(); } };
+        var keyEdit = new StackPanel { Orientation = Orientation.Horizontal };
+        keyEdit.Children.Add(key);
+        keyEdit.Children.Add(paste);
+        keyEdit.Children.Add(saveKey);
+        var hasKey = (island.Phone?.RelayKey.Length ?? 0) > 0;
 
         var save = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
         void Apply()
@@ -435,6 +467,8 @@ public sealed class SettingsWindow : Window
                  "os dados já criptografados: não vê o código de pareamento nem os comandos, e não consegue aprovar nada. " +
                  "Como publicar: pasta relay/ do projeto."),
             Row("Endereço do repasse", "Vazio = desligado. O celular recebe o endereço sozinho.", edit),
+            Row("Chave do repasse", hasKey ? "Salva (protegida no Windows). O celular recebe junto com o endereço."
+                                           : "Só quem tem a chave usa o seu repasse. O celular recebe junto com o endereço.", keyEdit),
             status);
     }
 
@@ -466,6 +500,15 @@ public sealed class SettingsWindow : Window
                 FontSize = 17, FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(phones > 0 ? Color.FromRgb(0x30, 0xD1, 0x58) : Color.FromRgb(0xFF, 0x9F, 0x0A)),
             });
+            // Each phone, by path (rede local / internet) and since when: an unknown one over the internet stands out.
+            foreach (var phone in link.Phones)
+                side.Children.Add(new TextBlock
+                {
+                    Text = $"{(phone.ViaRelay ? "" : "")}  {phone.Device} · {(phone.ViaRelay ? "pela internet" : "rede local")} · desde {phone.Since:HH:mm}",
+                    FontFamily = new FontFamily("Segoe MDL2 Assets, Segoe UI Variable Text, Segoe UI"), FontSize = 13,
+                    Foreground = phone.ViaRelay ? new SolidColorBrush(Color.FromRgb(0x64, 0xD2, 0xFF)) : Brushes.White,
+                    Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap,
+                });
             side.Children.Add(Note(PhoneLink.LocalAddress() is { } ip
                 ? $"Este PC: {ip}, porta {link.Port}"
                 : "Sem rede local: conecte o PC ao Wi-Fi."));

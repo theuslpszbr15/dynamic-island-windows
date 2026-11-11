@@ -53,6 +53,32 @@ public class PhoneRelayTests
     }
 
     [Fact]
+    public void QrCarriesTheRelayKeyAsRk()
+    {
+        var key = PhoneLink.NewRelayKey();
+        Assert.True(PhoneLink.ValidRelayKey(key));
+        var query = HttpUtility.ParseQueryString(new Uri(
+            PhoneLink.BuildPairingLink("10.0.0.5", 47900, "ab12", "t", "PC", "wss://relay.example.com", key)).Query);
+        Assert.Equal(key, query["rk"]);
+        Assert.Equal("wss://relay.example.com", query["relay"]);
+    }
+
+    [Fact]
+    public void NoRelayMeansNoKeyInTheQr()
+    {
+        var query = HttpUtility.ParseQueryString(new Uri(
+            PhoneLink.BuildPairingLink("10.0.0.5", 47900, "ab12", "t", "PC", "", PhoneLink.NewRelayKey())).Query);
+        Assert.Null(query["rk"]);
+        Assert.Null(query["relay"]);
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("has space inside 1234567890")]
+    [InlineData("plus+slash/equals=0123456789")]
+    public void RefusesBadRelayKeys(string key) => Assert.False(PhoneLink.ValidRelayKey(key));
+
+    [Fact]
     public void QrWithoutRelayHasNoRelayParameter()
     {
         var query = HttpUtility.ParseQueryString(new Uri(PhoneLink.BuildPairingLink("10.0.0.5", 47900, "ab12", "t", "PC", "")).Query);

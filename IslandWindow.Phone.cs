@@ -25,6 +25,7 @@ public partial class IslandWindow
             _phone = new PhoneLink(Dispatcher);
             _phone.Decision += OnPhoneDecision;
             _phone.Open += OnPhoneOpen;
+            _phone.PhoneJoined += OnPhoneJoined;
         }
         _phone.SetRelay(_settings.PhoneRelay);
         if (_phone.Running) return;
@@ -38,6 +39,14 @@ public partial class IslandWindow
         PublishPhoneSessions();
         PublishPhoneTray();
         foreach (var approval in _approvals) PublishApproval(approval);
+    }
+
+    // Coming in over the internet is new, so it's worth a glance: if it wasn't you, "Parear de novo" cuts it off.
+    void OnPhoneJoined(string device, bool viaRelay)
+    {
+        if (!viaRelay || SnapshotMode) return;
+        ShowInfo("", "Celular conectado pela internet", device.Length > 0 ? device : "Android",
+            action: () => ((App)System.Windows.Application.Current).ShowSettings("phone"), seconds: 6);
     }
 
     static string TrayId(FileItem item) =>

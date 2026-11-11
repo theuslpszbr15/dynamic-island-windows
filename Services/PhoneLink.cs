@@ -106,6 +106,45 @@ public sealed class PhoneLink : IDisposable
         if (Running) RestartRelay();
     }
 
+    /// <summary>The relay's access key, sent as "Authorization: Bearer …" on every relay connection: keeps strangers
+    /// from using the relay as a free tunnel. It is not what protects the link (TLS and the token do); phones get it
+    /// in the QR (rk=) or in the welcome, inside the authenticated TLS. Stored with the token (DPAPI).</summary>
+    public string RelayKey
+    {
+        get { LoadSecrets(); return _relayKey; }
+    }
+    string _relayKey = "";
+
+    /// <summary>Saves a new relay key ("" = none) and reconnects. False if it isn't a valid key.</summary>
+    public bool SetRelayKey(string? key)
+    {
+        var k = key?.Trim() ?? "";
+        if (k.Length > 0 && !ValidRelayKey(k)) return false;
+        LoadSecrets();
+        if (k == _relayKey) return true;
+        _relayKey = k;
+        SaveSecrets();
+        if (Running) RestartRelay();
+        return true;
+    }
+
+    /// <summary>A phone that finished the hello: its name, whether it came through the relay, and since when.</summary>
+    public sealed record PhoneInfo(string Device, bool ViaRelay, DateTime Since);
+
+    public IReadOnlyList<PhoneInfo> Phones
+    {
+        get { lock (_gate) return _peers.Where(p => p.Authenticated).Select(p => new PhoneInfo(p.Device, p.Relay, p.Since)).ToList(); }
+    }
+
+    /// <summary>Raised on the UI thread when a phone authenticates: (device name, came through the relay).</summary>
+    public event Action<string, bool>? PhoneJoined;
+
+    /// <summary>16-128 characters of base64url (A-Z a-z 0-9 - _).</summary>
+    public static bool ValidRelayKey(string key) =>
+        key.Length is >= 16 and <= 128 && key.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
+    public static string NewRelayKey() => NewToken();
+
     public void Stop()
     {
         StopRelay();
@@ -143,13 +182,15 @@ public sealed class PhoneLink : IDisposable
     }
 
     public string PairingLink() =>
-        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay);
+        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay, _relayKey);
 
-    /// <summary>The QR code's link. <paramref name="relay"/> ("" = none) is added as an optional parameter.</summary>
-    public static string BuildPairingLink(string host, int port, string fingerprint, string token, string name, string relay) =>
+    /// <summary>The QR code's link. <paramref name="relay"/> and <paramref name="relayKey"/> ("" = none) are
+    /// optional parameters; the key only goes along with a relay.</summary>
+    public static string BuildPairingLink(string host, int port, string fingerprint, string token, string name, string relay, string relayKey = "") =>
         $"dynamicisland://pair?v={Version}&host={host}&port={port}&fp={fingerprint}&token={token}" +
         $"&name={Uri.EscapeDataString(name)}" +
-        (relay.Length > 0 ? $"&relay={Uri.EscapeDataString(relay)}" : "");
+        (relay.Length > 0 ? $"&relay={Uri.EscapeDataString(relay)}" : "") +
+        (relay.Length > 0 && relayKey.Length > 0 ? $"&rk={relayKey}" : "");
 
     /// <summary>The relay room for a pairing token: lowercase hex SHA-256 of "dynamicisland-room|" + token.
     /// Only someone with the token can find the room, and the room name doesn't reveal the token.</summary>
@@ -295,12 +336,18 @@ public sealed class PhoneLink : IDisposable
                 }
                 peer.Device = Cut(Str(root, "device") ?? "Android", 40);
             }
+            peer.Since = DateTime.Now;
             peer.Authenticated = true;
-            _ = _ui.InvokeAsync(() => PhonesChanged?.Invoke());
+            _ = _ui.InvokeAsync(() =>
+            {
+                PhonesChanged?.Invoke();
+                PhoneJoined?.Invoke(peer.Device, peer.Relay);
+            });
             await peer.SendAsync(new JsonObject
             {
                 ["type"] = "welcome", ["v"] = Version, ["desktop"] = Environment.MachineName, ["os"] = "windows",
                 ["relay"] = Relay, // phones paired before the relay learn it here, without a new QR code
+                ["relayKey"] = Relay.Length > 0 ? _relayKey : "", // only ever sent here, after the token checked out
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
@@ -435,6 +482,7 @@ public sealed class PhoneLink : IDisposable
                 var data = JsonNode.Parse(Encoding.UTF8.GetString(
                     ProtectedData.Unprotect(File.ReadAllBytes(SecretFile), null, DataProtectionScope.CurrentUser)))!;
                 _token = data["token"]!.GetValue<string>();
+                _relayKey = data["relayKey"]?.GetValue<string>() is { } rk && ValidRelayKey(rk) ? rk : "";
                 _pfx = Convert.FromBase64String(data["pfx"]!.GetValue<string>());
                 _cert = X509CertificateLoader.LoadPkcs12(_pfx, null, X509KeyStorageFlags.UserKeySet);
                 return;
@@ -454,7 +502,7 @@ public sealed class PhoneLink : IDisposable
     void SaveSecrets()
     {
         if (_cert == null) return;
-        var json = new JsonObject { ["token"] = _token, ["pfx"] = Convert.ToBase64String(_pfx) }.ToJsonString();
+        var json = new JsonObject { ["token"] = _token, ["pfx"] = Convert.ToBase64String(_pfx), ["relayKey"] = _relayKey }.ToJsonString();
         // A half-written secret would unpair the phone, so it is replaced atomically like settings.json.
         AtomicFile.WriteAllBytes(SecretFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser),
             backup: false);
@@ -505,6 +553,7 @@ public sealed class PhoneLink : IDisposable
             using (var ws = new ClientWebSocket())
             {
                 ws.Options.KeepAliveInterval = RelayPing;
+                if (_relayKey.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + _relayKey);
                 try
                 {
                     using (var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel))
@@ -602,6 +651,7 @@ public sealed class PhoneLink : IDisposable
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             connect.CancelAfter(HelloTimeout);
             ws.Options.KeepAliveInterval = RelayPing;
+            if (_relayKey.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + _relayKey);
             await ws.ConnectAsync(new Uri($"{relay}/pc/{room}/{conn}"), connect.Token);
         }
         catch
@@ -674,6 +724,7 @@ public sealed class PhoneLink : IDisposable
         public SslStream? Stream;
         public bool Authenticated;
         public string Device = "";
+        public DateTime Since;
 
         public async Task SendAsync(string line)
         {
