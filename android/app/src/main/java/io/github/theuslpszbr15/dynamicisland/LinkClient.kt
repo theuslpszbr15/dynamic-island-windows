@@ -226,7 +226,12 @@ class LinkClient(
 
     private fun openLan(context: SSLContext): Pipe {
         val raw = Socket()
-        raw.connect(InetSocketAddress(pairing.host, pairing.port), connectTimeoutMs)
+        try {
+            raw.connect(InetSocketAddress(pairing.host, pairing.port), connectTimeoutMs)
+        } catch (e: IOException) {
+            raw.close()
+            throw IOException(lanError(pairing, e), e)
+        }
         val ssl = context.socketFactory.createSocket(raw, pairing.host, pairing.port, true) as SSLSocket
         return started(SocketPipe(ssl)) { ssl.startHandshake() }
     }
@@ -303,6 +308,22 @@ class LinkClient(
         const val PING_EVERY_MS = 20_000L
         const val MAX_LINE = 64 * 1024
         const val MAX_COMMAND = 500
+
+        /** Why the PC's address didn't answer, in words that say what to check. */
+        fun lanError(pairing: Pairing, e: IOException): String {
+            val where = "${pairing.host}:${pairing.port}"
+            val text = e.message.orEmpty()
+            return when {
+                "ECONNREFUSED" in text || "refused" in text.lowercase() ->
+                    "O PC recusou a conexão em $where: a ilha está aberta, com o celular ligado nas configurações?"
+                e is java.net.SocketTimeoutException || "ETIMEDOUT" in text || "EHOSTUNREACH" in text ||
+                    "timed out" in text.lowercase() ->
+                    "O PC não respondeu em $where: confira o firewall do Windows (rede \"Pública\" bloqueia) " +
+                        "e se o celular está na mesma rede"
+                "ENETUNREACH" in text -> "Sem rede até $where"
+                else -> "Não consegui chegar em $where ($text)"
+            }
+        }
 
         fun sha256Hex(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

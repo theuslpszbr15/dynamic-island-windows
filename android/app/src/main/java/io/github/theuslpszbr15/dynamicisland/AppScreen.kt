@@ -253,10 +253,12 @@ private fun AgentsTab(
                 Notice("O PC trocou o código de pareamento. Escaneie o código novo.", "Escanear", onScan)
             }
             LinkStatus.Offline -> item {
-                Notice(if (state.pairing?.relay != null)
+                Notice((if (state.pairing?.relay != null)
                     "Sem conexão. Confira se o PC está ligado, com a ilha aberta e com internet."
                 else "Sem conexão. Confira se o PC está ligado, com a ilha aberta, na mesma rede Wi-Fi " +
-                    "(redes de visitante costumam isolar os aparelhos).", "Tentar agora", onRetry)
+                    "(redes de visitante costumam isolar os aparelhos). Para conectar fora de casa, " +
+                    "escaneie de novo o QR do PC.") +
+                    (state.message?.let { "\n\nErro: $it" } ?: ""), "Tentar agora", onRetry)
             }
             LinkStatus.Paused -> item {
                 Notice("Parado: o celular não está procurando o PC (nem gastando bateria com isso). " +

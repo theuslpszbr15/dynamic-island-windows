@@ -74,6 +74,14 @@ class RelayPairingTest {
         assertTrue(!p.room().contains(token))
     }
 
+    @Test fun lanErrorsSayWhatToCheck() {
+        val p = Pairing.parse(base)!!
+        val refused = java.net.ConnectException("failed to connect to /192.168.0.12 (port 47900) after 2000ms: isConnected failed: ECONNREFUSED (Connection refused)")
+        assertTrue(LinkClient.lanError(p, refused).contains("recusou"))
+        assertTrue(LinkClient.lanError(p, java.net.SocketTimeoutException("failed to connect to /192.168.0.12 (port 47900) after 2000ms")).contains("firewall"))
+        assertTrue(LinkClient.lanError(p, refused).contains("192.168.0.12:47900"))
+    }
+
     @Test fun closeCodesInWords() {
         assertNull(RelayWire.closeError(1000))
         assertTrue(RelayWire.closeError(4404) is RelayException)
