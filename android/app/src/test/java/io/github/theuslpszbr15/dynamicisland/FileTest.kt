@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -35,27 +36,47 @@ class FileOfferTest {
     private val id = "0123456789abcdef0123456789abcdef"
     private val sha = "a".repeat(64)
 
-    private fun offer(name: String = "foto.jpg", size: Long = 10, id: String = this.id, sha: String = this.sha) =
-        FileOffer.parse(JSONObject().put("type", "fileOffer").put("id", id).put("name", name).put("size", size).put("sha256", sha))
+    private fun item(name: String = "foto.jpg", size: Long = 10, sha: String = this.sha, text: Boolean = false) =
+        JSONObject().put("name", name).put("size", size).put("sha256", sha).apply { if (text) put("text", true) }
 
-    @Test fun readsAnOffer() {
-        val o = offer()!!
+    private fun offer(vararg items: JSONObject, id: String = this.id) =
+        FileOffer.parse(JSONObject().put("type", "fileOffer").put("id", id).put("items", JSONArray().apply { items.forEach { put(it) } }))
+
+    @Test fun readsABatch() {
+        val o = offer(item(), item("video.mp4", 50L * 1024 * 1024))!!
         assertEquals(id, o.id)
-        assertEquals("foto.jpg", o.name)
-        assertEquals(10, o.size)
-        assertEquals(sha, o.sha256)
-        assertNotNull(offer(size = 0))
-        assertNotNull(offer(size = FileOffer.MAX_BYTES))
+        assertEquals(2, o.items.size)
+        assertEquals("foto.jpg", o.items[0].name)
+        assertEquals(10 + 50L * 1024 * 1024, o.totalBytes)
+        assertEquals("2 arquivos", o.label)
+        assertNotNull(offer(item(size = 0)))
+        assertNotNull(offer(item(size = FileOffer.MAX_BYTES)))
+        assertTrue(offer(item(text = true, size = 1000))!!.isText)
+    }
+
+    @Test fun limitsBySizeAndKind() {
+        assertNull(offer(item(size = FileOffer.MAX_BYTES + 1))) // a photo over 30 MB
+        assertNotNull(offer(item("filme.MP4", FileOffer.MAX_VIDEO_BYTES))) // a video up to 60 MB
+        assertNull(offer(item("filme.mp4", FileOffer.MAX_VIDEO_BYTES + 1)))
+        assertNull(offer(item(text = true, size = FileOffer.MAX_TEXT_BYTES + 1L)))
+        assertNull(offer(*Array(FileOffer.MAX_ITEMS + 1) { item() }))
+        assertNull(offer(item(text = true), item())) // a long text travels alone
     }
 
     @Test fun refusesWhatIsNotAnOffer() {
-        assertNull(offer(size = FileOffer.MAX_BYTES + 1)) // over 30 MB
-        assertNull(offer(size = -1))
-        assertNull(offer(id = "curto"))
-        assertNull(offer(id = "0123456789ABCDEF0123456789ABCDEF"))
-        assertNull(offer(sha = "b".repeat(63)))
-        assertNull(offer(sha = "z".repeat(64)))
-        assertNull(FileOffer.parse(JSONObject().put("id", id).put("sha256", sha)))
+        assertNull(offer(item(size = -1)))
+        assertNull(offer(item(), id = "curto"))
+        assertNull(offer(item(), id = "0123456789ABCDEF0123456789ABCDEF"))
+        assertNull(offer(item(sha = "b".repeat(63))))
+        assertNull(offer(item(sha = "z".repeat(64))))
+        assertNull(offer())
+        assertNull(FileOffer.parse(JSONObject().put("id", id)))
+    }
+
+    @Test fun newIdsLookLikeThePcs() {
+        val a = FileOffer.newId()
+        assertTrue(FileOffer.isId(a))
+        assertFalse(a == FileOffer.newId())
     }
 
     @Test fun onlyAPlainFileName() {
@@ -76,8 +97,8 @@ class FileOfferTest {
 }
 
 /**
- * Downloads against a fake PC (a TLS server with a throwaway certificate) that answers a "fetch" line with the
- * header and the bytes, straight over the "LAN" (loopback) and through a fake relay.
+ * Both directions against a fake PC (a TLS server with a throwaway certificate): "fetch" gets a batch of two files,
+ * "push" sends one, straight over the "LAN" (loopback) and through a fake relay.
  */
 class FileFetchTest {
     private val token = "abcDEF0123456789_-xyz"
@@ -87,10 +108,13 @@ class FileFetchTest {
     private lateinit var fingerprint: String
     private val relay = MockWebServer()
     private val data = ByteArray(2 * 1024 * 1024 + 123).also { Random(7).nextBytes(it) }
-    private val sha = LinkClient.sha256Hex(data)
-    /** What the fake PC does after the header: the right bytes, other bytes, or a refusal. */
+    private val small = "olá, celular".toByteArray()
+    private val files = listOf(data, small)
+    /** What the fake PC does: the right bytes, other bytes, a cut file, or a refusal. */
     @Volatile private var mode = "ok"
-    @Volatile private var fetchLine: JSONObject? = null
+    @Volatile private var firstLine: JSONObject? = null
+    /** What a push delivered, as the fake PC checked it. */
+    @Volatile private var pushed: List<ByteArray>? = null
 
     @Before fun setUp() {
         val keytool = listOf("bin/keytool", "bin/keytool.exe").map { File(System.getProperty("java.home"), it) }.firstOrNull { it.exists() } ?: File("keytool")
@@ -123,25 +147,51 @@ class FileFetchTest {
         }
     }
 
+    private fun readExactly(input: InputStream, size: Int): ByteArray {
+        val out = ByteArray(size)
+        var at = 0
+        while (at < size) {
+            val n = input.read(out, at, size - at)
+            if (n == -1) throw IOException("cut")
+            at += n
+        }
+        return out
+    }
+
     private fun fakePc(socket: Socket): Unit = socket.use {
         val input = it.getInputStream()
         val out = it.getOutputStream()
         fun send(o: JSONObject) { out.write((o.toString() + "\n").toByteArray()); out.flush() }
         val first = JSONObject(line(input) ?: return)
-        fetchLine = first
-        if (first.optString("type") != "fetch" || first.optString("token") != token) {
+        firstLine = first
+        if (first.optString("type") !in setOf("fetch", "push") || first.optString("token") != token) {
             send(JSONObject().put("type", "error").put("code", "auth").put("message", "não")); return
         }
-        when (mode) {
-            "refuse" -> return send(JSONObject().put("type", "error").put("code", "file").put("message", "Esse envio não vale mais."))
-            "short" -> {
-                send(JSONObject().put("type", "file").put("id", id).put("size", data.size).put("sha256", sha))
-                out.write(data, 0, data.size / 2); out.flush(); return
+        if (mode == "refuse") return send(JSONObject().put("type", "error").put("code", "file").put("message", "Esse envio não vale mais."))
+        if (first.optString("type") == "push") {
+            send(JSONObject().put("type", "ready"))
+            val got = mutableListOf<ByteArray>()
+            for (i in 0 until 1) {
+                val h = JSONObject(line(input) ?: return)
+                val bytes = readExactly(input, h.optInt("size"))
+                if (h.optInt("index") != i || LinkClient.sha256Hex(bytes) != h.optString("sha256")) {
+                    send(JSONObject().put("type", "saved").put("ok", false)); return
+                }
+                got += bytes
             }
+            pushed = got
+            send(JSONObject().put("type", "saved").put("ok", true).put("count", got.size))
+            return
         }
-        send(JSONObject().put("type", "file").put("id", id).put("size", data.size).put("sha256", sha))
-        val body = if (mode == "tampered") data.copyOf().also { d -> d[1000] = (d[1000] + 1).toByte() } else data
-        out.write(body); out.flush()
+        files.forEachIndexed { i, bytes ->
+            send(JSONObject().put("type", "file").put("id", id).put("index", i).put("size", bytes.size).put("sha256", LinkClient.sha256Hex(bytes)))
+            when {
+                mode == "short" -> { out.write(bytes, 0, bytes.size / 2); out.flush(); return }
+                mode == "tampered" && i == 1 -> out.write(bytes.copyOf().also { d -> d[3] = (d[3] + 1).toByte() })
+                else -> out.write(bytes)
+            }
+            out.flush()
+        }
         input.read() // the phone hangs up when it has everything
         Unit
     }
@@ -173,62 +223,112 @@ class FileFetchTest {
     private fun pairing(t: String = token) =
         Pairing("127.0.0.1", server.localPort, fingerprint, t, "PC", "ws://127.0.0.1:${relay.port}", key)
 
-    private val offer get() = FileOffer(id, "dados.bin", data.size.toLong(), sha, 0)
+    private val offer get() = FileOffer(id, files.mapIndexed { i, b -> OfferItem("f$i.bin", b.size.toLong(), LinkClient.sha256Hex(b)) }, 0)
 
-    @Test fun downloadsOverTheLan() {
-        val sink = ByteArrayOutputStream()
+    /** Collects what fetch keeps and drops. */
+    private class Collect : LinkClient.Sink {
+        val open = mutableMapOf<Int, ByteArrayOutputStream>()
+        val kept = mutableMapOf<Int, ByteArray>()
+        val dropped = mutableListOf<Int>()
         var last = 0L
-        LinkClient(pairing(), "teste").fetch(offer, sink) { last = it }
-        assertArrayEquals(data, sink.toByteArray())
-        assertEquals(data.size.toLong(), last)
-        assertEquals("fetch", fetchLine!!.optString("type"))
-        assertEquals(id, fetchLine!!.optString("id"))
+        override fun open(index: Int, item: OfferItem) = ByteArrayOutputStream().also { open[index] = it }
+        override fun keep(index: Int, item: OfferItem) { kept[index] = open.remove(index)!!.toByteArray() }
+        override fun drop(index: Int, item: OfferItem) { open.remove(index); dropped += index }
+        override fun progress(done: Long) { last = done }
+    }
+
+    @Test fun downloadsABatchOverTheLan() {
+        val sink = Collect()
+        LinkClient(pairing(), "teste").fetch(offer, sink)
+        assertArrayEquals(data, sink.kept[0])
+        assertArrayEquals(small, sink.kept[1])
+        assertEquals(offer.totalBytes, sink.last)
+        assertEquals("fetch", firstLine!!.optString("type"))
+        assertEquals(id, firstLine!!.optString("id"))
     }
 
     @Test fun downloadsThroughTheRelay() {
         relay.enqueue(bridge())
         relay.start()
-        val sink = ByteArrayOutputStream()
+        val sink = Collect()
         LinkClient(pairing(), "teste", Route.Relay).fetch(offer, sink)
-        assertArrayEquals(data, sink.toByteArray())
+        assertArrayEquals(data, sink.kept[0])
         val upgrade = relay.takeRequest()
         assertEquals("/phone/${pairing().room()}", upgrade.path)
         assertFalse("the token never reaches the relay in the clear", upgrade.requestLine.contains(token))
     }
 
-    @Test fun refusesBytesThatDontMatchTheHash() {
+    @Test fun dropsBytesThatDontMatchTheHash() {
         mode = "tampered"
-        val error = runCatching { LinkClient(pairing(), "teste").fetch(offer, ByteArrayOutputStream()) }.exceptionOrNull()
+        val sink = Collect()
+        val error = runCatching { LinkClient(pairing(), "teste").fetch(offer, sink) }.exceptionOrNull()
         assertTrue("$error", error is IOException && error.message!!.contains("diferente"))
+        assertArrayEquals("the good file before it stays", data, sink.kept[0])
+        assertEquals(listOf(1), sink.dropped)
     }
 
-    @Test fun refusesAFileCutShort() {
+    @Test fun dropsAFileCutShort() {
         mode = "short"
-        val error = runCatching { LinkClient(pairing(), "teste").fetch(offer, ByteArrayOutputStream()) }.exceptionOrNull()
+        val sink = Collect()
+        val error = runCatching { LinkClient(pairing(), "teste").fetch(offer, sink) }.exceptionOrNull()
         assertTrue("$error", error is IOException)
+        assertTrue(sink.kept.isEmpty())
+        assertEquals(listOf(0), sink.dropped)
     }
 
     @Test fun refusesAnotherFileThanOffered() {
-        val other = offer.copy(sha256 = "b".repeat(64))
-        val error = runCatching { LinkClient(pairing(), "teste").fetch(other, ByteArrayOutputStream()) }.exceptionOrNull()
+        val other = offer.copy(items = listOf(offer.items[0].copy(sha256 = "b".repeat(64)), offer.items[1]))
+        val error = runCatching { LinkClient(pairing(), "teste").fetch(other, Collect()) }.exceptionOrNull()
         assertTrue("$error", error is IOException && error.message!!.contains("outro arquivo"))
     }
 
     @Test fun saysWhenThePcRefuses() {
         mode = "refuse"
-        val error = runCatching { LinkClient(pairing(), "teste").fetch(offer, ByteArrayOutputStream()) }.exceptionOrNull()
+        val error = runCatching { LinkClient(pairing(), "teste").fetch(offer, Collect()) }.exceptionOrNull()
         assertTrue("$error", error is FileRefusedException && error.message!!.contains("não vale mais"))
     }
 
     @Test fun needsTheToken() {
-        val error = runCatching { LinkClient(pairing("outroToken0123456789"), "teste").fetch(offer, ByteArrayOutputStream()) }.exceptionOrNull()
+        val error = runCatching { LinkClient(pairing("outroToken0123456789"), "teste").fetch(offer, Collect()) }.exceptionOrNull()
         assertTrue("$error", error is AuthException)
     }
 
     @Test fun refusesAnotherPc() {
         val wrong = pairing().copy(fingerprint = "0".repeat(64))
-        val error = runCatching { LinkClient(wrong, "teste").fetch(offer, ByteArrayOutputStream()) }.exceptionOrNull()
+        val error = runCatching { LinkClient(wrong, "teste").fetch(offer, Collect()) }.exceptionOrNull()
         assertNotNull("a different certificate must be refused", error)
-        assertNull("nothing was asked of a PC that isn't the paired one", fetchLine)
+        assertNull("nothing was asked of a PC that isn't the paired one", firstLine)
+    }
+
+    @Test fun sendsAFileToThePc() {
+        val item = OfferItem("foto.jpg", data.size.toLong(), LinkClient.sha256Hex(data))
+        var last = 0L
+        LinkClient(pairing(), "teste").push(id, listOf(LinkClient.Outgoing(item) { data.inputStream() })) { last = it }
+        assertEquals("push", firstLine!!.optString("type"))
+        assertArrayEquals(data, pushed!!.single())
+        assertEquals(data.size.toLong(), last)
+    }
+
+    @Test fun sendsThroughTheRelay() {
+        relay.enqueue(bridge())
+        relay.start()
+        val item = OfferItem("foto.jpg", data.size.toLong(), LinkClient.sha256Hex(data))
+        LinkClient(pairing(), "teste", Route.Relay).push(id, listOf(LinkClient.Outgoing(item) { data.inputStream() }))
+        assertArrayEquals(data, pushed!!.single())
+    }
+
+    @Test fun saysWhenThePcDidNotAccept() {
+        mode = "refuse"
+        val item = OfferItem("foto.jpg", small.size.toLong(), LinkClient.sha256Hex(small))
+        val error = runCatching { LinkClient(pairing(), "teste").push(id, listOf(LinkClient.Outgoing(item) { small.inputStream() })) }.exceptionOrNull()
+        assertTrue("$error", error is FileRefusedException)
+    }
+
+    @Test fun thePcNoticesAFileThatChanged() {
+        // the phone promised one hash and sends other bytes: the PC says it didn't save
+        val item = OfferItem("foto.jpg", small.size.toLong(), "c".repeat(64))
+        val error = runCatching { LinkClient(pairing(), "teste").push(id, listOf(LinkClient.Outgoing(item) { small.inputStream() })) }.exceptionOrNull()
+        assertTrue("$error", error is IOException && error.message!!.contains("guardar"))
+        assertNull(pushed)
     }
 }

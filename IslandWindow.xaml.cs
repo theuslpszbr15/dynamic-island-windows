@@ -1091,14 +1091,16 @@ public partial class IslandWindow : Window
     void Island_DragOver(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        if (_draggingOut || !e.Data.GetDataPresent(DataFormats.FileDrop))
+        // Text can only go to the phone; files can be kept or sent.
+        var text = CanSendToPhone && !e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetDataPresent(DataFormats.UnicodeText);
+        if (_draggingOut || (!e.Data.GetDataPresent(DataFormats.FileDrop) && !text))
         {
             e.Effects = DragDropEffects.None;
             return;
         }
         e.Effects = DragDropEffects.Copy;
         _lastDragOver = DateTime.Now;
-        ShowDropSide(OverPhoneSide(e));
+        ShowDropSide(OverPhoneSide(e) || DraggingText(e));
         if (_dragOver) return;
 
         _dragOver = true;
@@ -1109,6 +1111,8 @@ public partial class IslandWindow : Window
     // With a phone connected the drop hint has two sides: keep it in the tray, or send it to the phone.
     bool OverPhoneSide(DragEventArgs e) =>
         CanSendToPhone && DropHint.ActualWidth > 0 && e.GetPosition(DropHint).X >= DropKeep.ActualWidth;
+
+    bool DraggingText(DragEventArgs e) => !e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetDataPresent(DataFormats.UnicodeText);
 
     void ShowDropSide(bool phone)
     {
@@ -1139,7 +1143,11 @@ public partial class IslandWindow : Window
     void Island_Drop(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        if (!_draggingOut && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } toPhone && OverPhoneSide(e))
+        if (!_draggingOut && CanSendToPhone && DraggingText(e) && e.Data.GetData(DataFormats.UnicodeText) is string dropped)
+        {
+            SendTextToPhone(dropped);
+        }
+        else if (!_draggingOut && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } toPhone && OverPhoneSide(e))
         {
             SendToPhone(toPhone);
         }

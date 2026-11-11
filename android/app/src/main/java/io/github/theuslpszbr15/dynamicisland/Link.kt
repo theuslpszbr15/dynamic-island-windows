@@ -136,6 +136,24 @@ object Link {
         FileReceiver.receive(app, pairing, c.route, offer)
     }
 
+    /** Short texts from the PC, by id, until "Copiar" (kept only in memory, at most a few). */
+    private val texts = object : LinkedHashMap<String, String>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 5
+    }
+
+    fun textFromPc(context: Context, id: String, text: String) {
+        synchronized(texts) { texts[id] = text }
+        Notifications.showText(context, id, text)
+    }
+
+    fun copyText(context: Context, id: String) {
+        val app = context.applicationContext
+        Notifications.cancelFile(app, id)
+        val text = synchronized(texts) { texts.remove(id) } ?: return tell(app, "Esse texto já não está mais aqui.")
+        FileReceiver.copy(app, text)
+        tell(app, "Texto copiado")
+    }
+
     fun declineFile(context: Context, id: String) {
         Notifications.cancelFile(context.applicationContext, id)
         update { s -> s.copy(files = s.files.filterNot { it.id == id }) }

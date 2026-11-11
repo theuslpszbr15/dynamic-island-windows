@@ -27,10 +27,10 @@ public sealed record PhoneTrayItem(string Id, string Name, string Kind, string? 
 /// Away from home the same TLS stream can also run through a blind relay on the web (see relay/): the PC keeps
 /// a control WebSocket in a room named after the token, and each phone that joins gets its own data WebSocket,
 /// carrying the raw TLS bytes. The relay never sees the token or anything inside TLS.
-/// Files go the other way only on request: the PC offers one on the link, and if the person accepts on the phone,
-/// the phone opens a second connection (same route, same pinned TLS, same token) that carries just that file.
+/// Files and text go both ways only after the other side accepts (see PhoneLink.Files.cs): the offer travels on the
+/// link, the bytes on a second connection the phone opens (same route, same pinned TLS, same token).
 /// </summary>
-public sealed class PhoneLink : IDisposable
+public sealed partial class PhoneLink : IDisposable
 {
     public const int Version = 1;
     public const int DefaultPort = 47900;
@@ -74,8 +74,6 @@ public sealed class PhoneLink : IDisposable
     public event Action<string, string>? Decision;
     /// <summary>Raised on the UI thread with a tray item id the phone wants opened.</summary>
     public event Action<string>? Open;
-    /// <summary>Raised on the UI thread as a file offered to the phone moves along: (file name, what happened).</summary>
-    public event Action<string, FileOutcome>? FileStatus;
     public event Action? PhonesChanged;
 
     public void Start()
@@ -335,16 +333,18 @@ public sealed class PhoneLink : IDisposable
                 var root = doc.RootElement;
                 var token = root.TryGetProperty("token", out var t) ? t.GetString() ?? "" : "";
                 var type = Str(root, "type");
-                if (type is not ("hello" or "fetch") || !SameSecret(token, _token))
+                if (type is not ("hello" or "fetch" or "push") || !SameSecret(token, _token))
                 {
                     await peer.SendAsync("""{"type":"error","code":"auth","message":"Pareamento inválido. Escaneie o código de novo."}""");
                     await Task.Delay(1000, cancel);
                     return;
                 }
-                if (type == "fetch")
+                if (type is "fetch" or "push")
                 {
-                    // A connection just for one accepted file: it never becomes a phone in the list.
-                    await ServeFile(peer, Str(root, "id"), cancel);
+                    // A connection just for one accepted batch: it never becomes a phone in the list.
+                    peer.Fetching = true;
+                    if (type == "fetch") await ServeFiles(peer, Str(root, "id"), cancel);
+                    else await ReceiveFiles(peer, Str(root, "id"), cancel);
                     return;
                 }
                 peer.Device = Cut(Str(root, "device") ?? "Android", 40);
@@ -395,6 +395,9 @@ public sealed class PhoneLink : IDisposable
                         EndOffer(id, root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True
                             ? FileOutcome.Received : FileOutcome.Failed);
                         break;
+                    case "sendOffer":
+                        OnPhoneOffer(peer, root);
+                        break;
                     case "bye":
                         return;
                 }
@@ -408,133 +411,6 @@ public sealed class PhoneLink : IDisposable
             lock (_gate) wasAuthenticated = _peers.Remove(peer) && peer.Authenticated;
             if (wasAuthenticated) _ = _ui.InvokeAsync(() => PhonesChanged?.Invoke());
         }
-    }
-
-    // ───────────────────────── files to the phone ─────────────────────────
-
-    /// <summary>The biggest file the phone is offered: this is a quick way to hand something over, not a sync.</summary>
-    public const long MaxFileBytes = 30L * 1024 * 1024;
-    const int MaxOffers = 5, MaxTransfers = 2;
-    static readonly TimeSpan OfferLifetime = TimeSpan.FromMinutes(10), TransferTimeout = TimeSpan.FromMinutes(5);
-
-    public enum FileOutcome { Sending, Received, Declined, Failed, Expired }
-
-    /// <summary>A file waiting for the phone. Only the name, size and hash go out; the path stays here.</summary>
-    sealed record FileOffer(string Id, string Path, string Name, long Size, string Sha256, DateTime LastWriteUtc);
-
-    readonly Dictionary<string, FileOffer> _offers = [];
-    int _transfers;
-
-    /// <summary>Hashes the file and offers it to the connected phones; null when offered, otherwise why not
-    /// (short, for the island). The phone asks the person, and only then fetches it on its own connection.</summary>
-    public async Task<string?> OfferFileAsync(string path)
-    {
-        if (!Running) return "Ligação desligada";
-        if (ConnectedPhones == 0) return "Celular desligado";
-        if (Directory.Exists(path)) return "Só arquivos";
-        var info = new FileInfo(path);
-        if (!info.Exists) return "Não encontrado";
-        if (info.Length > MaxFileBytes) return "Máx. 30 MB";
-        lock (_gate)
-            if (_offers.Count >= MaxOffers) return "Espere os outros";
-
-        FileOffer offer;
-        try
-        {
-            offer = await Task.Run(() =>
-            {
-                using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);
-                var hash = Convert.ToHexString(SHA256.HashData(file)).ToLowerInvariant();
-                var after = new FileInfo(path);
-                if (file.Length > MaxFileBytes || after.Length != file.Length) throw new IOException("changed while hashing");
-                return new FileOffer(NewOfferId(), path, Cut(info.Name, 120), file.Length, hash, after.LastWriteTimeUtc);
-            });
-        }
-        catch (Exception ex)
-        {
-            Log.Error("PhoneLink.OfferFile", ex);
-            return "Não deu para ler";
-        }
-        lock (_gate)
-        {
-            if (_offers.Count >= MaxOffers) return "Espere os outros";
-            _offers[offer.Id] = offer;
-        }
-        Broadcast(new JsonObject
-        {
-            ["type"] = "fileOffer", ["id"] = offer.Id, ["name"] = offer.Name, ["size"] = offer.Size, ["sha256"] = offer.Sha256,
-        }.ToJsonString());
-        _ = ExpireLater(offer.Id);
-        return null;
-    }
-
-    async Task ExpireLater(string id)
-    {
-        await Task.Delay(OfferLifetime);
-        EndOffer(id, FileOutcome.Expired);
-    }
-
-    /// <summary>Takes the offer away (the phones drop their prompt) and tells the island how it ended.</summary>
-    void EndOffer(string id, FileOutcome outcome)
-    {
-        FileOffer? offer;
-        lock (_gate)
-            if (!_offers.Remove(id, out offer)) return;
-        Broadcast(new JsonObject { ["type"] = "fileCancel", ["id"] = id }.ToJsonString());
-        _ = _ui.InvokeAsync(() => FileStatus?.Invoke(offer.Name, outcome));
-    }
-
-    void ForgetOffers()
-    {
-        lock (_gate) _offers.Clear();
-    }
-
-    /// <summary>128 random bits as lowercase hex: only phones that heard the offer (inside TLS) know it.</summary>
-    static string NewOfferId() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-
-    /// <summary>A phone that has the token asked for an offered file: one JSON header line, then exactly
-    /// <c>size</c> raw bytes. The phone checks the size and the SHA-256 before it keeps anything.</summary>
-    async Task ServeFile(Peer peer, string? id, CancellationToken cancel)
-    {
-        peer.Fetching = true;
-        FileOffer? offer = null;
-        lock (_gate)
-            if (id != null) _offers.TryGetValue(id, out offer);
-        if (offer == null)
-        {
-            await peer.SendAsync("""{"type":"error","code":"file","message":"Esse envio não vale mais. Mande de novo pelo PC."}""");
-            return;
-        }
-        if (Interlocked.Increment(ref _transfers) > MaxTransfers)
-        {
-            Interlocked.Decrement(ref _transfers);
-            await peer.SendAsync("""{"type":"error","code":"file","message":"O PC já está enviando outros arquivos. Tente de novo daqui a pouco."}""");
-            return;
-        }
-        try
-        {
-            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            limit.CancelAfter(TransferTimeout);
-            await using var file = new FileStream(offer.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            // The hash the phone checks is the one taken when the file was offered.
-            if (file.Length != offer.Size || File.GetLastWriteTimeUtc(offer.Path) != offer.LastWriteUtc)
-            {
-                await peer.SendAsync("""{"type":"error","code":"file","message":"O arquivo mudou no PC depois de oferecido. Mande de novo."}""");
-                return;
-            }
-            _ = _ui.InvokeAsync(() => FileStatus?.Invoke(offer.Name, FileOutcome.Sending));
-            await peer.SendAsync(new JsonObject
-            {
-                ["type"] = "file", ["id"] = offer.Id, ["size"] = offer.Size, ["sha256"] = offer.Sha256,
-            }.ToJsonString());
-            await peer.SendRawAsync(file, offer.Size, limit.Token);
-            // The phone hangs up once it has every byte; the result comes back as fileDone on the link.
-            using var drain = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            drain.CancelAfter(TimeSpan.FromSeconds(30));
-            try { await peer.ReadLineAsync(drain.Token); } catch { }
-        }
-        finally { Interlocked.Decrement(ref _transfers); }
     }
 
     // ───────────────────────── discovery ─────────────────────────
@@ -883,6 +759,26 @@ public sealed class PhoneLink : IDisposable
             try { await Stream.WriteAsync(bytes); await Stream.FlushAsync(); }
             catch { Close(); }
             finally { _write.Release(); }
+        }
+
+        /// <summary>Exactly <paramref name="size"/> bytes after the last line read (what is left in the buffer first),
+        /// into <paramref name="sink"/> and <paramref name="hash"/>. Throws if the link ends early.</summary>
+        public async Task ReadRawAsync(Stream sink, long size, IncrementalHash hash, CancellationToken cancel)
+        {
+            for (var left = size; left > 0;)
+            {
+                if (_start == _end)
+                {
+                    _start = 0;
+                    _end = await Stream!.ReadAsync(_buffer, cancel);
+                    if (_end == 0) throw new EndOfStreamException("phone hung up mid-file");
+                }
+                var n = (int)Math.Min(left, _end - _start);
+                hash.AppendData(_buffer, _start, n);
+                await sink.WriteAsync(_buffer.AsMemory(_start, n), cancel);
+                _start += n;
+                left -= n;
+            }
         }
 
         /// <summary>Exactly <paramref name="size"/> bytes of <paramref name="source"/>, after the lines already sent.

@@ -543,6 +543,8 @@ public partial class App : Application
         shows.Items.Add(Item("Vídeos (YouTube, Netflix…)", ToggleQuietVideos, !Settings.QuietVideos));
         menu.Items.Add(shows);
         menu.Items.Add(Item("Resumo da semana", ShowRecap));
+        if (_window.PhoneReady)
+            menu.Items.Add(Item("Mandar o que copiei pro celular", _window.SendClipboardToPhone));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Iniciar com o Windows", ToggleStartup, StartupRegistration.IsEnabled));
         menu.Items.Add(Item("Conectar Copilot (VS Code)", ToggleCopilotHooks, CopilotConnected));

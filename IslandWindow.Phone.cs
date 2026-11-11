@@ -29,6 +29,9 @@ public partial class IslandWindow
             _phone.PhoneJoined += OnPhoneJoined;
             _phone.PhonesChanged += UpdatePhoneSend;
             _phone.FileStatus += OnPhoneFile;
+            _phone.IncomingOffer += OnPhoneIncoming;
+            _phone.IncomingText += OnPhoneText;
+            _phone.IncomingDone += OnPhoneIncomingDone;
         }
         _phone.SetRelay(_settings.PhoneRelay);
         if (_phone.Running) return;
@@ -143,11 +146,13 @@ public partial class IslandWindow
     /// <summary>A phone is connected and sending is on: the drop hint gets its "celular" side and tray items a button.</summary>
     bool CanSendToPhone => _settings.PhoneLink && _settings.PhoneFiles && _phone?.Running == true && _phone.ConnectedPhones > 0;
 
+    public bool PhoneReady => CanSendToPhone;
+
     public void UpdatePhoneSend() =>
         Resources["PhoneSendVisibility"] = CanSendToPhone ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
-    /// <summary>Offers each file to the phone; the island says what happened. Folders and big files are refused here
-    /// (and again on the phone).</summary>
+    /// <summary>Offers the files to the phone as one batch (one Aceitar there); the island says what happened.
+    /// Folders and big files are refused here (and again on the phone).</summary>
     public async void SendToPhone(IReadOnlyList<string> paths)
     {
         if (_phone == null || !CanSendToPhone)
@@ -155,31 +160,131 @@ public partial class IslandWindow
             ShowInfo("\uE8EA", "Nenhum celular conectado", "", glyphColor: Meter.Red, seconds: 3);
             return;
         }
-        var offered = 0;
-        foreach (var path in paths)
-        {
-            var name = System.IO.Path.GetFileName(path.TrimEnd('\\', '/'));
-            if (await _phone.OfferFileAsync(path) is { } error)
-            {
-                ShowInfo("\uE8EA", name, error, glyphColor: Meter.Red, seconds: 3);
-                return;
-            }
-            offered++;
-        }
-        if (offered > 0)
-            ShowInfo("\uE8EA", offered == 1 ? System.IO.Path.GetFileName(paths[0].TrimEnd('\\', '/')) : $"{offered} arquivos",
-                "Aceite no celular", seconds: 3);
+        var label = paths.Count == 1 ? System.IO.Path.GetFileName(paths[0].TrimEnd('\\', '/')) : $"{paths.Count} arquivos";
+        if (await _phone.OfferFilesAsync(paths) is { } error)
+            ShowInfo("\uE8EA", label, error, glyphColor: Meter.Red, seconds: 3);
+        else
+            ShowInfo("\uE8EA", label, "Aceite no celular", seconds: 3);
     }
 
-    void OnPhoneFile(string name, PhoneLink.FileOutcome outcome)
+    public void SendTextToPhone(string text)
+    {
+        if (_phone == null || !CanSendToPhone)
+        {
+            ShowInfo("\uE8EA", "Nenhum celular conectado", "", glyphColor: Meter.Red, seconds: 3);
+            return;
+        }
+        if (_phone.SendText(text) is { } error) ShowInfo("\uE8C8", "Texto", error, glyphColor: Meter.Red, seconds: 3);
+        else ShowInfo("\uE8C8", Preview(text), "No celular", glyphColor: AgentSession.Done);
+    }
+
+    /// <summary>Whatever is in the clipboard: files, an image (as a PNG) or text.</summary>
+    public void SendClipboardToPhone()
+    {
+        try
+        {
+            if (System.Windows.Clipboard.GetData(System.Windows.DataFormats.FileDrop) is string[] { Length: > 0 } files)
+                SendToPhone(files);
+            else if (System.Windows.Clipboard.ContainsImage() && System.Windows.Clipboard.GetImage() is { } image)
+                SendToPhone([SaveClipboardImage(image)]);
+            else if (System.Windows.Clipboard.ContainsText())
+                SendTextToPhone(System.Windows.Clipboard.GetText());
+            else
+                ShowInfo("\uE8C8", "Nada copiado para enviar", "", seconds: 2);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("SendClipboardToPhone", ex);
+            ShowInfo("\uE8C8", "Não deu para ler o que foi copiado", "", glyphColor: Meter.Red, seconds: 3);
+        }
+    }
+
+    // A screenshot in the clipboard goes as a PNG from a temp folder only this user can read.
+    static string SaveClipboardImage(System.Windows.Media.Imaging.BitmapSource image)
+    {
+        var folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Dynamic Island");
+        Directory.CreateDirectory(folder);
+        foreach (var old in Directory.GetFiles(folder, "imagem-*.png"))
+            if (File.GetLastWriteTime(old) < DateTime.Now.AddHours(-1)) try { File.Delete(old); } catch { }
+        var path = System.IO.Path.Combine(folder, $"imagem-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+        using (var stream = File.Create(path)) encoder.Save(stream);
+        return path;
+    }
+
+    static string Preview(string text)
+    {
+        var line = string.Join(' ', text.Split((char[])['\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
+        return line.Length > 60 ? line[..60] + "…" : line;
+    }
+
+    void OnPhoneFile(string label, PhoneLink.FileOutcome outcome)
     {
         switch (outcome)
         {
-            case PhoneLink.FileOutcome.Sending: ShowInfo("\uE8EA", name, "Enviando…", seconds: 3); break;
-            case PhoneLink.FileOutcome.Received: ShowInfo("\uE73E", name, "No celular", glyphColor: AgentSession.Done); break;
-            case PhoneLink.FileOutcome.Declined: ShowInfo("\uE8EA", name, "Recusado"); break;
-            case PhoneLink.FileOutcome.Failed: ShowInfo("\uE8EA", name, "Falhou", glyphColor: Meter.Red, seconds: 3); break;
-            case PhoneLink.FileOutcome.Expired: ShowInfo("\uE8EA", name, "Não aceito"); break;
+            case PhoneLink.FileOutcome.Sending: ShowInfo("\uE8EA", label, "Enviando…", seconds: 3); break;
+            case PhoneLink.FileOutcome.Received: ShowInfo("\uE73E", label, "No celular", glyphColor: AgentSession.Done); break;
+            case PhoneLink.FileOutcome.Declined: ShowInfo("\uE8EA", label, "Recusado"); break;
+            case PhoneLink.FileOutcome.Failed: ShowInfo("\uE8EA", label, "Falhou", glyphColor: Meter.Red, seconds: 3); break;
+            case PhoneLink.FileOutcome.Expired: ShowInfo("\uE8EA", label, "Não aceito"); break;
         }
     }
+
+    // The phone wants to send something: one click on the pill accepts; ignoring it declines (after 45 s).
+    void OnPhoneIncoming(PhoneIncoming offer)
+    {
+        if (_phone == null || SnapshotMode) return;
+        var phone = _phone;
+        if (!_settings.PhoneFiles)
+        {
+            phone.DeclineIncoming(offer.Id);
+            return;
+        }
+        if (offer.Text != null)
+        {
+            ShowInfo("\uE8C8", "Texto do celular: " + Preview(offer.Text), "Clique p/ copiar", action: () =>
+            {
+                if (!phone.AcceptIncoming(offer.Id)) return;
+                CopyFromPhone(offer.Text);
+            }, seconds: 30);
+            return;
+        }
+        var what = offer.Items.Count == 1 ? offer.Items[0].IsText ? "um texto longo" : offer.Items[0].Name : $"{offer.Items.Count} arquivos";
+        ShowInfo("\uE896", $"{offer.Device} quer mandar {what} ({SizeText(offer.TotalBytes)})", "Clique p/ aceitar",
+            action: () => phone.AcceptIncoming(offer.Id), seconds: 30);
+    }
+
+    void OnPhoneText(string text) => CopyFromPhone(text);
+
+    void CopyFromPhone(string text)
+    {
+        try
+        {
+            System.Windows.Clipboard.SetText(text);
+            ShowInfo("\uE8C8", Preview(text), "Copiado do celular", glyphColor: AgentSession.Done);
+        }
+        catch { ShowInfo("\uE8C8", "Não deu para copiar o texto", "", glyphColor: Meter.Red, seconds: 3); }
+    }
+
+    // Saved in Downloads\Dynamic Island; the click shows it in Explorer (it is never opened by itself).
+    void OnPhoneIncomingDone(string label, string? first, bool ok)
+    {
+        if (!ok)
+        {
+            ShowInfo("\uE896", label, "Falhou", glyphColor: Meter.Red, seconds: 3);
+            return;
+        }
+        ShowInfo("\uE896", label, "Recebido", glyphColor: AgentSession.Done, action: () =>
+        {
+            try
+            {
+                System.Diagnostics.Process.Start("explorer.exe", first != null ? $"/select,\"{first}\"" : $"\"{PhoneLink.ReceiveFolder}\"");
+            }
+            catch { }
+        }, seconds: 5);
+    }
+
+    static string SizeText(long bytes) =>
+        bytes < 1024 * 1024 ? $"{Math.Max(1, bytes / 1024)} KB" : $"{bytes / (1024.0 * 1024.0):0.#} MB";
 }

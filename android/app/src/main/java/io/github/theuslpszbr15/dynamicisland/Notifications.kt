@@ -40,8 +40,8 @@ object Notifications {
             }
         )
         manager.createNotificationChannel(
-            NotificationChannel(FILE_CHANNEL, "Arquivos do PC", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Quando o PC quer mandar um arquivo (você aceita antes de receber)"
+            NotificationChannel(FILE_CHANNEL, "Arquivos e textos", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Arquivos e textos entre o PC e o celular (você aceita antes de receber)"
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             }
         )
@@ -177,21 +177,24 @@ object Notifications {
     }
 
     /** "O PC quer mandar foto.jpg (2,4 MB)" with Recusar / Aceitar. Nothing is downloaded before Aceitar, which
-     * asks to unlock the phone first; the lock screen shows only that a file is waiting, never its name. */
+     * asks to unlock the phone first; the lock screen shows only that something is waiting, never its name. */
     fun showFileOffer(context: Context, offer: FileOffer) {
         if (!canNotify(context)) return
         val accept = NotificationCompat.Action.Builder(0, "Aceitar", fileAction(context, DenyReceiver.ACTION_ACCEPT_FILE, offer.id))
             .setAuthenticationRequired(true)
             .build()
+        val title = if (offer.isText) "O PC quer mandar um texto longo" else "O PC quer mandar ${if (offer.items.size == 1) "um arquivo" else "${offer.items.size} arquivos"}"
+        val names = offer.items.take(5).joinToString(", ") { it.name } + if (offer.items.size > 5) "…" else ""
         val public = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
-            .setContentTitle("O PC quer mandar um arquivo")
+            .setContentTitle("O PC quer mandar algo")
             .build()
         val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
             .setColor(0xFF0A84FF.toInt())
-            .setContentTitle("O PC quer mandar um arquivo")
-            .setContentText("${offer.name} (${sizeText(offer.size)})")
+            .setContentTitle(title)
+            .setContentText(if (offer.isText) sizeText(offer.totalBytes) else "$names (${sizeText(offer.totalBytes)})")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(if (offer.isText) sizeText(offer.totalBytes) else "$names (${sizeText(offer.totalBytes)})"))
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -205,52 +208,80 @@ object Notifications {
         NotificationManagerCompat.from(context).notify(fileId(offer.id), notification)
     }
 
-    fun showFileProgress(context: Context, offer: FileOffer, percent: Int) {
+    /** A short text from the PC: shown (privately) with "Copiar"; copying needs the phone unlocked. */
+    fun showText(context: Context, id: String, text: String) {
+        if (!canNotify(context)) return
+        val copy = NotificationCompat.Action.Builder(0, "Copiar", fileAction(context, DenyReceiver.ACTION_COPY_TEXT, id))
+            .setAuthenticationRequired(true)
+            .build()
+        val public = NotificationCompat.Builder(context, FILE_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_bit)
+            .setContentTitle("O PC mandou um texto")
+            .build()
+        val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_bit)
+            .setColor(0xFF0A84FF.toInt())
+            .setContentTitle("O PC mandou um texto")
+            .setContentText(text.take(200))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text.take(1000)))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(public)
+            .setTimeoutAfter(FileOffer.WINDOW_MS)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, null))
+            .addAction(copy)
+            .build()
+        NotificationManagerCompat.from(context).notify(fileId(id), notification)
+    }
+
+    /** [percent] -1: still waiting (no bar to fill yet). */
+    fun showFileProgress(context: Context, id: String, title: String, text: String, percent: Int) {
         if (!canNotify(context)) return
         val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Recebendo do PC")
-            .setContentText(offer.name)
-            .setProgress(100, percent, false)
+            .setSmallIcon(if (title.startsWith("Receb")) android.R.drawable.stat_sys_download else android.R.drawable.stat_sys_upload)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setProgress(100, maxOf(percent, 0), percent < 0)
             .setOngoing(true)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .build()
-        NotificationManagerCompat.from(context).notify(fileId(offer.id), notification)
+        NotificationManagerCompat.from(context).notify(fileId(id), notification)
     }
 
-    /** Tapping it opens the file with whatever app handles it (Android asks first for anything it would install). */
-    fun showFileSaved(context: Context, offer: FileOffer, uri: Uri, mime: String) {
+    /** Done; with [uri], tapping opens it with whatever app handles it (Android asks first for anything it would install). */
+    fun showTransferDone(context: Context, id: String, title: String, text: String, uri: Uri?, mime: String?) {
         if (!canNotify(context)) return
-        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        val open = PendingIntent.getActivity(context, offer.id.hashCode(), view,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
+        val builder = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
             .setColor(0xFF30D158.toInt())
-            .setContentTitle("Recebido do PC")
-            .setContentText("${offer.name} · Downloads/${FileReceiver.FOLDER}")
+            .setContentTitle(title)
+            .setContentText(text)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
-            .setContentIntent(open)
-            .build()
-        NotificationManagerCompat.from(context).notify(fileId(offer.id), notification)
+            .setTimeoutAfter(if (uri == null) 8_000 else 0)
+        if (uri != null) {
+            val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            builder.setContentIntent(PendingIntent.getActivity(context, id.hashCode(), view,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        }
+        NotificationManagerCompat.from(context).notify(fileId(id), builder.build())
     }
 
-    fun showFileFailed(context: Context, offer: FileOffer, reason: String) {
+    fun showFileFailed(context: Context, id: String, title: String, reason: String) {
         if (!canNotify(context)) return
         val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
             .setColor(0xFFFF453A.toInt())
-            .setContentTitle("Não deu para receber ${offer.name}")
+            .setContentTitle(title)
             .setContentText(reason)
             .setStyle(NotificationCompat.BigTextStyle().bigText(reason))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
             .build()
-        NotificationManagerCompat.from(context).notify(fileId(offer.id), notification)
+        NotificationManagerCompat.from(context).notify(fileId(id), notification)
     }
 
     fun cancelFile(context: Context, id: String) = NotificationManagerCompat.from(context).cancel(fileId(id))

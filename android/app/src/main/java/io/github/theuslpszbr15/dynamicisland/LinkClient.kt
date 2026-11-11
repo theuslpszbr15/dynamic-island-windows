@@ -44,45 +44,6 @@ data class TrayItem(val id: String, val name: String, val kind: String, val icon
     override fun hashCode() = id.hashCode()
 }
 
-/**
- * A file the PC offers. Only its name, size and SHA-256 come with the offer; the bytes come on a connection of
- * their own once the person accepts. [name] is already safe to save (see [FileOffer.safeName]).
- */
-data class FileOffer(val id: String, val name: String, val size: Long, val sha256: String, val receivedAt: Long) {
-    companion object {
-        /** The PC refuses bigger files too; anything above is not a valid offer. */
-        const val MAX_BYTES = 30L * 1024 * 1024
-        /** The PC drops an offer after 10 minutes. */
-        const val WINDOW_MS = 9 * 60_000L
-        private val ID = Regex("^[0-9a-f]{32}$")
-        private val SHA = Regex("^[0-9a-f]{64}$")
-
-        fun parse(o: JSONObject, now: Long = System.currentTimeMillis()): FileOffer? {
-            val id = o.optString("id")
-            val sha = o.optString("sha256")
-            val size = o.optLong("size", -1)
-            if (!ID.matches(id) || !SHA.matches(sha) || size !in 0..MAX_BYTES) return null
-            return FileOffer(id, safeName(o.optString("name")), size, sha, now)
-        }
-
-        /** Just a file name: no folders, no control, reserved or direction characters, no leading dots, at most 100 chars
-         * (keeping the extension). The PC only sends names, but the phone doesn't take that on trust. */
-        fun safeName(raw: String): String {
-            var name = raw.substringAfterLast('/').substringAfterLast('\\')
-                // also the invisible direction marks that can make "gpj.apk" read as "kpa.jpg"
-                .filter { it >= ' ' && it != '\u007f' && it !in "<>:\"|?*" && it !in '\u200e'..'\u200f' &&
-                    it !in '\u202a'..'\u202e' && it !in '\u2066'..'\u2069' }
-                .trim().trimStart('.').trim()
-            if (name.length > 100) {
-                val dot = name.lastIndexOf('.')
-                val ext = if (dot > 0 && name.length - dot <= 10) name.substring(dot) else ""
-                name = name.take(100 - ext.length).trimEnd() + ext
-            }
-            return name.ifEmpty { "arquivo" }
-        }
-    }
-}
-
 /** The PC wouldn't hand over the file (expired, busy, changed); [message] is for the person. */
 class FileRefusedException(message: String) : IOException(message)
 
@@ -110,8 +71,12 @@ class LinkClient(
         fun onPong() {}
         /** The PC said which relay to use (null: none); only ever heard inside the pinned TLS. */
         fun onRelay(relay: String?, relayKey: String?) {}
-        /** The PC wants to send a file; nothing is downloaded until the person accepts. */
+        /** The PC wants to send files; nothing is downloaded until the person accepts. */
         fun onFileOffer(offer: FileOffer) {}
+        /** A short text from the PC (shown with "Copiar"). */
+        fun onText(id: String, text: String) {}
+        /** The PC answered something the phone offered (accepted: send it now). */
+        fun onSendAnswer(id: String, accepted: Boolean) {}
         /** The offer is gone (taken, declined elsewhere, expired). */
         fun onFileCancel(id: String) {}
     }
@@ -175,49 +140,118 @@ class LinkClient(
                 "pong" -> listener.onPong()
                 "fileOffer" -> FileOffer.parse(o)?.let(listener::onFileOffer)
                 "fileCancel" -> listener.onFileCancel(o.optString("id"))
+                "text" -> {
+                    val text = o.optString("text")
+                    if (FileOffer.isId(o.optString("id")) && text.isNotEmpty() && text.length <= FileOffer.INLINE_TEXT_CHARS)
+                        listener.onText(o.optString("id"), text)
+                }
+                "sendAccept", "sendDecline" -> if (FileOffer.isId(o.optString("id")))
+                    listener.onSendAnswer(o.optString("id"), o.optString("type") == "sendAccept")
+            }
+        }
+    }
+
+    /** Where [fetch] puts each item: [open] a stream, then [keep] it once its size and hash check out, or [drop] it. */
+    interface Sink {
+        fun open(index: Int, item: OfferItem): OutputStream
+        fun keep(index: Int, item: OfferItem)
+        fun drop(index: Int, item: OfferItem)
+        fun progress(done: Long) {}
+    }
+
+    /** Something the phone sends: what the PC accepted, and how to read it again. */
+    class Outgoing(val item: OfferItem, val open: () -> InputStream)
+
+    /**
+     * Downloads an accepted batch on a connection of its own (same route, same pinned certificate, the token in a
+     * "fetch" line instead of the hello). Every item must come with the size and SHA-256 from the offer, or it
+     * throws; what was already kept stays, the item in progress is dropped.
+     */
+    fun fetch(offer: FileOffer, sink: Sink) = transfer("fetch", offer.id) { link, input ->
+        var done = 0L
+        offer.items.forEachIndexed { index, item ->
+            val header = JSONObject(readLine(input) ?: throw EOFException("O PC fechou a conexão"))
+            when (header.optString("type")) {
+                "file" -> {}
+                "error" -> throw refusal(header)
+                else -> throw IOException("Resposta inesperada do PC")
+            }
+            if (header.optString("id") != offer.id || header.optInt("index", -1) != index || header.optLong("size", -1) != item.size ||
+                header.optString("sha256") != item.sha256) throw IOException("O PC mandou outro arquivo")
+            val out = sink.open(index, item)
+            var kept = false
+            try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(64 * 1024)
+                var left = item.size
+                while (left > 0) {
+                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                    if (n == -1) throw EOFException("A conexão caiu no meio do arquivo")
+                    digest.update(buffer, 0, n)
+                    out.write(buffer, 0, n)
+                    left -= n
+                    done += n
+                    sink.progress(done)
+                }
+                out.flush()
+                out.close()
+                if (!MessageDigest.isEqual(hex(digest.digest()).toByteArray(), item.sha256.toByteArray()))
+                    throw IOException("O arquivo chegou diferente do que o PC ofereceu")
+                sink.keep(index, item)
+                kept = true
+            } finally {
+                if (!kept) { try { out.close() } catch (_: Exception) {}; sink.drop(index, item) }
             }
         }
     }
 
     /**
-     * Downloads an accepted [offer] on a connection of its own (same route, same pinned certificate, the token in
-     * a "fetch" line instead of the hello), writing it to [sink]. The size and SHA-256 must be the ones from the
-     * offer, or it throws and the caller throws the bytes away. [progress] gets the bytes so far.
+     * Sends a batch the PC accepted (sendAccept) on a connection of its own: "push", the PC answers "ready", then per
+     * item a header and exactly its bytes; the PC checks each size and SHA-256 and answers "saved".
      */
-    fun fetch(offer: FileOffer, sink: OutputStream, progress: (Long) -> Unit = {}) {
+    fun push(id: String, items: List<Outgoing>, progress: (Long) -> Unit = {}) = transfer("push", id) { link, input ->
+        val ready = JSONObject(readLine(input) ?: throw EOFException("O PC fechou a conexão"))
+        when (ready.optString("type")) {
+            "ready" -> {}
+            "error" -> throw refusal(ready)
+            else -> throw IOException("Resposta inesperada do PC")
+        }
+        val out = link.output
+        var done = 0L
+        val buffer = ByteArray(16 * 1024)
+        items.forEachIndexed { index, o ->
+            send(JSONObject().put("type", "file").put("index", index).put("size", o.item.size).put("sha256", o.item.sha256))
+            o.open().use { source ->
+                var left = o.item.size
+                while (left > 0) {
+                    val n = source.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                    if (n == -1) throw EOFException("O arquivo acabou antes do esperado")
+                    synchronized(writeLock) { out.write(buffer, 0, n) }
+                    left -= n
+                    done += n
+                    progress(done)
+                }
+            }
+            synchronized(writeLock) { out.flush() }
+        }
+        val saved = JSONObject(readLine(input) ?: throw EOFException("O PC fechou a conexão antes de confirmar"))
+        if (saved.optString("type") != "saved" || !saved.optBoolean("ok")) throw IOException("O PC não conseguiu guardar os arquivos")
+    }
+
+    private fun refusal(o: JSONObject): IOException =
+        if (o.optString("code") == "auth") AuthException(o.optString("message"))
+        else FileRefusedException(o.optString("message").take(200).ifEmpty { "O PC recusou o envio." })
+
+    /** A second connection for one batch, opened exactly like the link and closed when [body] ends. */
+    private fun transfer(type: String, id: String, body: (Pipe, InputStream) -> Unit) {
         val context = SSLContext.getInstance("TLS")
         context.init(null, arrayOf(PinningTrustManager(pairing.fingerprint)), SecureRandom())
         val link = if (route == Route.Lan) openLan(context) else openRelay(context)
         try {
             output = link.output
-            send(JSONObject().put("type", "fetch").put("v", 1).put("token", pairing.token).put("id", offer.id))
+            send(JSONObject().put("type", type).put("v", 1).put("token", pairing.token).put("id", id))
             link.setReadTimeout(FETCH_READ_TIMEOUT_MS)
-            val input = link.input
-            val header = JSONObject(readLine(input) ?: throw EOFException("O PC fechou a conexão"))
-            when (header.optString("type")) {
-                "file" -> {}
-                "error" -> if (header.optString("code") == "auth") throw AuthException(header.optString("message"))
-                    else throw FileRefusedException(header.optString("message").take(200).ifEmpty { "O PC recusou o envio." })
-                else -> throw IOException("Resposta inesperada do PC")
-            }
-            if (header.optString("id") != offer.id || header.optLong("size", -1) != offer.size ||
-                header.optString("sha256") != offer.sha256) throw IOException("O PC mandou outro arquivo")
-
-            val digest = MessageDigest.getInstance("SHA-256")
-            val buffer = ByteArray(64 * 1024)
-            var left = offer.size
-            while (left > 0) {
-                val n = input.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
-                if (n == -1) throw EOFException("A conexão caiu no meio do arquivo")
-                digest.update(buffer, 0, n)
-                sink.write(buffer, 0, n)
-                left -= n
-                progress(offer.size - left)
-            }
-            sink.flush()
-            val actual = digest.digest().joinToString("") { "%02x".format(it) }
-            if (!MessageDigest.isEqual(actual.toByteArray(), offer.sha256.toByteArray()))
-                throw IOException("O arquivo chegou diferente do que o PC ofereceu")
+            body(link, link.input)
         } finally {
             closed = true
             try { link.close() } catch (_: Exception) {}
@@ -263,8 +297,17 @@ class LinkClient(
 
     fun declineFile(id: String) = send(JSONObject().put("type", "fileDecline").put("id", id))
 
-    /** Tells the PC whether the file arrived whole (saved) or not. */
+    /** Tells the PC whether the files arrived whole (saved) or not. */
     fun fileDone(id: String, ok: Boolean) = send(JSONObject().put("type", "fileDone").put("id", id).put("ok", ok))
+
+    /** Asks the PC to accept files (names, sizes, hashes); it answers sendAccept / sendDecline. */
+    fun sendOffer(id: String, items: List<OfferItem>) = send(JSONObject().put("type", "sendOffer").put("id", id)
+        .put("items", org.json.JSONArray().apply {
+            items.forEach { put(JSONObject().put("name", it.name).put("size", it.size).put("sha256", it.sha256).apply { if (it.isText) put("text", true) }) }
+        }))
+
+    /** Asks the PC to accept a short text (it goes along; the PC copies it once the person clicks). */
+    fun sendText(id: String, text: String) = send(JSONObject().put("type", "sendOffer").put("id", id).put("text", text))
 
     private fun send(message: JSONObject) {
         synchronized(writeLock) {
@@ -304,8 +347,9 @@ class LinkClient(
         const val MAX_LINE = 64 * 1024
         const val MAX_COMMAND = 500
 
-        fun sha256Hex(bytes: ByteArray): String =
-            MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        fun sha256Hex(bytes: ByteArray): String = hex(MessageDigest.getInstance("SHA-256").digest(bytes))
+
+        fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
     }
 }
 

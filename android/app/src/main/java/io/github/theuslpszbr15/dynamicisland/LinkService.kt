@@ -48,6 +48,7 @@ class LinkService : Service() {
                 scheduleWithFixedDelay(::tryLanAgain, LAN_CHECK_MS, LAN_CHECK_MS, TimeUnit.MILLISECONDS)
             }
             watchNetwork()
+            FileSender.cleanUp(this)
         }
         return START_STICKY
     }
@@ -187,6 +188,10 @@ class LinkService : Service() {
             Link.update { s -> s.copy(files = s.files.filterNot { it.id == offer.id } + offer) }
             Notifications.showFileOffer(this@LinkService, offer)
         }
+
+        override fun onText(id: String, text: String) = Link.textFromPc(this@LinkService, id, text)
+
+        override fun onSendAnswer(id: String, accepted: Boolean) = FileSender.answered(this@LinkService, id, accepted)
 
         override fun onFileCancel(id: String) {
             if (Link.state.value.files.none { it.id == id }) return

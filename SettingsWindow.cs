@@ -551,8 +551,9 @@ public sealed class SettingsWindow : Window
         page.Children.Add(Card("No celular",
             Toggle("Bandeja de arquivos no celular", "O celular vê os itens fixados na bandeja da ilha e pode abri-los neste PC (pede sua digital).",
                 S.PhoneTray, _ => _app.TogglePhoneTray()),
-            Toggle("Enviar arquivos pro celular", "Solte um arquivo no lado \"celular\" da ilha (ou use o botão no item da bandeja). " +
-                   "O celular pergunta antes de receber; até 30 MB, criptografado de ponta a ponta.",
+            Toggle("Arquivos e textos com o celular", "Solte arquivos ou texto no lado \"celular\" da ilha, use o botão no item da bandeja " +
+                   "ou \"Mandar o que copiei pro celular\" no menu. Do celular, use Compartilhar → Dynamic Island: a ilha pergunta antes, " +
+                   "e tudo vai para Downloads\\Dynamic Island. Até 30 MB por arquivo (vídeo 60 MB), criptografado de ponta a ponta.",
                 S.PhoneFiles, _ => _app.TogglePhoneFiles()),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
     }
