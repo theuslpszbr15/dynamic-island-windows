@@ -159,6 +159,14 @@ public partial class App : Application
         if (Settings.PhoneLink) ShowPhonePairing();
     }
 
+    /// <summary>Saves the relay (already checked with PhoneLink.NormalizeRelay, or "" for off) and reconnects.</summary>
+    public void SetPhoneRelay(string relay)
+    {
+        Settings.PhoneRelay = relay;
+        Settings.Save();
+        _window.ApplyPhoneLink();
+    }
+
     public void ShowPhonePairing()
     {
         if (!Settings.PhoneLink)

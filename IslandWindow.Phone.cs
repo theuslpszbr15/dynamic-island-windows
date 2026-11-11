@@ -26,6 +26,7 @@ public partial class IslandWindow
             _phone.Decision += OnPhoneDecision;
             _phone.Open += OnPhoneOpen;
         }
+        _phone.SetRelay(_settings.PhoneRelay);
         if (_phone.Running) return;
         try { _phone.Start(); PhoneError = null; }
         catch (Exception ex)

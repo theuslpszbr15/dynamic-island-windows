@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -23,15 +24,20 @@ public sealed record PhoneTrayItem(string Id, string Name, string Kind, string? 
 /// Opt-in link to the Android app over the local network: TLS with a self-signed certificate the phone pins
 /// at pairing (QR code), a shared token, newline-delimited JSON. The phone can Allow/Deny only the exact
 /// request the island is still waiting on. Off: nothing listens.
+/// Away from home the same TLS stream can also run through a blind relay on the web (see relay/): the PC keeps
+/// a control WebSocket in a room named after the token, and each phone that joins gets its own data WebSocket,
+/// carrying the raw TLS bytes. The relay never sees the token or anything inside TLS.
 /// </summary>
 public sealed class PhoneLink : IDisposable
 {
     public const int Version = 1;
     public const int DefaultPort = 47900;
     // MaxPeers counts paired phones; connections still in the TLS/hello stage have their own small budget (and
-    // per address), so someone on the network opening sockets can't lock the real phone out.
-    const int MaxLine = 64 * 1024, MaxPeers = 6, MaxPending = 4, MaxPendingPerAddress = 2;
+    // per address), so someone on the network opening sockets can't lock the real phone out. Connections from the
+    // relay have no address and a budget of their own.
+    const int MaxLine = 64 * 1024, MaxPeers = 6, MaxPending = 4, MaxPendingPerAddress = 2, MaxPendingRelay = 4;
     static readonly TimeSpan HelloTimeout = TimeSpan.FromSeconds(10), IdleTimeout = TimeSpan.FromMinutes(20);
+    static readonly TimeSpan RelayPing = TimeSpan.FromSeconds(20), RelayMaxBackoff = TimeSpan.FromSeconds(60);
 
     static string SecretFile => Path.Combine(IslandSettings.Folder, "phone-link.bin");
 
@@ -54,6 +60,13 @@ public sealed class PhoneLink : IDisposable
     public int Port { get; private set; }
     public string Fingerprint => _cert == null ? "" : Convert.ToHexString(SHA256.HashData(_cert.RawData)).ToLowerInvariant();
     public int ConnectedPhones { get { lock (_gate) return _peers.Count(p => p.Authenticated); } }
+
+    /// <summary>The relay origin (wss://host), or "" when off.</summary>
+    public string Relay { get; private set; } = "";
+    /// <summary>The control WebSocket to the relay is open.</summary>
+    public bool RelayConnected { get; private set; }
+    CancellationTokenSource? _relayCts;
+    int _relayGeneration;
 
     /// <summary>Raised on the UI thread: (fingerprint, "allow" | "deny").</summary>
     public event Action<string, string>? Decision;
@@ -81,10 +94,21 @@ public sealed class PhoneLink : IDisposable
         _cts = new CancellationTokenSource();
         _ = AcceptLoop(_listener, _cts.Token);
         StartDiscovery(_cts.Token);
+        RestartRelay();
+    }
+
+    /// <summary>Sets the relay (any form <see cref="NormalizeRelay"/> accepts; "" turns it off) and reconnects.</summary>
+    public void SetRelay(string? relay)
+    {
+        var normalized = NormalizeRelay(relay) ?? "";
+        if (normalized == Relay) return;
+        Relay = normalized;
+        if (Running) RestartRelay();
     }
 
     public void Stop()
     {
+        StopRelay();
         _cts?.Cancel();
         _listener?.Stop();
         _listener = null;
@@ -114,14 +138,37 @@ public sealed class PhoneLink : IDisposable
             foreach (var peer in _peers) peer.Close();
             _peers.Clear();
         }
+        if (Running) RestartRelay(); // the room comes from the token: the old one is left
         PhonesChanged?.Invoke();
     }
 
-    public string PairingLink()
+    public string PairingLink() =>
+        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay);
+
+    /// <summary>The QR code's link. <paramref name="relay"/> ("" = none) is added as an optional parameter.</summary>
+    public static string BuildPairingLink(string host, int port, string fingerprint, string token, string name, string relay) =>
+        $"dynamicisland://pair?v={Version}&host={host}&port={port}&fp={fingerprint}&token={token}" +
+        $"&name={Uri.EscapeDataString(name)}" +
+        (relay.Length > 0 ? $"&relay={Uri.EscapeDataString(relay)}" : "");
+
+    /// <summary>The relay room for a pairing token: lowercase hex SHA-256 of "dynamicisland-room|" + token.
+    /// Only someone with the token can find the room, and the room name doesn't reveal the token.</summary>
+    public static string RoomId(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("dynamicisland-room|" + token))).ToLowerInvariant();
+
+    /// <summary>A relay as its origin "wss://hostname" (lowercase, no port, path, query or user info), or null if
+    /// it isn't one. "relay.example.com" alone means wss://; ws:// and http(s):// are refused, a trailing "/" is fine.
+    /// Empty input is null too.</summary>
+    public static string? NormalizeRelay(string? input)
     {
-        var host = LocalAddress() ?? "127.0.0.1";
-        return $"dynamicisland://pair?v={Version}&host={host}&port={Port}&fp={Fingerprint}&token={_token}" +
-               $"&name={Uri.EscapeDataString(Environment.MachineName)}";
+        var text = input?.Trim() ?? "";
+        if (text.Length == 0 || text.Length > 253 + 6) return null;
+        if (!text.Contains("://")) text = "wss://" + text;
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) || uri.Scheme != "wss") return null;
+        if (uri.UserInfo.Length > 0 || !uri.IsDefaultPort || uri.Query.Length > 0 || uri.Fragment.Length > 0
+            || uri.AbsolutePath != "/" || uri.HostNameType != UriHostNameType.Dns) return null;
+        if (text.TrimEnd('/').Count(c => c == '/') != 2) return null; // "wss://host/" at most
+        return "wss://" + uri.IdnHost.ToLowerInvariant();
     }
 
     // ───────────────────────── state sent to phones ─────────────────────────
@@ -195,30 +242,37 @@ public sealed class PhoneLink : IDisposable
             catch { return; }
             var remote = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
             bool full;
+            // The "local network only" rule is for this listener: relay connections come in through RelayLoop.
+            Peer? peer = null;
             lock (_gate)
             {
-                var pending = _peers.Where(p => !p.Authenticated).ToList();
+                var pending = _peers.Where(p => !p.Authenticated && !p.Relay).ToList();
                 full = _peers.Count(p => p.Authenticated) >= MaxPeers || pending.Count >= MaxPending
                        || (remote != null && pending.Count(p => remote.Equals(p.Address)) >= MaxPendingPerAddress);
+                if (remote != null && IsLocal(remote) && !full)
+                {
+                    peer = new Peer(client.GetStream(), remote, client, relay: false);
+                    _peers.Add(peer);
+                }
             }
-            if (remote == null || !IsLocal(remote) || full)
+            if (peer == null)
             {
                 client.Dispose();
                 continue;
             }
-            _ = Serve(client, cancel);
+            _ = Serve(peer, cancel);
         }
     }
 
-    async Task Serve(TcpClient client, CancellationToken cancel)
+    /// <summary>One phone, over the LAN or the relay: TLS as server, the hello with the token, then the session.
+    /// The peer is already in _peers.</summary>
+    async Task Serve(Peer peer, CancellationToken cancel)
     {
-        var peer = new Peer(client);
-        lock (_gate) _peers.Add(peer);
         try
         {
             using var hello = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             hello.CancelAfter(HelloTimeout);
-            var ssl = new SslStream(client.GetStream(), false);
+            var ssl = new SslStream(peer.Raw, false);
             peer.Stream = ssl;
             await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
             {
@@ -246,6 +300,7 @@ public sealed class PhoneLink : IDisposable
             await peer.SendAsync(new JsonObject
             {
                 ["type"] = "welcome", ["v"] = Version, ["desktop"] = Environment.MachineName, ["os"] = "windows",
+                ["relay"] = Relay, // phones paired before the relay learn it here, without a new QR code
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
@@ -405,9 +460,213 @@ public sealed class PhoneLink : IDisposable
             backup: false);
     }
 
-    sealed class Peer(TcpClient client)
+    // ───────────────────────── relay ─────────────────────────
+
+    void RestartRelay()
     {
-        public IPAddress? Address { get; } = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
+        StopRelay();
+        if (Relay.Length == 0 || _token.Length == 0) return;
+        _relayCts = new CancellationTokenSource();
+        _ = RelayLoop(Relay, RoomId(_token), ++_relayGeneration, _relayCts.Token);
+    }
+
+    void StopRelay()
+    {
+        _relayCts?.Cancel();
+        _relayCts?.Dispose();
+        _relayCts = null;
+        _relayGeneration++;
+        SetRelayConnected(false);
+        lock (_gate)
+        {
+            foreach (var peer in _peers.Where(p => p.Relay).ToList())
+            {
+                peer.Close();
+                _peers.Remove(peer);
+            }
+        }
+    }
+
+    void SetRelayConnected(bool connected)
+    {
+        if (RelayConnected == connected) return;
+        RelayConnected = connected;
+        _ = _ui.InvokeAsync(() => PhonesChanged?.Invoke());
+    }
+
+    /// <summary>Keeps the control WebSocket (wss://host/pc/room) open, reconnecting with backoff. The relay
+    /// sends {"type":"incoming","conn":id} for each phone that joins; each gets its own data socket.</summary>
+    async Task RelayLoop(string relay, string room, int generation, CancellationToken cancel)
+    {
+        var backoff = TimeSpan.FromSeconds(2);
+        var failures = 0;
+        while (!cancel.IsCancellationRequested)
+        {
+            using (var ws = new ClientWebSocket())
+            {
+                ws.Options.KeepAliveInterval = RelayPing;
+                try
+                {
+                    using (var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+                    {
+                        connect.CancelAfter(TimeSpan.FromSeconds(15));
+                        await ws.ConnectAsync(new Uri($"{relay}/pc/{room}"), connect.Token);
+                    }
+                    if (generation == _relayGeneration) SetRelayConnected(true);
+                    backoff = TimeSpan.FromSeconds(2);
+                    failures = 0;
+                    using var pinger = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                    _ = PingLoop(ws, pinger.Token);
+                    try
+                    {
+                        while (ws.State == WebSocketState.Open && !cancel.IsCancellationRequested)
+                        {
+                            var text = await ReceiveText(ws, cancel);
+                            if (text == null) break;
+                            if (text == "pong") continue;
+                            try
+                            {
+                                using var doc = JsonDocument.Parse(text);
+                                if (Str(doc.RootElement, "type") == "incoming" && Str(doc.RootElement, "conn") is { } conn && ValidConn(conn))
+                                    _ = AcceptRelay(relay, room, conn, cancel);
+                            }
+                            catch (JsonException) { } // not for us
+                        }
+                    }
+                    finally { pinger.Cancel(); }
+                }
+                catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return; }
+                catch (Exception ex)
+                {
+                    // One line per outage, not one per retry.
+                    if (failures++ == 0) Log.Error("PhoneLink.Relay", ex);
+                }
+            }
+            if (generation == _relayGeneration) SetRelayConnected(false);
+            try { await Task.Delay(backoff + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 1000)), cancel); }
+            catch (OperationCanceledException) { return; }
+            backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, RelayMaxBackoff.Ticks));
+        }
+    }
+
+    // A text "ping" every 20 s: the relay answers "pong" without waking up, and idle NATs keep the socket.
+    static async Task PingLoop(ClientWebSocket ws, CancellationToken cancel)
+    {
+        var ping = "ping"u8.ToArray();
+        try
+        {
+            while (!cancel.IsCancellationRequested && ws.State == WebSocketState.Open)
+            {
+                await Task.Delay(RelayPing, cancel);
+                await ws.SendAsync(ping, WebSocketMessageType.Text, true, cancel);
+            }
+        }
+        catch { } // the receive loop notices the broken socket
+    }
+
+    static async Task<string?> ReceiveText(ClientWebSocket ws, CancellationToken cancel)
+    {
+        var buffer = new byte[4096];
+        var total = 0;
+        while (true)
+        {
+            var result = await ws.ReceiveAsync(buffer.AsMemory(total), cancel);
+            if (result.MessageType == WebSocketMessageType.Close) return null;
+            total += result.Count;
+            if (result.EndOfMessage)
+                return result.MessageType == WebSocketMessageType.Text ? Encoding.UTF8.GetString(buffer, 0, total) : "";
+            if (total == buffer.Length) throw new InvalidDataException("relay control message too long");
+        }
+    }
+
+    static bool ValidConn(string conn) => conn.Length is > 0 and <= 64 && conn.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
+    /// <summary>A phone joined the room: open its data socket (wss://host/pc/room/conn) and run the same TLS +
+    /// hello path as a LAN connection over it. Binary frames only; closing either side closes the other.</summary>
+    async Task AcceptRelay(string relay, string room, string conn, CancellationToken cancel)
+    {
+        Peer peer;
+        var ws = new ClientWebSocket();
+        lock (_gate)
+        {
+            if (_peers.Count(p => p.Authenticated) >= MaxPeers || _peers.Count(p => !p.Authenticated && p.Relay) >= MaxPendingRelay)
+            {
+                ws.Dispose();
+                return; // the relay drops the phone once its partner never shows up
+            }
+            peer = new Peer(new RelayStream(ws), null, ws, relay: true);
+            _peers.Add(peer);
+        }
+        try
+        {
+            using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            connect.CancelAfter(HelloTimeout);
+            ws.Options.KeepAliveInterval = RelayPing;
+            await ws.ConnectAsync(new Uri($"{relay}/pc/{room}/{conn}"), connect.Token);
+        }
+        catch
+        {
+            peer.Close();
+            lock (_gate) _peers.Remove(peer);
+            return;
+        }
+        await Serve(peer, cancel);
+    }
+
+    /// <summary>The data WebSocket as a byte stream: each write is one binary frame, reads return frame data
+    /// without boundaries. A text frame (not part of the protocol) or a close ends the stream.</summary>
+    sealed class RelayStream(ClientWebSocket ws) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer, offset, count).GetAwaiter().GetResult();
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer, offset, count).GetAwaiter().GetResult();
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            while (true)
+            {
+                if (ws.State is not (WebSocketState.Open or WebSocketState.CloseSent)) return 0;
+                var result = await ws.ReceiveAsync(buffer, cancellationToken);
+                if (result.MessageType == WebSocketMessageType.Close) return 0;
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    ws.Abort();
+                    return 0;
+                }
+                if (result.Count > 0 || buffer.Length == 0) return result.Count;
+            }
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        // TLS records are at most ~16 KB, well under the relay's 64 KB frame limit.
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ws.SendAsync(buffer, WebSocketMessageType.Binary, true, cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) ws.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
+    sealed class Peer(Stream raw, IPAddress? address, IDisposable owner, bool relay)
+    {
+        public Stream Raw => raw;
+        public IPAddress? Address => address;
+        public bool Relay => relay;
         readonly SemaphoreSlim _write = new(1, 1);
         readonly byte[] _buffer = new byte[8192];
         readonly MemoryStream _line = new();
@@ -449,7 +708,7 @@ public sealed class PhoneLink : IDisposable
         public void Close()
         {
             try { Stream?.Dispose(); } catch { }
-            client.Dispose();
+            try { owner.Dispose(); } catch { }
         }
     }
 }

@@ -396,14 +396,58 @@ public sealed class SettingsWindow : Window
         page.Children.Add(Card("Semana passada", numbers, Row("Resumo da semana", "Toda segunda a ilha oferece o resumo; dá para salvar como imagem. Fica só no seu PC.", open)));
     }
 
+    /// <summary>The relay address for connecting away from home, and whether the PC is in its room.</summary>
+    Border RelayCard(IslandWindow island)
+    {
+        var box = new TextBox
+        {
+            Text = S.PhoneRelay, Width = 270, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5,
+            Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = "Ex.: wss://dynamic-island-relay.seu-usuario.workers.dev",
+        };
+        var status = Note("");
+        void Show(string text, Brush color) { status.Text = text; status.Foreground = color; }
+        if (S.PhoneRelay.Length == 0) Show("Desligado: o celular só conecta na mesma rede.", Muted);
+        else if (!S.PhoneLink || island.Phone is not { Running: true } link) Show("Ligue a ligação com o celular para usar o repasse.", Muted);
+        else if (link.RelayConnected) Show("✓ Conectado ao repasse: o celular alcança este PC de qualquer rede.", new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58)));
+        else Show("Conectando ao repasse… (sem internet ou endereço errado?)", new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A)));
+
+        var save = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        void Apply()
+        {
+            var text = box.Text.Trim();
+            var relay = text.Length == 0 ? "" : PhoneLink.NormalizeRelay(text);
+            if (relay == null)
+            {
+                Show("Endereço inválido: use wss://seu-repasse.workers.dev (só o endereço, sem caminho nem porta).", Brushes.Orange);
+                return;
+            }
+            _app.SetPhoneRelay(relay);
+            Render();
+        }
+        save.Click += (_, _) => Apply();
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; Apply(); } };
+        var edit = new StackPanel { Orientation = Orientation.Horizontal };
+        edit.Children.Add(box);
+        edit.Children.Add(save);
+        return Card("Fora de casa (pela internet)",
+            Note("Um repasse seu no Cloudflare deixa o celular alcançar este PC no 4G ou em outra rede. Ele só passa adiante " +
+                 "os dados já criptografados: não vê o código de pareamento nem os comandos, e não consegue aprovar nada. " +
+                 "Como publicar: pasta relay/ do projeto."),
+            Row("Endereço do repasse", "Vazio = desligado. O celular recebe o endereço sozinho.", edit),
+            status);
+    }
+
     void Phone(Panel page)
     {
         var island = _app.Island;
         page.Children.Add(Card("Aprovar pelo celular",
             Note("Com o app Dynamic Island no Android, os pedidos de permissão chegam no celular: Negar direto da notificação, " +
-                 "Permitir com a sua digital. O celular conversa direto com este PC pela rede Wi-Fi (TLS, código de pareamento)."),
+                 "Permitir com a sua digital. O celular conversa direto com este PC pela rede Wi-Fi (TLS, código de pareamento), " +
+                 "ou pelo repasse na web quando estiver fora de casa."),
             Toggle("Ligação com o celular", "Desligada, nada fica escutando na rede.", S.PhoneLink, _ => _app.TogglePhoneLink())));
         page.Children.Add(InstallCard());
+        page.Children.Add(RelayCard(island));
 
         if (S.PhoneLink && island.Phone is { Running: true } link)
         {
@@ -425,7 +469,10 @@ public sealed class SettingsWindow : Window
             side.Children.Add(Note(PhoneLink.LocalAddress() is { } ip
                 ? $"Este PC: {ip}, porta {link.Port}"
                 : "Sem rede local: conecte o PC ao Wi-Fi."));
-            side.Children.Add(Note("1. Instale o app no celular (Baixar no celular, acima).\n2. Celular e PC na mesma rede Wi-Fi.\n3. No app, toque em Escanear e aponte para este código."));
+            side.Children.Add(Note("1. Instale o app no celular (Baixar no celular, acima).\n" +
+                                   (link.Relay.Length > 0 ? "2. Qualquer rede serve: com o repasse ligado o celular alcança o PC pela internet.\n"
+                                                          : "2. Celular e PC na mesma rede Wi-Fi.\n") +
+                                   "3. No app, toque em Escanear e aponte para este código."));
             var buttons = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
             var copy = new Button { Content = "Copiar link", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
             copy.Click += (_, _) => { try { Clipboard.SetText(url); } catch { } };

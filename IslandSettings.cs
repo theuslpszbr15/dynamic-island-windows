@@ -29,6 +29,8 @@ public sealed class IslandSettings
     public bool QuietVideos { get; set; } = true;
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
+    /// <summary>The relay for connecting the phone away from home (wss://host, see relay/); "" = off.</summary>
+    public string PhoneRelay { get; set; } = "";
     /// <summary>The paired phone sees the file tray and can open its items on this PC.</summary>
     public bool PhoneTray { get; set; } = true;
     public bool CheckUpdates { get; set; } = true;
