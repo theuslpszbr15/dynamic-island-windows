@@ -33,6 +33,15 @@ class PairingTest {
         assertNull(Pairing.parse("dynamicisland://pair?v=1&host=evil.example.com&port=47900&fp=$fp&token=$token"))
     }
 
+    @Test fun otherAddressesOfThePc() {
+        val p = Pairing.parse("dynamicisland://pair?v=1&host=192.168.0.11&port=47900&fp=$fp&token=$token&alt=10.0.0.4,127.0.0.1,8.8.8.8,192.168.0.11")!!
+        // only private addresses, no repeats, the main one first
+        assertEquals(listOf("192.168.0.11", "10.0.0.4", "127.0.0.1"), p.hosts)
+        assertEquals(p, Pairing.fromJson(p.toJson()))
+        // an old pairing saved without alt still loads
+        val old = Pairing.fromJson("""{"host":"192.168.0.11","port":47900,"fp":"$fp","token":"$token","name":"PC"}""")!!
+        assertEquals(listOf("192.168.0.11"), old.hosts)
+    }
     @Test fun localAddressesOnly() {
         assertTrue(Pairing.isLocalAddress("10.0.0.5"))
         assertTrue(Pairing.isLocalAddress("172.20.1.1"))

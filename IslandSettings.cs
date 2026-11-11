@@ -29,6 +29,8 @@ public sealed class IslandSettings
     public bool PhoneLink { get; set; }
     /// <summary>The paired phone sees the file tray and can open its items on this PC.</summary>
     public bool PhoneTray { get; set; } = true;
+    /// <summary>Also reach the phone through the USB cable (adb reverse), for PCs whose network the phone can't see.</summary>
+    public bool PhoneUsb { get; set; }
     public bool CheckUpdates { get; set; } = true;
     public bool DesktopPet { get; set; }
     public double? DesktopPetX { get; set; }

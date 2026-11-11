@@ -320,13 +320,17 @@ public partial class IslandWindow
 
         // The settings panel, one image per section (with the phone link on, to show the pairing code).
         _settings.PhoneLink = true;
+        _settings.PhoneUsb = true;
         ApplyPhoneLink();
+        await Task.Delay(7000); // the USB bridge needs a few seconds to look for a phone
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
         foreach (var section in new[] { "general", "look", "island", "agents", "phone", "tray", "updates", "phone-download" })
         {
             if (section == "phone-download") settingsWindow.ShowDownloadQr();
             else settingsWindow.Navigate(section);
+            // the phone page is long: tall window so the whole page shows
+            settingsWindow.Height = section == "phone" ? 1500 : 680;
             await Task.Delay(700);
             var root = (FrameworkElement)settingsWindow.Content;
             var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
@@ -338,6 +342,7 @@ public partial class IslandWindow
         }
         settingsWindow.Close();
         _settings.PhoneLink = false;
+        _settings.PhoneUsb = false;
         ApplyPhoneLink();
 
         var info = GC.GetGCMemoryInfo();

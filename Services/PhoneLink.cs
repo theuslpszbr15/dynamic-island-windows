@@ -111,11 +111,16 @@ public sealed class PhoneLink : IDisposable
         PhonesChanged?.Invoke();
     }
 
-    public string PairingLink()
+    /// <param name="usb">Also offer 127.0.0.1, which the phone reaches through the USB cable (adb reverse).</param>
+    public string PairingLink(bool usb = false)
     {
-        var host = LocalAddress() ?? "127.0.0.1";
+        var addresses = LocalAddresses();
+        var host = addresses.FirstOrDefault() ?? "127.0.0.1";
+        var alt = addresses.Skip(1).ToList();
+        if (usb) alt.Add("127.0.0.1");
+        var tail = alt.Count > 0 ? "&alt=" + string.Join(",", alt.Where(a => a != host).Distinct()) : "";
         return $"dynamicisland://pair?v={Version}&host={host}&port={Port}&fp={Fingerprint}&token={_token}" +
-               $"&name={Uri.EscapeDataString(Environment.MachineName)}";
+               $"&name={Uri.EscapeDataString(Environment.MachineName)}{tail}";
     }
 
     // ───────────────────────── state sent to phones ─────────────────────────
@@ -295,8 +300,13 @@ public sealed class PhoneLink : IDisposable
     }
 
     /// <summary>The PC's private IPv4 on the network that has the default gateway (Wi-Fi or cable).</summary>
-    public static string? LocalAddress()
+    public static string? LocalAddress() => LocalAddresses().FirstOrDefault();
+
+    /// <summary>Every private IPv4 of the PC on a network with a default gateway (Wi-Fi first, then cable), so the phone
+    /// has a way in whichever one it shares.</summary>
+    public static IReadOnlyList<string> LocalAddresses()
     {
+        var list = new List<string>();
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()
                      .Where(n => n.OperationalStatus == OperationalStatus.Up
                                  && n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
@@ -306,9 +316,9 @@ public sealed class PhoneLink : IDisposable
             if (!props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork)) continue;
             var address = props.UnicastAddresses.Select(u => u.Address)
                 .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork && IsLocal(a) && !IPAddress.IsLoopback(a));
-            if (address != null) return address.ToString();
+            if (address != null && !list.Contains(address.ToString())) list.Add(address.ToString());
         }
-        return null;
+        return list;
     }
 
     // ───────────────────────── certificate and token ─────────────────────────

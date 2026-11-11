@@ -136,6 +136,13 @@ public partial class App : Application
         _window.PublishPhoneTray();
     }
 
+    public void TogglePhoneUsb()
+    {
+        Settings.PhoneUsb = !Settings.PhoneUsb;
+        Settings.Save();
+        _window.ApplyPhoneUsb();
+    }
+
     public void Balloon(string title, string text) => _tray.Balloon(title, text);
 
     public void TogglePhoneLink()
