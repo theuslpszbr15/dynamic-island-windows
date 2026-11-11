@@ -96,7 +96,7 @@ class RelayLinkTest {
     private val heard = mutableListOf<String>()
 
     @Before fun setUp() {
-        val keytool = File(System.getProperty("java.home"), "bin/keytool")
+        val keytool = listOf("bin/keytool", "bin/keytool.exe").map { File(System.getProperty("java.home"), it) }.firstOrNull { it.exists() } ?: File("keytool")
         assumeTrue("keytool not found", keytool.exists())
         val store = File.createTempFile("pc-cert", ".p12").apply { delete() }
         val made = ProcessBuilder(keytool.path, "-genkeypair", "-alias", "pc", "-keyalg", "EC", "-groupname", "secp256r1",
