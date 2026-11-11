@@ -3,3 +3,14 @@ obj/
 publish/
 .vs/
 *.user
+
+# never commit secrets or build outputs
+*.pfx
+*.pem
+*.p12
+*.bundle
+*.apk
+*.aab
+phone-link.bin
+.env
+.env.*
