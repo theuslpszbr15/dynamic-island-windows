@@ -93,7 +93,8 @@ class LinkService : Service() {
                 client.close()
                 // nothing can be answered without the PC
                 Link.state.value.approvals.forEach { Notifications.cancelApproval(this, it.fingerprint) }
-                Link.update { it.copy(approvals = emptyList(), sessions = emptyList(), tray = emptyList()) }
+                Link.state.value.files.forEach { Notifications.cancelFile(this, it.id) }
+                Link.update { it.copy(approvals = emptyList(), sessions = emptyList(), tray = emptyList(), files = emptyList()) }
             }
             showStatus("Sem conexão com ${pairing.name}. Tentando de novo…")
             val wait = BACKOFF_MS[minOf(attempt++, BACKOFF_MS.lastIndex)]
@@ -181,6 +182,18 @@ class LinkService : Service() {
 
         override fun onTray(items: List<TrayItem>) = Link.update { it.copy(tray = items) }
 
+        override fun onFileOffer(offer: FileOffer) {
+            if (Link.state.value.files.size >= MAX_FILE_OFFERS) return
+            Link.update { s -> s.copy(files = s.files.filterNot { it.id == offer.id } + offer) }
+            Notifications.showFileOffer(this@LinkService, offer)
+        }
+
+        override fun onFileCancel(id: String) {
+            if (Link.state.value.files.none { it.id == id }) return
+            Link.update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
+            Notifications.cancelFile(this@LinkService, id)
+        }
+
         override fun onApproval(approval: Approval) {
             Link.update { s -> s.copy(approvals = s.approvals.filterNot { it.fingerprint == approval.fingerprint } + approval) }
             Notifications.showApproval(this@LinkService, approval)
@@ -213,6 +226,8 @@ class LinkService : Service() {
         private val BACKOFF_MS = longArrayOf(2_000, 5_000, 10_000, 30_000, 60_000)
         /** How often a relay link checks whether the PC is reachable directly again. */
         private const val LAN_CHECK_MS = 60_000L
+        /** The PC keeps at most 5 offers at a time; more than that isn't a person dropping files. */
+        private const val MAX_FILE_OFFERS = 5
 
         fun start(context: Context) =
             ContextCompat.startForegroundService(context, Intent(context, LinkService::class.java))

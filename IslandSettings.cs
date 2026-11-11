@@ -33,6 +33,8 @@ public sealed class IslandSettings
     public string PhoneRelay { get; set; } = "";
     /// <summary>The paired phone sees the file tray and can open its items on this PC.</summary>
     public bool PhoneTray { get; set; } = true;
+    /// <summary>Files can be sent to the paired phone (dropped on the island's "celular" side, or from the tray).</summary>
+    public bool PhoneFiles { get; set; } = true;
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

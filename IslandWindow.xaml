@@ -152,6 +152,8 @@
             </Setter>
         </Style>
 
+        <Visibility x:Key="PhoneSendVisibility">Collapsed</Visibility>
+
         <DataTemplate x:Key="FileTemplate" DataType="{x:Type local:FileItem}">
             <Grid x:Name="Tile" Width="76" Margin="0,0,4,0" Background="Transparent" Cursor="Hand" ToolTip="{Binding Path}"
                   MouseLeftButtonDown="FileTile_MouseDown" MouseMove="FileTile_MouseMove" MouseLeftButtonUp="FileTile_MouseUp">
@@ -163,11 +165,16 @@
                 </StackPanel>
                 <Button x:Name="Remove" Style="{StaticResource TinyButton}" Content="&#xE711;" Visibility="Hidden"
                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,3,0" Click="FileRemove_Click" />
+                <!-- Shown only while a phone is connected (PhoneSendVisibility), and only on hover -->
+                <Button x:Name="Send" Style="{StaticResource TinyButton}" Content="&#xE8EA;" Opacity="0" ToolTip="Mandar pro celular"
+                        Visibility="{DynamicResource PhoneSendVisibility}"
+                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3,3,0,0" Click="FileSend_Click" />
             </Grid>
             <DataTemplate.Triggers>
                 <Trigger SourceName="Tile" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Hover" Property="Opacity" Value="1" />
                     <Setter TargetName="Remove" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Send" Property="Opacity" Value="1" />
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -579,11 +586,26 @@
                                                    Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
                                     <Grid x:Name="DropHint" Visibility="Collapsed" Background="#CC000000">
-                                        <Rectangle RadiusX="16" RadiusY="16" Stroke="{DynamicResource Faint}" StrokeThickness="1.5" StrokeDashArray="4 3" />
-                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" FontSize="24" HorizontalAlignment="Center" />
-                                            <TextBlock Text="Solte para guardar" FontSize="13" FontWeight="SemiBold" Margin="0,6,0,0" />
-                                        </StackPanel>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <!-- The phone side: only while a phone is connected -->
+                                            <ColumnDefinition x:Name="DropPhoneColumn" Width="0" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid x:Name="DropKeep">
+                                            <Rectangle RadiusX="16" RadiusY="16" Stroke="{DynamicResource Faint}" StrokeThickness="1.5" StrokeDashArray="4 3" />
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" FontSize="24" HorizontalAlignment="Center" />
+                                                <TextBlock Text="Solte para guardar" FontSize="13" FontWeight="SemiBold" Margin="0,6,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Grid x:Name="DropPhone" Grid.Column="1" Margin="8,0,0,0">
+                                            <Rectangle RadiusX="16" RadiusY="16" Stroke="{DynamicResource Faint}" StrokeThickness="1.5" StrokeDashArray="4 3" />
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8EA;" FontSize="24" HorizontalAlignment="Center" />
+                                                <TextBlock Text="Mandar pro celular" FontSize="13" FontWeight="SemiBold" Margin="0,6,0,0" HorizontalAlignment="Center" />
+                                                <TextBlock Text="até 30 MB" FontSize="11" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
+                                            </StackPanel>
+                                        </Grid>
                                     </Grid>
                                 </Grid>
 

@@ -551,6 +551,9 @@ public sealed class SettingsWindow : Window
         page.Children.Add(Card("No celular",
             Toggle("Bandeja de arquivos no celular", "O celular vê os itens fixados na bandeja da ilha e pode abri-los neste PC (pede sua digital).",
                 S.PhoneTray, _ => _app.TogglePhoneTray()),
+            Toggle("Enviar arquivos pro celular", "Solte um arquivo no lado \"celular\" da ilha (ou use o botão no item da bandeja). " +
+                   "O celular pergunta antes de receber; até 30 MB, criptografado de ponta a ponta.",
+                S.PhoneFiles, _ => _app.TogglePhoneFiles()),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
     }
 

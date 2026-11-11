@@ -124,6 +124,12 @@ Desenho do protocolo inspirado no [Coucou](https://github.com/Louis-CFM/coucou) 
 
 Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e reconecta sozinho, sem parear de novo.
 
+**Mandar arquivos pro celular** (até 30 MB): com o celular ligado, arraste um arquivo até a ilha e solte no lado
+**Mandar pro celular**, ou use o botão de celular num item da bandeja. O celular pergunta antes (Aceitar pede o
+celular desbloqueado) e salva em `Downloads/Dynamic Island`. O arquivo vai por uma conexão própria, com o mesmo TLS
+fixado e o mesmo segredo: direto no Wi-Fi de casa ou pelo relay fora de casa, que continua vendo só bytes cifrados.
+O celular confere tamanho e SHA-256 antes de guardar; o caminho do arquivo nunca sai do PC.
+
 Compilar: JDK 17+ e Android SDK 35, `cd android` e `gradlew assembleRelease`. Para publicar, assine com uma chave própria:
 crie `android/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`; fica fora do git) ou use as
 variáveis `DI_STORE_FILE`, `DI_STORE_PASSWORD`, `DI_KEY_ALIAS` e `DI_KEY_PASSWORD`. Sem chave, o release usa a chave de debug

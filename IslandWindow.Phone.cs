@@ -18,6 +18,7 @@ public partial class IslandWindow
         if (!_settings.PhoneLink)
         {
             _phone?.Stop();
+            UpdatePhoneSend();
             return;
         }
         if (_phone == null)
@@ -26,6 +27,8 @@ public partial class IslandWindow
             _phone.Decision += OnPhoneDecision;
             _phone.Open += OnPhoneOpen;
             _phone.PhoneJoined += OnPhoneJoined;
+            _phone.PhonesChanged += UpdatePhoneSend;
+            _phone.FileStatus += OnPhoneFile;
         }
         _phone.SetRelay(_settings.PhoneRelay);
         if (_phone.Running) return;
@@ -134,4 +137,49 @@ public partial class IslandWindow
     }
 
     static long Millis(DateTime time) => new DateTimeOffset(time).ToUnixTimeMilliseconds();
+
+    // ───────────────────────── files to the phone ─────────────────────────
+
+    /// <summary>A phone is connected and sending is on: the drop hint gets its "celular" side and tray items a button.</summary>
+    bool CanSendToPhone => _settings.PhoneLink && _settings.PhoneFiles && _phone?.Running == true && _phone.ConnectedPhones > 0;
+
+    public void UpdatePhoneSend() =>
+        Resources["PhoneSendVisibility"] = CanSendToPhone ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    /// <summary>Offers each file to the phone; the island says what happened. Folders and big files are refused here
+    /// (and again on the phone).</summary>
+    public async void SendToPhone(IReadOnlyList<string> paths)
+    {
+        if (_phone == null || !CanSendToPhone)
+        {
+            ShowInfo("\uE8EA", "Nenhum celular conectado", "", glyphColor: Meter.Red, seconds: 3);
+            return;
+        }
+        var offered = 0;
+        foreach (var path in paths)
+        {
+            var name = System.IO.Path.GetFileName(path.TrimEnd('\\', '/'));
+            if (await _phone.OfferFileAsync(path) is { } error)
+            {
+                ShowInfo("\uE8EA", name, error, glyphColor: Meter.Red, seconds: 3);
+                return;
+            }
+            offered++;
+        }
+        if (offered > 0)
+            ShowInfo("\uE8EA", offered == 1 ? System.IO.Path.GetFileName(paths[0].TrimEnd('\\', '/')) : $"{offered} arquivos",
+                "Aceite no celular", seconds: 3);
+    }
+
+    void OnPhoneFile(string name, PhoneLink.FileOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case PhoneLink.FileOutcome.Sending: ShowInfo("\uE8EA", name, "Enviando…", seconds: 3); break;
+            case PhoneLink.FileOutcome.Received: ShowInfo("\uE73E", name, "No celular", glyphColor: AgentSession.Done); break;
+            case PhoneLink.FileOutcome.Declined: ShowInfo("\uE8EA", name, "Recusado"); break;
+            case PhoneLink.FileOutcome.Failed: ShowInfo("\uE8EA", name, "Falhou", glyphColor: Meter.Red, seconds: 3); break;
+            case PhoneLink.FileOutcome.Expired: ShowInfo("\uE8EA", name, "Não aceito"); break;
+        }
+    }
 }

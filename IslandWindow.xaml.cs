@@ -1098,11 +1098,23 @@ public partial class IslandWindow : Window
         }
         e.Effects = DragDropEffects.Copy;
         _lastDragOver = DateTime.Now;
+        ShowDropSide(OverPhoneSide(e));
         if (_dragOver) return;
 
         _dragOver = true;
         DropHint.Visibility = Visibility.Visible;
         SetExpanded(true, PageFiles);
+    }
+
+    // With a phone connected the drop hint has two sides: keep it in the tray, or send it to the phone.
+    bool OverPhoneSide(DragEventArgs e) =>
+        CanSendToPhone && DropHint.ActualWidth > 0 && e.GetPosition(DropHint).X >= DropKeep.ActualWidth;
+
+    void ShowDropSide(bool phone)
+    {
+        DropPhoneColumn.Width = CanSendToPhone ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        DropKeep.Opacity = phone ? 0.45 : 1;
+        DropPhone.Opacity = phone ? 1 : 0.45;
     }
 
     void Island_DragLeave(object sender, DragEventArgs e)
@@ -1127,7 +1139,11 @@ public partial class IslandWindow : Window
     void Island_Drop(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        if (!_draggingOut && e.Data.GetData(DataFormats.FileDrop) is string[] paths)
+        if (!_draggingOut && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } toPhone && OverPhoneSide(e))
+        {
+            SendToPhone(toPhone);
+        }
+        else if (!_draggingOut && e.Data.GetData(DataFormats.FileDrop) is string[] paths)
         {
             foreach (var path in paths)
                 if (!Files.Any(f => string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase)))
@@ -1208,6 +1224,12 @@ public partial class IslandWindow : Window
             return;
         }
         try { Process.Start(new ProcessStartInfo(item.Path) { UseShellExecute = true }); } catch { }
+    }
+
+    void FileSend_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is FileItem item) SendToPhone([item.Path]);
+        e.Handled = true;
     }
 
     void FileRemove_Click(object sender, RoutedEventArgs e)

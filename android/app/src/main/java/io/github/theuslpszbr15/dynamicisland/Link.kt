@@ -21,6 +21,8 @@ data class LinkUi(
     val sessions: List<Session> = emptyList(),
     val approvals: List<Approval> = emptyList(),
     val tray: List<TrayItem> = emptyList(),
+    /** Files the PC offered and the person hasn't answered yet. */
+    val files: List<FileOffer> = emptyList(),
     /** Connected through the relay (away from the PC's network). */
     val viaRelay: Boolean = false,
     /** Notifications are off, so requests would arrive silently (the app shows how to turn them on). */
@@ -52,7 +54,9 @@ object Link {
         PairingStore.setPaused(context, true)
         LinkService.stop(context)
         _state.value.approvals.forEach { Notifications.cancelApproval(context, it.fingerprint) }
-        update { it.copy(status = LinkStatus.Paused, message = null, approvals = emptyList(), sessions = emptyList(), tray = emptyList()) }
+        _state.value.files.forEach { Notifications.cancelFile(context, it.id) }
+        update { it.copy(status = LinkStatus.Paused, message = null, approvals = emptyList(), sessions = emptyList(), tray = emptyList(),
+            files = emptyList()) }
     }
 
     fun resume(context: Context) {
@@ -63,6 +67,11 @@ object Link {
 
     fun pruneExpired(context: Context) {
         val now = System.currentTimeMillis()
+        val stale = _state.value.files.filter { now - it.receivedAt > FileOffer.WINDOW_MS }
+        if (stale.isNotEmpty()) {
+            update { s -> s.copy(files = s.files - stale.toSet()) }
+            stale.forEach { Notifications.cancelFile(context, it.id) }
+        }
         val expired = _state.value.approvals.filter { now - it.receivedAt > APPROVAL_WINDOW_MS }
         if (expired.isEmpty()) return
         update { s -> s.copy(approvals = s.approvals - expired.toSet()) }
@@ -110,6 +119,36 @@ object Link {
         val c = client ?: return
         io.execute {
             try { c.open(item.id) } catch (_: Exception) {}
+        }
+    }
+
+    /** "Aceitar" on the notification (the phone must be unlocked): download on a connection of its own, the same
+     * way the link reaches the PC right now (Wi-Fi directly, or the relay). */
+    fun acceptFile(context: Context, id: String) {
+        val app = context.applicationContext
+        val offer = _state.value.files.firstOrNull { it.id == id }
+        Notifications.cancelFile(app, id)
+        if (offer == null) return tell(app, "Esse envio já expirou. Mande de novo pelo PC.")
+        val c = client
+        val pairing = _state.value.pairing
+        if (c == null || pairing == null) return tell(app, "Sem conexão com o PC agora. Mande de novo quando ligar.")
+        update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
+        FileReceiver.receive(app, pairing, c.route, offer)
+    }
+
+    fun declineFile(context: Context, id: String) {
+        Notifications.cancelFile(context.applicationContext, id)
+        update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
+        val c = client ?: return
+        io.execute {
+            try { c.declineFile(id) } catch (_: Exception) {}
+        }
+    }
+
+    fun fileDone(id: String, ok: Boolean) {
+        val c = client ?: return
+        io.execute {
+            try { c.fileDone(id, ok) } catch (_: Exception) {}
         }
     }
 

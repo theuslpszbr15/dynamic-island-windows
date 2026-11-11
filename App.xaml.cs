@@ -160,6 +160,13 @@ public partial class App : Application
         _window.PublishPhoneTray();
     }
 
+    public void TogglePhoneFiles()
+    {
+        Settings.PhoneFiles = !Settings.PhoneFiles;
+        Settings.Save();
+        _window.UpdatePhoneSend();
+    }
+
     public void Balloon(string title, string text) => _tray.Balloon(title, text);
 
     public void TogglePhoneLink()
