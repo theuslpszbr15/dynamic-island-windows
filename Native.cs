@@ -60,6 +60,29 @@ static class Native
     [DllImport("user32.dll")]
     public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
 
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+    [DllImport("dwmapi.dll")] static extern int DwmFlush();
+
+    /// <summary>Hides one of our own windows from the desktop composition (DWMWA_CLOAK); false if the system refuses.</summary>
+    public static bool SetCloaked(IntPtr hwnd, bool cloaked)
+    {
+        var value = cloaked ? 1 : 0;
+        return DwmSetWindowAttribute(hwnd, 13, ref value, sizeof(int)) == 0;
+    }
+
+    /// <summary>Like <see cref="CapturePixels"/> but with <paramref name="hide"/> cloaked for the capture (about two frames).
+    /// For windows that cannot be excluded from capture (Windows 10 refuses it for WPF's transparent windows).</summary>
+    public static (int[] Pixels, int Width, int Height)? CapturePixelsHiding(IntPtr hide, int x, int y, int width, int height, int factor)
+    {
+        if (!SetCloaked(hide, true)) return null;
+        try
+        {
+            DwmFlush();
+            return CapturePixels(x, y, width, height, factor);
+        }
+        finally { SetCloaked(hide, false); }
+    }
+
     [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hwnd);
     [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
     [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);

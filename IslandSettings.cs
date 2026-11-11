@@ -35,6 +35,8 @@ public sealed class IslandSettings
     public bool PhoneTray { get; set; } = true;
     /// <summary>Files can be sent to the paired phone (dropped on the island's "celular" side, or from the tray).</summary>
     public bool PhoneFiles { get; set; } = true;
+    /// <summary>Also reach the phone through the USB cable (adb reverse), for PCs whose network the phone can't see.</summary>
+    public bool PhoneUsb { get; set; }
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

@@ -259,9 +259,8 @@ class LinkClient(
     }
 
     private fun openLan(context: SSLContext): Pipe {
-        val raw = Socket()
-        raw.connect(InetSocketAddress(pairing.host, pairing.port), connectTimeoutMs)
-        val ssl = context.socketFactory.createSocket(raw, pairing.host, pairing.port, true) as SSLSocket
+        val (raw, host) = connectAny()
+        val ssl = context.socketFactory.createSocket(raw, host, pairing.port, true) as SSLSocket
         return started(SocketPipe(ssl)) { ssl.startHandshake() }
     }
 
@@ -285,6 +284,24 @@ class LinkClient(
             throw e
         }
         return link
+    }
+
+    /** Tries the PC's addresses in order (LAN first, then the other network or the USB cable); the first that answers wins. */
+    private fun connectAny(): Pair<Socket, String> {
+        var first: IOException? = null
+        for (host in pairing.hosts) {
+            if (closed) break
+            val raw = Socket()
+            try {
+                raw.connect(InetSocketAddress(host, pairing.port), connectTimeoutMs)
+                return raw to host
+            } catch (e: IOException) {
+                try { raw.close() } catch (_: Exception) {}
+                // the message the user sees is about the main address, not the cable fallback
+                if (first == null) first = e
+            }
+        }
+        throw first ?: IOException("Sem endereço do PC")
     }
 
     fun decide(fingerprint: String, allow: Boolean) =
