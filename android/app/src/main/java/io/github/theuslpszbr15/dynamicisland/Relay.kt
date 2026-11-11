@@ -217,7 +217,7 @@ class TlsPipe(private val engine: SSLEngine, private val wire: Pipe) : Pipe {
             while (true) {
                 when (engine.handshakeStatus) {
                     SSLEngineResult.HandshakeStatus.NEED_WRAP -> wrap(EMPTY)
-                    SSLEngineResult.HandshakeStatus.NEED_UNWRAP, SSLEngineResult.HandshakeStatus.NEED_UNWRAP_AGAIN ->
+                    SSLEngineResult.HandshakeStatus.NEED_UNWRAP ->
                         if (!unwrap()) throw EOFException("A conexão caiu durante o TLS")
                     SSLEngineResult.HandshakeStatus.NEED_TASK -> runTasks()
                     else -> return
