@@ -236,6 +236,7 @@ object Notifications {
 
     /** [percent] -1: still waiting (no bar to fill yet). */
     fun showFileProgress(context: Context, id: String, title: String, text: String, percent: Int) {
+        Island.transfer(id, title, text, percent, LiveTransfer.State.Running)
         if (!canNotify(context)) return
         val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(if (title.startsWith("Receb")) android.R.drawable.stat_sys_download else android.R.drawable.stat_sys_upload)
@@ -251,6 +252,7 @@ object Notifications {
 
     /** Done; with [uri], tapping opens it with whatever app handles it (Android asks first for anything it would install). */
     fun showTransferDone(context: Context, id: String, title: String, text: String, uri: Uri?, mime: String?) {
+        Island.transfer(id, title, text, 100, LiveTransfer.State.Done)
         if (!canNotify(context)) return
         val builder = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
@@ -271,6 +273,7 @@ object Notifications {
     }
 
     fun showFileFailed(context: Context, id: String, title: String, reason: String) {
+        Island.transfer(id, title, reason, -1, LiveTransfer.State.Failed)
         if (!canNotify(context)) return
         val notification = NotificationCompat.Builder(context, FILE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_bit)
@@ -284,5 +287,8 @@ object Notifications {
         NotificationManagerCompat.from(context).notify(fileId(id), notification)
     }
 
-    fun cancelFile(context: Context, id: String) = NotificationManagerCompat.from(context).cancel(fileId(id))
+    fun cancelFile(context: Context, id: String) {
+        Island.transferGone(id)
+        NotificationManagerCompat.from(context).cancel(fileId(id))
+    }
 }

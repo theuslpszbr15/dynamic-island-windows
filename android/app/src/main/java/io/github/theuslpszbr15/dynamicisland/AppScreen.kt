@@ -297,6 +297,7 @@ private fun AgentsTab(
             }
             items(state.sessions, key = { it.id }) { SessionRow(it) }
         }
+        item { IslandSettingsCard() }
         item {
             TextButton(onClick = onUnpair, modifier = Modifier.padding(vertical = 18.dp)) {
                 Text("Desparear deste PC", color = Red)

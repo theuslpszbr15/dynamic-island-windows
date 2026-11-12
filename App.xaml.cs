@@ -333,6 +333,12 @@ public partial class App : Application
         Settings.Save();
     }
 
+    public void ToggleDiscordToPhone()
+    {
+        Settings.DiscordToPhone = !Settings.DiscordToPhone;
+        Settings.Save();
+    }
+
     public void ToggleNotifications()
     {
         Settings.ShowNotifications = !Settings.ShowNotifications;

@@ -57,6 +57,8 @@ public sealed class IslandSettings
     public bool DiscordCalls { get; set; }
     /// <summary>Also a small pill when someone leaves that call.</summary>
     public bool DiscordLeaves { get; set; } = true;
+    /// <summary>Who joins and leaves also goes to the paired phone's floating island (over the same pinned link).</summary>
+    public bool DiscordToPhone { get; set; } = true;
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>

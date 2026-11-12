@@ -52,6 +52,7 @@ class LinkService : Service() {
             }
             watchNetwork()
             FileSender.load(this)
+            IslandOverlay.linkRunning(this, true)
         }
         return START_STICKY
     }
@@ -213,6 +214,8 @@ class LinkService : Service() {
 
         override fun onFileCancel(id: String) = dropOffer(id)
 
+        override fun onDiscord(event: DiscordEvent) = Island.discordEvent(event)
+
         override fun onApproval(approval: Approval) {
             Link.update { s -> s.copy(approvals = s.approvals.filterNot { it.fingerprint == approval.fingerprint } + approval) }
             Notifications.showApproval(this@LinkService, approval)
@@ -239,6 +242,7 @@ class LinkService : Service() {
 
     override fun onDestroy() {
         running = false
+        IslandOverlay.linkRunning(this, false)
         ticker?.shutdownNow()
         networkCallback?.let { cb ->
             try { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } catch (_: Exception) {}

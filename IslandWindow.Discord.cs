@@ -1,3 +1,6 @@
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DynamicIsland.Services;
 
 namespace DynamicIsland;
@@ -56,6 +59,8 @@ public partial class IslandWindow
     void OnDiscordVoice(DiscordVoiceEvent e)
     {
         if (!_settings.DiscordCalls) return;
+        if (_settings.DiscordToPhone && _phone?.Running == true && _phone.ConnectedPhones > 0)
+            _phone.PublishDiscord(e.Joined, e.Name, e.Channel, e.Count, SmallPng(e.Avatar));
         // The name as shown in the call, plus the @username (unique, so a nickname can't pass for someone else).
         // (Read from the window there is no @username: only the name as shown.)
         var handle = e.Username.Length > 0 ? "@" + e.Username : "";
@@ -66,5 +71,26 @@ public partial class IslandWindow
         else if (_settings.DiscordLeaves)
             ShowInfo("\uE77B", same ? $"{e.Name} saiu da call" : $"{e.Name} ({handle}) saiu da call", e.Channel,
                 thumb: e.Avatar, seconds: 2.6, round: true);
+    }
+
+    /// <summary>The avatar as a 64 px PNG for the phone (null without one or if it can't be encoded).</summary>
+    static byte[]? SmallPng(BitmapSource? avatar)
+    {
+        if (avatar == null) return null;
+        try
+        {
+            var scale = 64.0 / Math.Max(avatar.PixelWidth, avatar.PixelHeight);
+            BitmapSource small = scale < 1 ? new TransformedBitmap(avatar, new ScaleTransform(scale, scale)) : avatar;
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(small));
+            using var stream = new MemoryStream();
+            encoder.Save(stream);
+            return stream.Length <= PhoneLink.MaxDiscordAvatarBytes ? stream.ToArray() : null;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Discord.SmallPng", ex);
+            return null;
+        }
     }
 }

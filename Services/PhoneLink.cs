@@ -321,6 +321,25 @@ public sealed partial class PhoneLink : IDisposable
         Broadcast(new JsonObject { ["type"] = "approvalResolved", ["fingerprint"] = fingerprint }.ToJsonString());
     }
 
+    /// <summary>Someone joined or left the Discord call: the phone's floating island shows it. Only names, the
+    /// channel, how many are in it and a small PNG of the avatar, inside the same pinned TLS as everything else.</summary>
+    public void PublishDiscord(bool joined, string name, string channel, int count, byte[]? avatarPng) =>
+        Broadcast(DiscordLine(joined, name, channel, count, avatarPng));
+
+    /// <summary>Avatars bigger than this go without the picture (the phone drops bigger ones too).</summary>
+    public const int MaxDiscordAvatarBytes = 24 * 1024;
+
+    public static string DiscordLine(bool joined, string name, string channel, int count, byte[]? avatarPng)
+    {
+        var o = new JsonObject
+        {
+            ["type"] = "discord", ["event"] = joined ? "join" : "leave", ["name"] = Cut(name, 64), ["channel"] = Cut(channel, 64),
+            ["count"] = Math.Clamp(count, 0, 999),
+        };
+        if (avatarPng is { Length: > 0 and <= MaxDiscordAvatarBytes }) o["avatar"] = Convert.ToBase64String(avatarPng);
+        return o.ToJsonString();
+    }
+
     void Broadcast(string line)
     {
         List<Peer> peers;

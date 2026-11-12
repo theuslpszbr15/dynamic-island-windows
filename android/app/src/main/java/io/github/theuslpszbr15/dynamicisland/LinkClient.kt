@@ -81,6 +81,8 @@ class LinkClient(
         fun onFileCancel(id: String) {}
         /** Nobody answered on the PC: what the phone offered waits in the island's Pendentes. */
         fun onSendPending(id: String) {}
+        /** Someone joined or left the Discord call the PC's island is watching. */
+        fun onDiscord(event: DiscordEvent) {}
     }
 
     private val writeLock = Any()
@@ -150,6 +152,7 @@ class LinkClient(
                 "sendAccept", "sendDecline" -> if (FileOffer.isId(o.optString("id")))
                     listener.onSendAnswer(o.optString("id"), o.optString("type") == "sendAccept")
                 "sendPending" -> if (FileOffer.isId(o.optString("id"))) listener.onSendPending(o.optString("id"))
+                "discord" -> DiscordEvent.parse(o)?.let(listener::onDiscord)
             }
         }
     }

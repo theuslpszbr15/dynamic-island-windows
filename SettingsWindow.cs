@@ -240,6 +240,8 @@ public sealed partial class SettingsWindow : DarkWindow
             S.DiscordCalls, _ => _app.ToggleDiscord());
         var leaves = Toggle("Avisar quando alguém sai", "Uma pílula pequena com a foto de quem saiu.",
             S.DiscordLeaves, _ => _app.ToggleDiscordLeaves(), enabled: S.DiscordCalls);
+        var phone = Toggle("Mostrar também no celular", "Quem entra e sai aparece na ilha flutuante do celular pareado (nome, canal e foto pequena).",
+            S.DiscordToPhone, _ => _app.ToggleDiscordToPhone(), enabled: S.DiscordCalls);
         var which = Choice("Como a ilha vê a call",
             "Lendo a janela: não precisa configurar nada. Pelo app (RPC): mostra o @ e funciona com qualquer tela aberta, mas o dono do app precisa te cadastrar como tester.",
             [(DiscordSource.Window, "Lendo a janela do Discord (padrão)"), (DiscordSource.IslandApp, "Pelo app da ilha (RPC)"),
@@ -280,7 +282,7 @@ public sealed partial class SettingsWindow : DarkWindow
                 : "A ilha conversa com o Discord aberto neste PC. Só a troca da chave de acesso passa pela internet " +
                   (own ? "(direto com o Discord)." : "(pelo servidor da ilha, que guarda a senha do app).") +
                   " O Discord só libera isso para quem o dono do app cadastrou como tester (até 50 pessoas)."),
-            calls, leaves, which,
+            calls, leaves, phone, which,
         };
 
         if (own)

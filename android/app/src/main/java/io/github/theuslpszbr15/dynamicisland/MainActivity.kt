@@ -91,6 +91,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // back from Android's settings: the island may be allowed now
+        IslandOverlay.refresh(this)
         val off = Notifications.approvalsBlocked(this)
         Link.update { if (it.notificationsOff == off) it else it.copy(notificationsOff = off) }
         val fingerprint = allowOnResume ?: return
