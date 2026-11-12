@@ -367,6 +367,7 @@ public sealed partial class PhoneLink : IDisposable
             List<string> pending;
             lock (_gate) pending = _approvals.Values.ToList();
             foreach (var line in pending) await peer.SendAsync(line);
+            foreach (var line in LiveOfferLines()) await peer.SendAsync(line);
 
             while (!cancel.IsCancellationRequested)
             {
@@ -397,6 +398,9 @@ public sealed partial class PhoneLink : IDisposable
                         break;
                     case "sendOffer":
                         OnPhoneOffer(peer, root);
+                        break;
+                    case "sendCancel" when Str(root, "id") is { } id:
+                        CancelIncoming(id);
                         break;
                     case "bye":
                         return;

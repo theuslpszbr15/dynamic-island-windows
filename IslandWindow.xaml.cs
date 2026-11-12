@@ -21,8 +21,8 @@ public partial class IslandWindow : Window
     enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info }
     enum CompactKind { Clock, Media, Timer, Agent }
 
-    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda"];
+    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6;
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
 
@@ -55,7 +55,7 @@ public partial class IslandWindow : Window
     readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
     bool _eqPlaying;
-    readonly Border[] _dots = new Border[6];
+    readonly Border[] _dots = new Border[7];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
     Point _pressPoint;
@@ -286,6 +286,7 @@ public partial class IslandWindow : Window
     {
         PageAgents => new(560, 236),
         PageCalendar => new(520, 236),
+        PagePending => new(520, 236),
         PageSystem => new(450, 216),
         _ => ExpandedSize,
     };
@@ -653,7 +654,7 @@ public partial class IslandWindow : Window
 
     // ───────────────────────── pages ─────────────────────────
 
-    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage];
+    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage];
 
     void ShowPage(int index, int direction)
     {
@@ -706,6 +707,7 @@ public partial class IslandWindow : Window
             case PageAgents: UpdateAgentDetail(); break;
             case PageTimer: UpdateTimerUi(); break;
             case PageCalendar: UpdateCalendar(); break;
+            case PagePending: UpdatePendingUi(); break;
         }
     }
 

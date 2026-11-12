@@ -9,6 +9,8 @@ namespace DynamicIsland.Services;
 public sealed record PhoneIncoming(string Id, string Device, IReadOnlyList<PhoneLink.IncomingItem> Items, string? Text)
 {
     public long TotalBytes => Items.Sum(i => i.Size);
+    /// <summary>When the phone first asked.</summary>
+    public DateTime At { get; init; } = DateTime.Now;
 }
 
 // Files and text between the PC and the phone, in both directions, always after the receiving side accepts.
@@ -18,6 +20,11 @@ public sealed record PhoneIncoming(string Id, string Device, IReadOnlyList<Phone
 //                 link: text {id, text} (the phone shows it with "Copiar"; nothing to fetch)
 //   phone -> PC   link: sendOffer {id, items:[…]} or {id, text}       PC: sendAccept / sendDecline {id}
 //                 phone opens a connection: {"type":"push","token","id"} -> PC "ready" -> per item header + bytes -> PC "saved" {ok}
+//
+// Pending: what nobody answers right away waits up to a day. A batch from the PC stays offered (and is offered again
+// to a phone that connects); one from the phone moves to "Pendentes" on the island after the prompt (PC: sendPending
+// {id}), the phone keeps its copies and offers it again on every connect with "pending":true, and an Accept given
+// while the phone was away is repeated then.
 //
 // Every byte goes inside the same pinned TLS with the pairing token (LAN or relay, the relay only sees TLS).
 // Sizes and SHA-256 are checked by whoever receives; received files land in Downloads\Dynamic Island with the
@@ -35,17 +42,20 @@ public sealed partial class PhoneLink
 
     /// <summary>60 MB for videos, 30 MB for everything else (the phone uses the same rule).</summary>
     public static long MaxBytesFor(string name) => VideoExtensions.Contains(Path.GetExtension(name)) ? MaxVideoBytes : MaxFileBytes;
-    const int MaxOffers = 5, MaxTransfers = 2;
-    static readonly TimeSpan OfferLifetime = TimeSpan.FromMinutes(10), TransferTimeout = TimeSpan.FromMinutes(5);
-    /// <summary>How long a phone's offer waits for a click on the island, and then for its bytes.</summary>
-    static readonly TimeSpan IncomingAnswerWindow = TimeSpan.FromSeconds(45), IncomingPushWindow = TimeSpan.FromMinutes(2);
+    const int MaxOffers = 20, MaxIncoming = 20, MaxTransfers = 2;
+    /// <summary>Unanswered things wait this long either way (the PC's own offers: while the island stays open).</summary>
+    public static readonly TimeSpan PendingLifetime = TimeSpan.FromHours(24);
+    static readonly TimeSpan OfferLifetime = PendingLifetime, TransferTimeout = TimeSpan.FromMinutes(5);
+    /// <summary>How long a phone's offer shows as a prompt on the island before it moves to Pendentes.</summary>
+    static readonly TimeSpan IncomingAnswerWindow = TimeSpan.FromSeconds(45);
 
     public enum FileOutcome { Sending, Received, Declined, Failed, Expired }
 
     /// <summary>A file to send, or (<see cref="Text"/> set) a long text sent the same way.</summary>
     sealed record FileEntry(string Path, string Name, long Size, string Sha256, DateTime LastWriteUtc, byte[]? Text = null);
-    /// <summary>A batch waiting for the phone. Only names, sizes and hashes go out; paths stay here.</summary>
-    sealed record FileOffer(string Id, string Label, IReadOnlyList<FileEntry> Items);
+    /// <summary>A batch waiting for the phone. Only names, sizes and hashes go out (<paramref name="Line"/>, sent
+    /// again to a phone that connects later); paths stay here.</summary>
+    sealed record FileOffer(string Id, string Label, IReadOnlyList<FileEntry> Items, string Line = "");
 
     /// <summary>One thing in a batch from the phone; <paramref name="IsText"/>: a long text, for the clipboard.</summary>
     public sealed record IncomingItem(string Name, long Size, string Sha256, bool IsText = false);
@@ -53,8 +63,11 @@ public sealed partial class PhoneLink
     sealed class Incoming(PhoneIncoming offer, Peer from)
     {
         public PhoneIncoming Offer => offer;
-        public Peer From => from;
+        /// <summary>The phone's link it last came on (it may have reconnected since).</summary>
+        public Peer From = from;
         public bool Accepted;
+        /// <summary>Nobody clicked the prompt: it waits in Pendentes.</summary>
+        public bool Pending;
     }
 
     readonly Dictionary<string, FileOffer> _offers = [];
@@ -69,6 +82,16 @@ public sealed partial class PhoneLink
     public event Action<string, string?, bool>? IncomingDone;
     /// <summary>Raised on the UI thread with a long text from the phone the person accepted (for the clipboard).</summary>
     public event Action<string>? IncomingText;
+    /// <summary>Raised on the UI thread when the list of <see cref="PendingIncoming"/> changes.</summary>
+    public event Action? PendingChanged;
+
+    /// <summary>What the phone wants to send and nobody answered yet, oldest first.</summary>
+    public IReadOnlyList<PhoneIncoming> PendingIncoming
+    {
+        get { lock (_gate) return [.. _incoming.Values.Where(i => i.Pending && !i.Accepted).Select(i => i.Offer).OrderBy(o => o.At)]; }
+    }
+
+    void RaisePending() => _ = _ui.InvokeAsync(() => PendingChanged?.Invoke());
 
     /// <summary>Where sent and received things are listed (the phone window's Recebidos / Enviados); null: nowhere.</summary>
     public TransferHistory? History { get; set; }
@@ -119,12 +142,7 @@ public sealed partial class PhoneLink
 
     string? Offer(string label, List<FileEntry> items, string? text = null)
     {
-        var offer = new FileOffer(NewOfferId(), label, items);
-        lock (_gate)
-        {
-            if (_offers.Count >= MaxOffers) return "Espere os outros";
-            _offers[offer.Id] = offer;
-        }
+        var id = NewOfferId();
         var list = new JsonArray();
         foreach (var item in items)
         {
@@ -132,7 +150,13 @@ public sealed partial class PhoneLink
             if (item.Text != null) o["text"] = true;
             list.Add(o);
         }
-        Broadcast(new JsonObject { ["type"] = "fileOffer", ["id"] = offer.Id, ["items"] = list }.ToJsonString());
+        var offer = new FileOffer(id, label, items, new JsonObject { ["type"] = "fileOffer", ["id"] = id, ["items"] = list }.ToJsonString());
+        lock (_gate)
+        {
+            if (_offers.Count >= MaxOffers) return "Espere os outros";
+            _offers[offer.Id] = offer;
+        }
+        Broadcast(offer.Line);
         History?.Add(new TransferEntry(offer.Id, DateTime.Now, true, text != null ? "Texto" : label, items.Sum(i => i.Size), items.Count,
             "Esperando o celular", text != null ? [] : [.. items.Select(i => i.Path)], text));
         _ = ExpireLater(offer.Id);
@@ -181,6 +205,12 @@ public sealed partial class PhoneLink
             _ => "Falhou",
         });
         _ = _ui.InvokeAsync(() => FileStatus?.Invoke(offer.Label, outcome));
+    }
+
+    /// <summary>Offers still waiting, for a phone that just connected (it may have been away when they went out).</summary>
+    List<string> LiveOfferLines()
+    {
+        lock (_gate) return [.. _offers.Values.Select(o => o.Line)];
     }
 
     void ForgetOffers()
@@ -288,32 +318,56 @@ public sealed partial class PhoneLink
         }
         else return;
 
+        // The phone offers what is still waiting again each time it connects ("pending": it already asked before).
+        var again = root.TryGetProperty("pending", out var p) && p.ValueKind == JsonValueKind.True;
+        Incoming? known;
         var offer = new PhoneIncoming(id!, peer.Device, items, text);
         lock (_gate)
         {
-            if (_incoming.Count >= MaxOffers || _incoming.ContainsKey(id!)) { Answer(peer, id!, false); return; }
-            _incoming[id!] = new Incoming(offer, peer);
+            if (_incoming.TryGetValue(id!, out known)) known.From = peer;
+            else if (_incoming.Count >= MaxIncoming) { Answer(peer, id!, false); return; }
+            else _incoming[id!] = new Incoming(offer, peer) { Pending = again };
         }
-        _ = ForgetIncomingLater(id!);
+        if (known != null)
+        {
+            if (known.Accepted) Answer(peer, id!, true);
+            else if (known.Pending) Tell(peer, "sendPending", id!);
+            return;
+        }
+        _ = ExpireIncomingLater(id!);
+        if (again)
+        {
+            Tell(peer, "sendPending", id!);
+            RaisePending();
+            return;
+        }
+        _ = PendLater(id!);
         _ = _ui.InvokeAsync(() => IncomingOffer?.Invoke(offer));
     }
 
-    async Task ForgetIncomingLater(string id)
+    /// <summary>The prompt went unanswered: the offer waits in Pendentes and the phone keeps its copies.</summary>
+    async Task PendLater(string id)
     {
         await Task.Delay(IncomingAnswerWindow);
         Incoming? waiting;
         lock (_gate)
         {
-            if (!_incoming.TryGetValue(id, out waiting)) return;
-            if (!waiting.Accepted) _incoming.Remove(id);
+            if (!_incoming.TryGetValue(id, out waiting) || waiting.Accepted || waiting.Pending) return;
+            waiting.Pending = true;
         }
-        if (!waiting.Accepted)
-        {
-            Answer(waiting.From, id, false);
-            return;
-        }
-        await Task.Delay(IncomingPushWindow);
-        lock (_gate) _incoming.Remove(id); // accepted but the bytes never came
+        Tell(waiting.From, "sendPending", id);
+        RaisePending();
+    }
+
+    /// <summary>A day later whatever is still here goes: not answered, or accepted but the bytes never came.</summary>
+    async Task ExpireIncomingLater(string id)
+    {
+        await Task.Delay(PendingLifetime);
+        Incoming? gone;
+        lock (_gate)
+            if (!_incoming.Remove(id, out gone)) return;
+        if (!gone.Accepted) Broadcast(AnswerLine("sendDecline", id));
+        RaisePending();
     }
 
     /// <summary>The person clicked the island: the phone may send it now. For text there is nothing more to wait for
@@ -324,10 +378,12 @@ public sealed partial class PhoneLink
         lock (_gate)
         {
             if (!_incoming.TryGetValue(id, out waiting) || waiting.Accepted) return false;
+            // (a text stays listed as accepted, so a phone that was away and offers it again just hears "accepted")
             waiting.Accepted = true;
-            if (waiting.Offer.Text != null) _incoming.Remove(id);
         }
-        Answer(waiting.From, id, true);
+        // to every connected phone: the one that asked may have reconnected (if it is away, it hears it on its way back)
+        Broadcast(AnswerLine("sendAccept", id));
+        if (waiting.Pending) RaisePending();
         if (waiting.Offer.Text is { } text)
             History?.Add(new TransferEntry(id, DateTime.Now, false, "Texto", Encoding.UTF8.GetByteCount(text), 1, "Copiado", [], text));
         return true;
@@ -338,11 +394,25 @@ public sealed partial class PhoneLink
         Incoming? waiting;
         lock (_gate)
             if (!_incoming.Remove(id, out waiting)) return;
-        Answer(waiting.From, id, false);
+        Broadcast(AnswerLine("sendDecline", id));
+        if (waiting.Pending) RaisePending();
     }
 
-    static void Answer(Peer peer, string id, bool accept) =>
-        _ = peer.SendAsync(new JsonObject { ["type"] = accept ? "sendAccept" : "sendDecline", ["id"] = id }.ToJsonString());
+    /// <summary>The phone took its offer back (Cancelar in its Pendentes): it is no longer here to accept.</summary>
+    void CancelIncoming(string id)
+    {
+        Incoming? gone;
+        lock (_gate)
+            if (!_incoming.Remove(id, out gone)) return;
+        // (a pill still asking just finds it gone when clicked)
+        if (gone.Pending) RaisePending();
+    }
+
+    static string AnswerLine(string type, string id) => new JsonObject { ["type"] = type, ["id"] = id }.ToJsonString();
+
+    static void Answer(Peer peer, string id, bool accept) => Tell(peer, accept ? "sendAccept" : "sendDecline", id);
+
+    static void Tell(Peer peer, string type, string id) => _ = peer.SendAsync(AnswerLine(type, id));
 
     /// <summary>The phone sends an accepted batch: per item a header, then exactly the bytes. Each one goes to a
     /// hidden temporary file first and is kept only if its size and SHA-256 are the ones the person accepted.</summary>

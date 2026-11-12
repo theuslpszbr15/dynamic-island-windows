@@ -44,11 +44,14 @@ class LinkService : Service() {
             worker = Thread(::loop, "link").apply { start() }
             ticker = Executors.newSingleThreadScheduledExecutor().apply {
                 scheduleWithFixedDelay({ Link.ping() }, LinkClient.PING_EVERY_MS, LinkClient.PING_EVERY_MS, TimeUnit.MILLISECONDS)
-                scheduleWithFixedDelay({ Link.pruneExpired(this@LinkService) }, 1, 1, TimeUnit.SECONDS)
+                scheduleWithFixedDelay({
+                    Link.pruneExpired(this@LinkService)
+                    FileSender.pruneExpired(this@LinkService)
+                }, 1, 1, TimeUnit.SECONDS)
                 scheduleWithFixedDelay(::tryLanAgain, LAN_CHECK_MS, LAN_CHECK_MS, TimeUnit.MILLISECONDS)
             }
             watchNetwork()
-            FileSender.cleanUp(this)
+            FileSender.load(this)
         }
         return START_STICKY
     }
@@ -92,10 +95,10 @@ class LinkService : Service() {
             } finally {
                 Link.client = null
                 client.close()
-                // nothing can be answered without the PC
+                // nothing can be answered without the PC (files the PC offered stay: they wait a day, and the PC
+                // offers them again when the link is back)
                 Link.state.value.approvals.forEach { Notifications.cancelApproval(this, it.fingerprint) }
-                Link.state.value.files.forEach { Notifications.cancelFile(this, it.id) }
-                Link.update { it.copy(approvals = emptyList(), sessions = emptyList(), tray = emptyList(), files = emptyList()) }
+                Link.update { it.copy(approvals = emptyList(), sessions = emptyList(), tray = emptyList()) }
             }
             showStatus("Sem conexão com ${pairing.name}. Tentando de novo…")
             val wait = BACKOFF_MS[minOf(attempt++, BACKOFF_MS.lastIndex)]
@@ -164,6 +167,16 @@ class LinkService : Service() {
             val viaRelay = Link.client?.route == Route.Relay
             Link.update { it.copy(status = LinkStatus.Connected, desktop = desktop, message = null, viaRelay = viaRelay) }
             showStatus(if (viaRelay) "Ligado a $desktop pela internet" else "Ligado a $desktop")
+            // The PC sends its live offers right after this; one it doesn't send again is gone (taken elsewhere,
+            // expired, the PC restarted).
+            val before = Link.state.value.files.map { it.id }.toSet()
+            synchronized(seen) { seen.clear() }
+            if (before.isNotEmpty()) ticker?.schedule(Runnable {
+                val gone = before - synchronized(seen) { seen.toSet() }
+                gone.forEach(::dropOffer)
+            }, OFFERS_AGAIN_MS, TimeUnit.MILLISECONDS)
+            // and what the phone still wants to send is offered again
+            Link.client?.let(FileSender::announce)
         }
 
         override fun onRelay(relay: String?, relayKey: String?) {
@@ -184,20 +197,21 @@ class LinkService : Service() {
         override fun onTray(items: List<TrayItem>) = Link.update { it.copy(tray = items) }
 
         override fun onFileOffer(offer: FileOffer) {
+            synchronized(seen) { seen += offer.id }
+            // offered again after a reconnection: already listed (and notified), keep when it first came
+            if (Link.state.value.files.any { it.id == offer.id }) return
             if (Link.state.value.files.size >= MAX_FILE_OFFERS) return
-            Link.update { s -> s.copy(files = s.files.filterNot { it.id == offer.id } + offer) }
+            Link.update { s -> s.copy(files = s.files + offer) }
             Notifications.showFileOffer(this@LinkService, offer)
         }
+
+        override fun onSendPending(id: String) = FileSender.movedToPending(this@LinkService, id)
 
         override fun onText(id: String, text: String) = Link.textFromPc(this@LinkService, id, text)
 
         override fun onSendAnswer(id: String, accepted: Boolean) = FileSender.answered(this@LinkService, id, accepted)
 
-        override fun onFileCancel(id: String) {
-            if (Link.state.value.files.none { it.id == id }) return
-            Link.update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
-            Notifications.cancelFile(this@LinkService, id)
-        }
+        override fun onFileCancel(id: String) = dropOffer(id)
 
         override fun onApproval(approval: Approval) {
             Link.update { s -> s.copy(approvals = s.approvals.filterNot { it.fingerprint == approval.fingerprint } + approval) }
@@ -209,6 +223,15 @@ class LinkService : Service() {
             Notifications.cancelApproval(this@LinkService, fingerprint)
             Link.confirmed(this@LinkService, fingerprint)
         }
+    }
+
+    /** Offer ids the PC sent since the last welcome. */
+    private val seen = HashSet<String>()
+
+    private fun dropOffer(id: String) {
+        if (Link.state.value.files.none { it.id == id }) return
+        Link.update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
+        Notifications.cancelFile(this, id)
     }
 
     private fun showStatus(text: String) =
@@ -231,8 +254,10 @@ class LinkService : Service() {
         private val BACKOFF_MS = longArrayOf(2_000, 5_000, 10_000, 30_000, 60_000)
         /** How often a relay link checks whether the PC is reachable directly again. */
         private const val LAN_CHECK_MS = 60_000L
-        /** The PC keeps at most 5 offers at a time; more than that isn't a person dropping files. */
-        private const val MAX_FILE_OFFERS = 5
+        /** The PC keeps at most 20 offers at a time (they wait a day); more than that isn't a person dropping files. */
+        private const val MAX_FILE_OFFERS = 20
+        /** How long after welcome the PC's offers have to come again before the old ones are dropped. */
+        private const val OFFERS_AGAIN_MS = 10_000L
 
         fun start(context: Context) =
             ContextCompat.startForegroundService(context, Intent(context, LinkService::class.java))

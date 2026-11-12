@@ -51,16 +51,19 @@ public sealed partial class SettingsWindow
         Drop += OnDrop;
 
         Island.History.Changed += OnHistory;
+        Island.PhonePendingChanged += OnHistory;
         Activated += (_, _) => Watch();
         Closed += (_, _) =>
         {
             Island.History.Changed -= OnHistory;
+            Island.PhonePendingChanged -= OnHistory;
+            _viewer?.Close();
             if (_link != null) _link.PhonesChanged -= OnPhones;
         };
         Watch();
     }
 
-    /// <summary>Opens the tab on Enviar, Recebidos or Enviados ("send", "received", "sent").</summary>
+    /// <summary>Opens the tab on Enviar, Recebidos, Enviados, Imagens or Vídeos ("send", "received", "sent", "images", "videos").</summary>
     public void ShowTransfers(string tab)
     {
         _tab = tab;
@@ -90,7 +93,9 @@ public sealed partial class SettingsWindow
     void Transfers(Panel page)
     {
         var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
-        foreach (var (id, label) in new[] { ("send", "Enviar"), ("received", "Recebidos"), ("sent", "Enviados") })
+        var pending = Island.PhonePending.Count;
+        foreach (var (id, label) in new[] { ("send", "Enviar"), ("received", pending > 0 ? $"Recebidos ({pending})" : "Recebidos"),
+                     ("sent", "Enviados"), ("images", "Imagens"), ("videos", "Vídeos") })
         {
             var b = new Button { Content = label, Style = (Style)Resources[_tab == id ? "Segment" : "Action"], Margin = new Thickness(0, 0, 8, 0) };
             b.Click += (_, _) => { _tab = id; Render(); };
@@ -101,6 +106,8 @@ public sealed partial class SettingsWindow
         {
             case "received": History(page, sent: false); break;
             case "sent": History(page, sent: true); break;
+            case "images": Media(page, videos: false); break;
+            case "videos": Media(page, videos: true); break;
             default: Send(page); break;
         }
     }
@@ -301,6 +308,7 @@ public sealed partial class SettingsWindow
 
     void History(Panel page, bool sent)
     {
+        if (!sent && Island.PhonePending is { Count: > 0 } pending) page.Children.Add(PendingCard(pending));
         var entries = Island.History.Entries.Where(e => e.Sent == sent).ToList();
         var list = new StackPanel();
         if (entries.Count == 0)
@@ -333,6 +341,110 @@ public sealed partial class SettingsWindow
         page.Children.Add(Card(sent ? "Do PC pro celular" : "Do celular pro PC", stack));
     }
 
+    /// <summary>What the phone wants to send and nobody answered: the same list as the island's Pendentes page.</summary>
+    Border PendingCard(IReadOnlyList<PhoneIncoming> pending)
+    {
+        var list = new StackPanel();
+        list.Children.Add(Note($"Ninguém respondeu na hora, então esperam aqui (e na ilha, em Pendentes) por até {(int)PhoneLink.PendingLifetime.TotalHours} horas. " +
+                               "Se o celular estiver longe, o envio começa quando ele conectar de novo."));
+        for (var i = 0; i < pending.Count; i++)
+        {
+            var offer = pending[i];
+            if (i > 0) list.Children.Add(new Border { Height = 1, Background = Line, Margin = new Thickness(0, 6, 0, 6) });
+            var row = new DockPanel();
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var decline = new Button { Content = "Recusar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            decline.Click += (_, _) => Island.DeclinePending(offer);
+            var accept = new Button { Content = offer.Text != null ? "Copiar" : "Aceitar", Style = (Style)Resources["Segment"], Margin = new Thickness(8, 0, 0, 0) };
+            accept.Click += (_, _) => Island.AcceptPending(offer);
+            buttons.Children.Add(decline);
+            buttons.Children.Add(accept);
+            DockPanel.SetDock(buttons, Dock.Right);
+            row.Children.Add(buttons);
+            var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            info.Children.Add(new TextBlock
+            {
+                Text = offer.Text is { } t ? Preview(t) : offer.Items.Count == 1 ? offer.Items[0].Name : $"{offer.Items.Count} arquivos",
+                FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+            info.Children.Add(Small($"{offer.Device} · {When(offer.At)} · " +
+                                    (offer.Text != null ? $"{offer.Text.Length:N0} caracteres".Replace(',', '.') : SizeText(offer.TotalBytes)) +
+                                    (offer.Items.Count > 1 ? " · " + string.Join(", ", offer.Items.Select(x => x.Name)) : "")));
+            row.Children.Add(info);
+            list.Children.Add(row);
+        }
+        return Card("Esperando você aceitar", list);
+    }
+
+    // ───────────────────────── Imagens / Vídeos ─────────────────────────
+
+    MediaViewer? _viewer;
+
+    /// <summary>Every picture (or video and gif) that went either way and is still on this PC, newest first.</summary>
+    List<(string Path, bool Sent, DateTime When)> MediaPaths(bool videos) =>
+        [.. Island.History.Entries.Where(e => !e.IsText)
+            .SelectMany(e => e.Paths.Select(p => (Path: p, e.Sent, e.When)))
+            .Where(x => (videos ? MediaFiles.IsVideo(x.Path) : MediaFiles.IsImage(x.Path)) && File.Exists(x.Path))
+            .DistinctBy(x => x.Path.ToLowerInvariant())];
+
+    const int MediaShown = 60;
+
+    void Media(Panel page, bool videos)
+    {
+        var all = MediaPaths(videos);
+        var grid = new WrapPanel();
+        if (all.Count == 0)
+            grid.Children.Add(Note(videos
+                ? "Nenhum vídeo ainda. Aparecem aqui os vídeos e gifs (mp4, mkv, webm, mov, gif…) que você mandou ou recebeu e ainda estão no PC."
+                : "Nenhuma imagem ainda. Aparecem aqui as fotos (png, jpg, webp, heic…) que você mandou ou recebeu e ainda estão no PC."));
+        var paths = all.Select(x => x.Path).ToList();
+        for (var i = 0; i < Math.Min(all.Count, MediaShown); i++)
+            grid.Children.Add(MediaTile(all[i].Path, all[i].Sent, paths, i, videos));
+        var stack = new StackPanel();
+        stack.Children.Add(Note((videos ? "Clique para assistir aqui: mp4, mkv, webm e gif tocam direto; o que o Windows não tocar abre com outro app."
+                                        : "Clique para ver em tamanho grande, com zoom.") +
+                                (all.Count > MediaShown ? $" Mostrando os {MediaShown} mais novos de {all.Count}." : "")));
+        stack.Children.Add(grid);
+        page.Children.Add(Card(videos ? "Vídeos e gifs" : "Imagens", stack));
+    }
+
+    FrameworkElement MediaTile(string path, bool sent, IReadOnlyList<string> list, int index, bool video)
+    {
+        var picture = new Border { Height = 112, CornerRadius = new CornerRadius(10), Background = Hover, ClipToBounds = true };
+        var glyph = new TextBlock
+        {
+            Text = video ? "\uE714" : "\uEB9F", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 26,
+            Foreground = Muted, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        var layers = new Grid();
+        layers.Children.Add(glyph);
+        picture.Child = layers;
+        // the preview comes in the background: a folder of big photos shouldn't freeze the window
+        _ = MediaFiles.ThumbnailAsync(path, 320).ContinueWith(t =>
+        {
+            if (t.Result is not { } thumb) return;
+            layers.Children.Insert(0, new Image { Source = thumb, Stretch = Stretch.UniformToFill, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+            glyph.Visibility = video ? Visibility.Visible : Visibility.Collapsed;
+            if (video) { glyph.Foreground = Brushes.White; glyph.Opacity = 0.85; }
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+        var name = new TextBlock { Text = Path.GetFileName(path), FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(2, 6, 2, 0) };
+        var where = new TextBlock { Text = sent ? "Enviado" : "Recebido", FontSize = 11, Foreground = Muted, Margin = new Thickness(2, 1, 2, 0) };
+        var tile = new StackPanel { Width = 150, Margin = new Thickness(0, 0, 12, 14), Cursor = Cursors.Hand, Background = Brushes.Transparent, ToolTip = path };
+        tile.Children.Add(picture);
+        tile.Children.Add(name);
+        tile.Children.Add(where);
+        tile.MouseLeftButtonUp += (_, _) => ShowMedia(list, index);
+        return tile;
+    }
+
+    void ShowMedia(IReadOnlyList<string> list, int index)
+    {
+        _viewer?.Close();
+        _viewer = new MediaViewer(list, index) { Owner = this };
+        _viewer.Closed += (_, _) => _viewer = null;
+        _viewer.Show();
+    }
+
     FrameworkElement EntryRow(TransferEntry entry)
     {
         var row = new DockPanel();
@@ -361,6 +473,9 @@ public sealed partial class SettingsWindow
         else
         {
             var existing = entry.Paths.Where(File.Exists).ToList();
+            var media = existing.Where(p => MediaFiles.IsImage(p) || MediaFiles.IsVideo(p)).ToList();
+            if (media.Count > 0)
+                Act("Ver", () => ShowMedia(media, 0));
             if (existing.Count > 0)
                 Act("Mostrar na pasta", () => Select(existing[0]));
             if (entry.Sent && existing.Count == entry.Paths.Count && existing.Count > 0)

@@ -37,6 +37,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         Notifications.createChannels(this)
         History.load(this)
+        FileSender.load(this)
         PairingStore.load(this)?.let { pairing ->
             val paused = PairingStore.isPaused(this)
             Link.update {

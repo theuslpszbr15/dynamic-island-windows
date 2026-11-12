@@ -727,6 +727,22 @@
                                         </Border>
                                     </Grid>
                                 </Grid>
+
+                                <!-- Pendentes: what the phone wants to send and nobody answered yet -->
+                                <Grid x:Name="PendingPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
+                                        <TranslateTransform />
+                                    </Grid.RenderTransform>
+                                    <ScrollViewer x:Name="PendingScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="PendingList" />
+                                    </ScrollViewer>
+                                    <StackPanel x:Name="PendingEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8EA;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
+                                        <TextBlock Text="Nada pendente" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
+                                        <TextBlock Text="O que o celular mandar e você não aceitar na hora espera aqui por um dia" FontSize="11.5"
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
                             </Grid>
 
                             <StackPanel x:Name="Dots" Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" />
