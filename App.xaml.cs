@@ -276,9 +276,8 @@ public partial class App : Application
     public async void InstallUpdate()
     {
         if (Update is not { } update) return;
-        var answer = MessageBox.Show($"Baixar e instalar a versão {update.Version.ToString(3)} agora? A ilha reinicia sozinha.",
-            "Atualizar Dynamic Island", MessageBoxButton.OKCancel, MessageBoxImage.Question);
-        if (answer != MessageBoxResult.OK) return;
+        if (!DarkDialog.Ask(null, "Atualizar Dynamic Island",
+                $"Baixar e instalar a versão {update.Version.ToString(3)} agora? A ilha reinicia sozinha.", "Atualizar")) return;
         try
         {
             _tray.Balloon("Baixando atualização", $"Versão {update.Version.ToString(3)}…");
@@ -357,11 +356,9 @@ public partial class App : Application
 
     public void Install()
     {
-        var answer = MessageBox.Show(
-            $"A ilha será instalada em:\n{Installer.InstallDir}\n\nCom atalho no menu Iniciar, iniciando junto com o Windows " +
-            "e aparecendo em Configurações → Aplicativos (para desinstalar). Continuar?",
-            "Instalar Dynamic Island", MessageBoxButton.OKCancel, MessageBoxImage.Question);
-        if (answer != MessageBoxResult.OK) return;
+        if (!DarkDialog.Ask(null, "Instalar Dynamic Island",
+                $"A ilha será instalada em:\n{Installer.InstallDir}\n\nCom atalho no menu Iniciar, iniciando junto com o Windows " +
+                "e aparecendo em Configurações → Aplicativos (para desinstalar). Continuar?", "Instalar")) return;
         try
         {
             var exe = Installer.Install();
@@ -377,9 +374,7 @@ public partial class App : Application
 
     public void Uninstall()
     {
-        var answer = MessageBox.Show("Remover a Dynamic Island deste computador?", "Desinstalar",
-            MessageBoxButton.OKCancel, MessageBoxImage.Question);
-        if (answer != MessageBoxResult.OK) return;
+        if (!DarkDialog.Ask(null, "Desinstalar", "Remover a Dynamic Island deste computador?", "Desinstalar", danger: true)) return;
         Installer.Uninstall();
         Quit();
     }

@@ -501,8 +501,7 @@ public sealed class SettingsWindow : DarkWindow
             var again = new Button { Content = "Parear de novo", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
             again.Click += (_, _) =>
             {
-                if (MessageBox.Show(this, "O celular pareado será desconectado e terá de escanear um código novo. Continuar?",
-                        "Parear de novo", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+                if (!DarkDialog.Ask(this, "Parear de novo", "O celular pareado será desconectado e terá de escanear um código novo. Continuar?", "Parear de novo")) return;
                 link.PairAgain();
                 Render();
             };
