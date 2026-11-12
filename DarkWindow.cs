@@ -25,7 +25,7 @@ public abstract class DarkWindow : Window
     protected DarkWindow(string windowTitle, string barTitle, (string Id, string Glyph, string Title)[] sections)
     {
         _sections = sections;
-        _page = sections[0].Id;
+        _page = sections.Length > 0 ? sections[0].Id : "";
         Title = windowTitle;
         Width = 940;
         Height = 680;
@@ -62,13 +62,15 @@ public abstract class DarkWindow : Window
         foreach (var (id, glyph, title) in sections) _nav.Children.Add(NavButton(id, glyph, title));
         sidebar.Children.Add(_nav);
 
-        var root = new Grid { Background = Ground };
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
+        var root = _root;
+        root.Background = Ground;
+        // no sections (the viewer): no sidebar, the bar and the body take the whole width
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(sections.Length > 0 ? 240 : 0) });
         root.ColumnDefinitions.Add(new ColumnDefinition());
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(CaptionHeight) });
         root.RowDefinitions.Add(new RowDefinition());
         Grid.SetRowSpan(sidebar, 2);
-        root.Children.Add(sidebar);
+        if (sections.Length > 0) root.Children.Add(sidebar);
         // The bar over the content: same tone as the sidebar with a hairline under it (like Obsidian's tab
         // strip), the window's name on the left (drag area) and the buttons on the right.
         var bar = new Border { Background = Panel, BorderBrush = Line, BorderThickness = new Thickness(0, 0, 0, 1) };
@@ -106,6 +108,17 @@ public abstract class DarkWindow : Window
         StateChanged += (_, _) => Fit();
         Activated += (_, _) => SetCaptionActive(true);
         Deactivated += (_, _) => SetCaptionActive(false);
+    }
+
+    readonly Grid _root = new();
+
+    /// <summary>Puts <paramref name="body"/> under the bar instead of the scrolling page (the viewer, which sizes itself).</summary>
+    protected void SetBody(UIElement body)
+    {
+        _root.Children.Remove(_scroll);
+        Grid.SetColumn(body, 1);
+        Grid.SetRow(body, 1);
+        _root.Children.Add(body);
     }
 
     const double CaptionHeight = 38;

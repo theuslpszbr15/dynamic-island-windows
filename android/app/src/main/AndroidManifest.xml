@@ -39,6 +39,12 @@
             </intent-filter>
         </activity>
 
+        <!-- pictures and videos received from the PC (only the app opens it) -->
+        <activity
+            android:name=".MediaViewerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DynamicIsland" />
+
         <!-- "Compartilhar → Dynamic Island": files, photos, videos or text to the PC (which asks first) -->
         <activity
             android:name=".ShareActivity"

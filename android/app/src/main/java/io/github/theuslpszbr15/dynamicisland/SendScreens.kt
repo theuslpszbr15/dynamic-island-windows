@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -186,25 +189,66 @@ private fun SendTile(icon: Int, label: String, enabled: Boolean, modifier: Modif
     }
 }
 
-/** "Histórico": Recebidos and Enviados, newest first; received files open from here, texts copy. */
+/** "Histórico": Recebidos, Enviados and Pendentes (both ways), then the received Imagens and Vídeos with a viewer. */
 @Composable
-fun HistoryTab(records: List<TransferRecord>, ready: Boolean) {
+fun HistoryTab(records: List<TransferRecord>, state: LinkUi) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var sent by rememberSaveable { mutableStateOf(false) }
+    val ready = state.status == LinkStatus.Connected
+    val mine by FileSender.waiting.collectAsState()
+    // 0 Recebidos, 1 Enviados, 2 Pendentes, 3 Imagens, 4 Vídeos
+    var segment by rememberSaveable { mutableStateOf(0) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
+    val sent = segment == 1
     val shown = records.filter { it.sent == sent }
+    val waiting = state.files.size + mine.size
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-        Row(Modifier.padding(top = 4.dp, bottom = 10.dp).fillMaxWidth().background(SCard, RoundedCornerShape(14.dp)).padding(4.dp)) {
-            listOf(false to "Recebidos", true to "Enviados").forEach { (side, label) ->
-                Box(
-                    Modifier.weight(1f).height(38.dp)
-                        .background(if (sent == side) SBlue.copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(11.dp))
-                        .clickable { sent = side },
-                    contentAlignment = Alignment.Center,
-                ) { Text(label, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) }
-            }
+        Row(Modifier.padding(top = 4.dp, bottom = 10.dp).fillMaxWidth().background(SCard, RoundedCornerShape(14.dp))
+            .horizontalScroll(rememberScrollState()).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            listOf("Recebidos", "Enviados", if (waiting > 0) "Pendentes ($waiting)" else "Pendentes", "Imagens", "Vídeos")
+                .forEachIndexed { i, label ->
+                    Box(
+                        Modifier.height(38.dp)
+                            .background(if (segment == i) SBlue.copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(11.dp))
+                            .clickable { segment = i }.padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(label, color = if (i == 2 && waiting > 0 && segment != i) SOrange else Color.White,
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+                    }
+                }
         }
+        when (segment) {
+            2 -> PendingList(state, mine, Modifier.weight(1f))
+            3, 4 -> {
+                val entries = remember(records, segment) { Media.entries(records, videos = segment == 4) }
+                MediaGrid(entries, videos = segment == 4, modifier = Modifier.weight(1f))
+            }
+            else -> RecordList(shown, sent, ready, context, scope, Modifier.weight(1f)) { confirmClear = true }
+        }
+    }
+    if (confirmClear) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Limpar a lista?") },
+            text = { Text("Os arquivos continuam onde estão; só a lista some.") },
+            confirmButton = { TextButton(onClick = { confirmClear = false; History.clear(context, sent) }) { Text("Limpar", color = SRed) } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancelar") } },
+        )
+    }
+}
+
+@Composable
+private fun RecordList(
+    shown: List<TransferRecord>,
+    sent: Boolean,
+    ready: Boolean,
+    context: Context,
+    scope: kotlinx.coroutines.CoroutineScope,
+    modifier: Modifier,
+    onClear: () -> Unit,
+) {
+    Column(modifier) {
         if (shown.isEmpty()) {
             Text(if (sent) "Nada enviado ainda. Use a aba Enviar ou Compartilhar → Mandar pro PC em qualquer app."
                 else "Nada recebido ainda. No PC, solte arquivos no lado \"celular\" da ilha ou use a janela Celular.",
@@ -227,20 +271,11 @@ fun HistoryTab(records: List<TransferRecord>, ready: Boolean) {
                     onRemove = { History.remove(context, record.id, record.sent) })
             }
             if (shown.isNotEmpty()) item {
-                TextButton(onClick = { confirmClear = true }, modifier = Modifier.padding(vertical = 8.dp)) {
+                TextButton(onClick = onClear, modifier = Modifier.padding(vertical = 8.dp)) {
                     Text("Limpar a lista", color = SRed)
                 }
             }
         }
-    }
-    if (confirmClear) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("Limpar a lista?") },
-            text = { Text("Os arquivos continuam onde estão; só a lista some.") },
-            confirmButton = { TextButton(onClick = { confirmClear = false; History.clear(context, sent) }) { Text("Limpar", color = SRed) } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancelar") } },
-        )
     }
 }
 
@@ -255,8 +290,8 @@ private fun RecordRow(
 ) {
     val statusColor = when (record.status) {
         "No PC", "Recebido", "Copiado" -> SGreen
-        "Esperando o PC", "Enviando" -> SOrange
-        "Recusado", "Não aceito" -> SMuted
+        "Esperando o PC", "Enviando", "Pendente no PC", "Na fila", "Vai de novo quando ligar" -> SOrange
+        "Recusado", "Não aceito", "Cancelado", "Expirou" -> SMuted
         else -> SRed
     }
     Column(Modifier.fillMaxWidth().background(SCard, RoundedCornerShape(16.dp)).padding(14.dp)) {
@@ -290,8 +325,11 @@ private fun RecordRow(
     }
 }
 
-/** Opens a received file with whatever app handles it (only this app's own MediaStore entries are listed). */
+/** Pictures and videos open in the app's viewer; anything else with whatever app handles it (only this app's own
+ * MediaStore entries are listed). */
 private fun open(context: Context, record: TransferRecord) {
+    val media = Media.entries(listOf(record), videos = false) + Media.entries(listOf(record), videos = true)
+    if (media.isNotEmpty()) return MediaViewerActivity.open(context, media, 0)
     val uri = record.uris.firstOrNull()?.let(Uri::parse) ?: return
     val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, record.mimes.firstOrNull() ?: "*/*")
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)

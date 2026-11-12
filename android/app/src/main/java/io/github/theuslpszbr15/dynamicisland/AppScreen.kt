@@ -202,7 +202,7 @@ private fun HomeScreen(
             when (tab) {
                 0 -> AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan, onFixNotifications)
                 2 -> SendTab(state)
-                3 -> HistoryTab(records, state.status == LinkStatus.Connected)
+                3 -> HistoryTab(records, state)
                 else -> TrayTab(state, onOpen)
             }
         }

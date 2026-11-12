@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows.Controls;
+using System.Windows.Media;
 using DynamicIsland.Services;
 
 namespace DynamicIsland;
@@ -37,6 +39,7 @@ public partial class IslandWindow
             _phone.IncomingText += OnPhoneText;
             _phone.IncomingDone += OnPhoneIncomingDone;
             _phone.RelayTrouble += OnRelayTrouble;
+            _phone.PendingChanged += OnPhonePending;
             _phone.History = History;
         }
         _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);
@@ -257,7 +260,7 @@ public partial class IslandWindow
         }
     }
 
-    // The phone wants to send something: one click on the pill accepts; ignoring it declines (after 45 s).
+    // The phone wants to send something: one click on the pill accepts; ignored, it moves to Pendentes after 45 s.
     void OnPhoneIncoming(PhoneIncoming offer)
     {
         if (_phone == null || SnapshotMode) return;
@@ -282,6 +285,96 @@ public partial class IslandWindow
     }
 
     void OnPhoneText(string text) => CopyFromPhone(text);
+
+    // ───────────────────────── Pendentes ─────────────────────────
+
+    int _pendingCount;
+
+    /// <summary>What the phone wants to send and nobody answered yet (the island's Pendentes page).</summary>
+    public IReadOnlyList<PhoneIncoming> PhonePending => _phone?.PendingIncoming ?? [];
+
+    /// <summary>Raised when <see cref="PhonePending"/> changes (the settings window listens too).</summary>
+    public event Action? PhonePendingChanged;
+
+    void OnPhonePending()
+    {
+        var count = PhonePending.Count;
+        // a new one moved here: a short note, clicking it opens the page
+        if (count > _pendingCount && !SnapshotMode)
+            ShowInfo("\uE823", "Ficou nos pendentes", count == 1 ? "1 pedido" : $"{count} pedidos",
+                action: OpenPending, seconds: 4);
+        _pendingCount = count;
+        if (_expanded && _page == PagePending) UpdatePendingUi();
+        PhonePendingChanged?.Invoke();
+    }
+
+    public void OpenPending() => SetExpanded(true, PagePending);
+
+    /// <summary>Accepts a pending batch (the phone sends it now, or as soon as it connects again).</summary>
+    public void AcceptPending(PhoneIncoming offer)
+    {
+        if (_phone?.AcceptIncoming(offer.Id) != true) return;
+        if (offer.Text != null) CopyFromPhone(offer.Text);
+        else ShowInfo("\uE896", What(offer), _phone.ConnectedPhones > 0 ? "Recebendo…" : "Chega quando o celular conectar", seconds: 3);
+    }
+
+    public void DeclinePending(PhoneIncoming offer) => _phone?.DeclineIncoming(offer.Id);
+
+    static string What(PhoneIncoming offer) =>
+        offer.Text != null ? "Texto: " + Preview(offer.Text)
+        : offer.Items.Count == 1 ? offer.Items[0].IsText ? "Um texto longo" : offer.Items[0].Name
+        : $"{offer.Items.Count} arquivos";
+
+    void UpdatePendingUi()
+    {
+        var list = PhonePending;
+        PendingEmpty.Visibility = Vis(list.Count == 0);
+        PendingList.Children.Clear();
+        foreach (var offer in list)
+        {
+            var row = new Grid { Margin = new System.Windows.Thickness(0, 0, 0, 6) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = System.Windows.GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = System.Windows.GridLength.Auto });
+            var kind = offer.Text != null || offer.Items.Any(i => i.IsText) ? "\uE8C8"
+                : offer.Items.All(i => MediaFiles.IsImage(i.Name)) ? "\uEB9F"
+                : offer.Items.All(i => MediaFiles.IsVideo(i.Name)) ? "\uE714" : "\uE8A5";
+            var icon = new TextBlock
+            {
+                Text = kind, FontFamily = (System.Windows.Media.FontFamily)FindResource("Icons"), FontSize = 20, Width = 34,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            };
+            icon.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            row.Children.Add(icon);
+            var info = new StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 0, 8, 0) };
+            info.Children.Add(new TextBlock { Text = What(offer), FontSize = 13, FontWeight = System.Windows.FontWeights.SemiBold, TextTrimming = System.Windows.TextTrimming.CharacterEllipsis });
+            var left = offer.At + PhoneLink.PendingLifetime - DateTime.Now;
+            var detail = new TextBlock
+            {
+                FontSize = 11.5, TextTrimming = System.Windows.TextTrimming.CharacterEllipsis,
+                Text = $"{offer.Device} · {(offer.Text != null ? $"{offer.Text.Length} caracteres" : SizeText(offer.TotalBytes))} · " +
+                       $"{(offer.At.Date == DateTime.Today ? $"às {offer.At:HH:mm}" : $"{offer.At:dd/MM HH:mm}")} · vale mais {Math.Max(1, (int)left.TotalHours)} h",
+            };
+            detail.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            info.Children.Add(detail);
+            Grid.SetColumn(info, 1);
+            row.Children.Add(info);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = System.Windows.VerticalAlignment.Center };
+            var decline = new System.Windows.Controls.Button { Content = "Recusar", Style = (System.Windows.Style)FindResource("Chip"), Height = 30 };
+            decline.Click += (_, _) => DeclinePending(offer);
+            var accept = new System.Windows.Controls.Button
+            {
+                Content = offer.Text != null ? "Copiar" : "Aceitar", Style = (System.Windows.Style)FindResource("Chip"), Height = 30,
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x0A, 0x84, 0xFF)),
+            };
+            accept.Click += (_, _) => AcceptPending(offer);
+            buttons.Children.Add(decline);
+            buttons.Children.Add(accept);
+            Grid.SetColumn(buttons, 2);
+            row.Children.Add(buttons);
+            PendingList.Children.Add(row);
+        }
+    }
 
     void CopyFromPhone(string text)
     {

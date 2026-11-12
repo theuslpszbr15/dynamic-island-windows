@@ -79,6 +79,8 @@ class LinkClient(
         fun onSendAnswer(id: String, accepted: Boolean) {}
         /** The offer is gone (taken, declined elsewhere, expired). */
         fun onFileCancel(id: String) {}
+        /** Nobody answered on the PC: what the phone offered waits in the island's Pendentes. */
+        fun onSendPending(id: String) {}
     }
 
     private val writeLock = Any()
@@ -147,6 +149,7 @@ class LinkClient(
                 }
                 "sendAccept", "sendDecline" -> if (FileOffer.isId(o.optString("id")))
                     listener.onSendAnswer(o.optString("id"), o.optString("type") == "sendAccept")
+                "sendPending" -> if (FileOffer.isId(o.optString("id"))) listener.onSendPending(o.optString("id"))
             }
         }
     }
@@ -316,14 +319,19 @@ class LinkClient(
     /** Tells the PC whether the files arrived whole (saved) or not. */
     fun fileDone(id: String, ok: Boolean) = send(JSONObject().put("type", "fileDone").put("id", id).put("ok", ok))
 
-    /** Asks the PC to accept files (names, sizes, hashes); it answers sendAccept / sendDecline. */
-    fun sendOffer(id: String, items: List<OfferItem>) = send(JSONObject().put("type", "sendOffer").put("id", id)
+    /** Asks the PC to accept files (names, sizes, hashes); it answers sendAccept / sendDecline, or sendPending when
+     * nobody clicks. [pending]: offered before and still waiting (sent again on each connection). */
+    fun sendOffer(id: String, items: List<OfferItem>, pending: Boolean = false) = send(JSONObject().put("type", "sendOffer").put("id", id)
         .put("items", org.json.JSONArray().apply {
             items.forEach { put(JSONObject().put("name", it.name).put("size", it.size).put("sha256", it.sha256).apply { if (it.isText) put("text", true) }) }
-        }))
+        }).apply { if (pending) put("pending", true) })
 
     /** Asks the PC to accept a short text (it goes along; the PC copies it once the person clicks). */
-    fun sendText(id: String, text: String) = send(JSONObject().put("type", "sendOffer").put("id", id).put("text", text))
+    fun sendText(id: String, text: String, pending: Boolean = false) =
+        send(JSONObject().put("type", "sendOffer").put("id", id).put("text", text).apply { if (pending) put("pending", true) })
+
+    /** Takes back something offered (Cancelar in Pendentes). */
+    fun sendCancel(id: String) = send(JSONObject().put("type", "sendCancel").put("id", id))
 
     private fun send(message: JSONObject) {
         synchronized(writeLock) {
