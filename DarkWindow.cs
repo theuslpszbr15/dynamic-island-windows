@@ -90,6 +90,9 @@ public abstract class DarkWindow : Window
         // the resize border, so the content is pulled back in.
         var frame = new Border { BorderBrush = Line, BorderThickness = new Thickness(1), Child = root };
         Content = frame;
+        // Whatever DWM still draws (the 1 px frame, the caption while snapping or on Windows 10) goes dark too,
+        // instead of taking the Windows accent colour when "show accent colour on title bars" is on.
+        SourceInitialized += (_, _) => DarkFrame.Apply(this, 0xFF1C1C1F, 0xFF2E2E33);
         void Fit()
         {
             frame.BorderThickness = WindowState == WindowState.Maximized ? new Thickness(0) : new Thickness(1);
@@ -256,7 +259,7 @@ public abstract class DarkWindow : Window
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); } catch { }
     }
 
-    protected static SolidColorBrush Frozen(uint argb)
+    internal static SolidColorBrush Frozen(uint argb)
     {
         var brush = new SolidColorBrush(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
         brush.Freeze();
@@ -264,7 +267,7 @@ public abstract class DarkWindow : Window
     }
 
     // Dark controls: a switch, sidebar items, buttons and a combo box with a dark drop-down.
-    protected static ResourceDictionary Styles() => (ResourceDictionary)XamlReader.Parse("""
+    internal static ResourceDictionary Styles() => (ResourceDictionary)XamlReader.Parse("""
         <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
           <Style x:Key="Switch" TargetType="CheckBox">

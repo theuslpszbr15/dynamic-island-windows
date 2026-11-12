@@ -309,8 +309,8 @@ public sealed class PhoneWindow : DarkWindow
         var clear = new Button { Content = "Limpar lista", Style = (Style)Resources["Action"], Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
         clear.Click += (_, _) =>
         {
-            if (MessageBox.Show(this, "Limpar a lista? Os arquivos continuam onde estão.", sent ? "Enviados" : "Recebidos",
-                    MessageBoxButton.OKCancel) == MessageBoxResult.OK) Island.History.Clear(sent);
+            if (DarkDialog.Ask(this, sent ? "Limpar Enviados?" : "Limpar Recebidos?", "Os arquivos continuam onde estão; só a lista some.",
+                    "Limpar", danger: true)) Island.History.Clear(sent);
         };
         var stack = new StackPanel();
         stack.Children.Add(Note(sent

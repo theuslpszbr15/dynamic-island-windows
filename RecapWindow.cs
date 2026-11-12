@@ -166,7 +166,7 @@ public sealed class RecapWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Não foi possível salvar", MessageBoxButton.OK, MessageBoxImage.Warning);
+            DarkDialog.Ask(this, "Não foi possível salvar", ex.Message, cancel: null);
         }
     }
 }
