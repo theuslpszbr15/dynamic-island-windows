@@ -9,35 +9,28 @@ using DynamicIsland.Services;
 namespace DynamicIsland;
 
 /// <summary>
-/// The "Celular" window, in the spirit of LocalSend but for the one paired phone (no list of nearby devices):
+/// The "Enviar e receber" tab, in the spirit of LocalSend but for the one paired phone (no list of nearby devices):
 /// Enviar (Arquivo, Pasta, Texto, Colar, or drop things on the window), Recebidos and Enviados (the history).
 /// Everything goes through the same link as the island: the phone asks before taking anything.
 /// </summary>
-public sealed class PhoneWindow : DarkWindow
+public sealed partial class SettingsWindow
 {
-    static readonly (string Id, string Glyph, string Title)[] Sections =
-    [
-        ("send", "", "Enviar"),
-        ("received", "", "Recebidos"),
-        ("sent", "", "Enviados"),
-        ("settings", "", "Configurações"),
-    ];
+    public const string TransferPage = "transfer";
 
     static readonly Brush Good = Frozen(0xFF30D158), Warn = Frozen(0xFFFF9F0A), Bad = Frozen(0xFFFF453A), Internet = Frozen(0xFF64D2FF);
 
-    readonly App _app;
     PhoneLink? _link;
     // Kept across renders so a half-written text survives the phone coming and going.
-    readonly TextBox _text;
+    TextBox _text = null!;
     bool _textOpen;
     string? _status;
     bool _statusBad;
+    string _tab = "send";
 
     IslandWindow Island => _app.Island;
 
-    public PhoneWindow(App app) : base("Celular — Dynamic Island", "Celular", Sections)
+    void SetUpTransfers()
     {
-        _app = app;
         Resources.MergedDictionaries.Add(TileStyle());
         _text = new TextBox
         {
@@ -65,7 +58,13 @@ public sealed class PhoneWindow : DarkWindow
             if (_link != null) _link.PhonesChanged -= OnPhones;
         };
         Watch();
-        Render();
+    }
+
+    /// <summary>Opens the tab on Enviar, Recebidos or Enviados ("send", "received", "sent").</summary>
+    public void ShowTransfers(string tab)
+    {
+        _tab = tab;
+        if (_page == TransferPage) Render(); else Navigate(TransferPage);
     }
 
     /// <summary>The link exists only once "Ligação com o celular" was turned on, so look for it again on the way in.</summary>
@@ -75,27 +74,34 @@ public sealed class PhoneWindow : DarkWindow
         if (_link != null) _link.PhonesChanged -= OnPhones;
         _link = Island.Phone;
         if (_link != null) _link.PhonesChanged += OnPhones;
-        Render();
+        if (_page is "phone" or TransferPage) Render();
     }
 
-    void OnPhones()
+    void OnPhones() => Dispatcher.InvokeAsync(() =>
     {
-        if (_page is "send" or "settings") Render();
-    }
+        if (_page == "phone" || _page == TransferPage && _tab == "send") Render();
+    });
 
     void OnHistory() => Dispatcher.InvokeAsync(() =>
     {
-        if (_page is "received" or "sent") Render();
+        if (_page == TransferPage && _tab != "send") Render();
     });
 
-    protected override void Fill(string section, Panel page)
+    void Transfers(Panel page)
     {
-        switch (section)
+        var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
+        foreach (var (id, label) in new[] { ("send", "Enviar"), ("received", "Recebidos"), ("sent", "Enviados") })
         {
-            case "send": Send(page); break;
+            var b = new Button { Content = label, Style = (Style)Resources[_tab == id ? "Segment" : "Action"], Margin = new Thickness(0, 0, 8, 0) };
+            b.Click += (_, _) => { _tab = id; Render(); };
+            tabs.Children.Add(b);
+        }
+        page.Children.Add(tabs);
+        switch (_tab)
+        {
             case "received": History(page, sent: false); break;
             case "sent": History(page, sent: true); break;
-            case "settings": Settings(page); break;
+            default: Send(page); break;
         }
     }
 
@@ -163,7 +169,7 @@ public sealed class PhoneWindow : DarkWindow
                 });
             }
             if (!_app.Settings.PhoneFiles)
-                text.Children.Add(Small("\"Arquivos e textos com o celular\" está desligado (em Configurações, aqui ao lado)."));
+                text.Children.Add(Small("\"Arquivos e textos com o celular\" está desligado (na aba Celular, aqui ao lado)."));
         }
         row.Children.Add(text);
         if (!_app.Settings.PhoneLink || phones.Count == 0)
@@ -270,14 +276,14 @@ public sealed class PhoneWindow : DarkWindow
     {
         if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } paths)
         {
-            Navigate("send");
+            ShowTransfers("send");
             SendFiles(paths);
         }
         else if (e.Data.GetData(DataFormats.UnicodeText) is string text && text.Length > 0)
         {
             _textOpen = true;
             _text.Text = text.Length > PhoneLink.MaxTextChars ? text[..PhoneLink.MaxTextChars] : text;
-            Navigate("send");
+            ShowTransfers("send");
             Render();
             _text.Focus();
         }
@@ -288,7 +294,7 @@ public sealed class PhoneWindow : DarkWindow
     {
         _status = error ?? ok;
         _statusBad = error != null;
-        if (_page == "send") Render();
+        if (_page == TransferPage && _tab == "send") Render();
     }
 
     // ───────────────────────── Recebidos / Enviados ─────────────────────────
@@ -350,7 +356,7 @@ public sealed class PhoneWindow : DarkWindow
         if (entry.Text is { } text)
         {
             Act("Copiar", () => { try { Clipboard.SetText(text); } catch { } });
-            if (entry.Sent) Act("Mandar de novo", () => { Navigate("send"); Done(Island.SendTextToPhone(text), "Texto enviado"); }).IsEnabled = Island.PhoneReady;
+            if (entry.Sent) Act("Mandar de novo", () => { ShowTransfers("send"); Done(Island.SendTextToPhone(text), "Texto enviado"); }).IsEnabled = Island.PhoneReady;
         }
         else
         {
@@ -358,7 +364,7 @@ public sealed class PhoneWindow : DarkWindow
             if (existing.Count > 0)
                 Act("Mostrar na pasta", () => Select(existing[0]));
             if (entry.Sent && existing.Count == entry.Paths.Count && existing.Count > 0)
-                Act("Mandar de novo", () => { Navigate("send"); SendFiles(existing); }).IsEnabled = Island.PhoneReady;
+                Act("Mandar de novo", () => { ShowTransfers("send"); SendFiles(existing); }).IsEnabled = Island.PhoneReady;
         }
         var remove = new Button
         {
@@ -414,19 +420,6 @@ public sealed class PhoneWindow : DarkWindow
         try { Process.Start("explorer.exe", $"/select,\"{path}\""); } catch { }
     }
 
-    // ───────────────────────── Configurações ─────────────────────────
-
-    void Settings(Panel page)
-    {
-        var more = new Button { Content = "Abrir", Style = (Style)Resources["Action"] };
-        more.Click += (_, _) => _app.ShowSettings("phone");
-        page.Children.Add(Card("Celular",
-            Toggle("Ligação com o celular", "Desligada, nada fica escutando na rede.", _app.Settings.PhoneLink, _ => { _app.TogglePhoneLink(); Watch(); }),
-            Toggle("Arquivos e textos com o celular", "Desligado, a ilha recusa o que vier do celular e esta janela não envia nada.",
-                _app.Settings.PhoneFiles, _ => _app.TogglePhoneFiles()),
-            Row("Parear, repasse pela internet e app", "Nas Configurações da ilha, em Celular.", more)));
-    }
-
     // ───────────────────────── building blocks ─────────────────────────
 
     TextBlock Small(string text) => new()
@@ -448,10 +441,23 @@ public sealed class PhoneWindow : DarkWindow
         return button;
     }
 
-    // Big rounded buttons, like LocalSend's selection row.
+    // Big rounded buttons, like LocalSend's selection row, and the selected Enviar / Recebidos / Enviados switch.
     static ResourceDictionary TileStyle() => (ResourceDictionary)XamlReader.Parse("""
         <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+          <Style x:Key="Segment" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+              <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                  <Border CornerRadius="8" Padding="14,7" Background="#FF0A84FF" BorderBrush="#FF0A84FF" BorderThickness="1">
+                    <ContentPresenter HorizontalAlignment="Center" />
+                  </Border>
+                </ControlTemplate>
+              </Setter.Value>
+            </Setter>
+          </Style>
           <Style x:Key="Tile" TargetType="Button">
             <Setter Property="Foreground" Value="White" />
             <Setter Property="Cursor" Value="Hand" />

@@ -126,7 +126,7 @@ Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e recone
 
 **Arquivos, fotos, vídeos e textos entre o PC e o celular** (até 30 MB por arquivo, vídeo até 60 MB, até 20 de uma
 vez, texto até 100 mil caracteres):
-- PC → celular: a janela **Celular** (menu da bandeja → **Enviar pro celular…**), no estilo do LocalSend, tem **Arquivo**,
+- PC → celular: a aba **Enviar e receber** das Configurações (ou menu da bandeja → **Enviar pro celular…**), no estilo do LocalSend, tem **Arquivo**,
   **Pasta**, **Texto** e **Colar**, e as listas **Recebidos** e **Enviados**. Também dá para arrastar arquivos ou um texto até
   a ilha e soltar no lado **Mandar pro celular**, ou usar o botão de celular num item da bandeja. O celular
   pergunta antes (Aceitar pede o celular desbloqueado). Fotos vão para a Galeria (`Pictures/Dynamic Island`), vídeos
