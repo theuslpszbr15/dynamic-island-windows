@@ -240,18 +240,24 @@ public sealed class SettingsWindow : DarkWindow
     Border DiscordCard()
     {
         var discord = _app.Island.Discord;
-        var own = S.DiscordOwnApp;
-        var calls = Toggle("Quem entra na call", "Mostra a foto, o nome e o @ de quem entra na call do Discord em que você está.",
+        var source = S.DiscordSource;
+        var own = source == DiscordSource.OwnApp;
+        var window = source == DiscordSource.Window;
+        var calls = Toggle("Quem entra na call", "Mostra a foto e o nome de quem entra na call do Discord em que você está.",
             S.DiscordCalls, _ => _app.ToggleDiscord());
         var leaves = Toggle("Avisar quando alguém sai", "Uma pílula pequena com a foto de quem saiu.",
             S.DiscordLeaves, _ => _app.ToggleDiscordLeaves(), enabled: S.DiscordCalls);
-        var which = Choice("App do Discord", "O da ilha já vem pronto. Use o seu se quiser controlar tudo pelo seu Developer Portal.",
-            [(false, "App da ilha (padrão)"), (true, "Meu próprio app")], own, o => { _app.SetDiscordOwnApp(o); Render(); });
+        var which = Choice("Como a ilha vê a call",
+            "Lendo a janela: não precisa configurar nada. Pelo app (RPC): mostra o @ e funciona com qualquer tela aberta, mas o dono do app precisa te cadastrar como tester.",
+            [(DiscordSource.Window, "Lendo a janela do Discord (padrão)"), (DiscordSource.IslandApp, "Pelo app da ilha (RPC)"),
+             (DiscordSource.OwnApp, "Pelo meu próprio app (RPC)")],
+            source, o => { _app.SetDiscordSource(o); Render(); });
 
         var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
         var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
-        var state = Note(!S.DiscordCalls ? "Desligado." : (discord.Authenticated ? "✓ " : "") + discord.Status);
-        state.Foreground = !S.DiscordCalls ? Muted : discord.Authenticated ? green : orange;
+        var state = Note(!S.DiscordCalls ? "Desligado." : window ? "Ligado. Funciona enquanto você está numa call." :
+            (discord.Authenticated ? "✓ " : "") + discord.Status);
+        state.Foreground = !S.DiscordCalls ? Muted : window || discord.Authenticated ? green : orange;
 
         var connect = new Button
         {
@@ -273,9 +279,14 @@ public sealed class SettingsWindow : DarkWindow
 
         var rows = new List<UIElement>
         {
-            Note("A ilha conversa com o Discord aberto neste PC. Só a troca da chave de acesso passa pela internet " +
-                 (own ? "(direto com o Discord)." : "(pelo servidor da ilha, que guarda a senha do app).") +
-                 " O Discord só libera isso para quem o dono do app cadastrou como tester (até 50 pessoas)."),
+            Note(window
+                ? "A ilha lê a lista da call na própria janela do Discord, como um leitor de tela: nada sai do PC. " +
+                  "Importante: o Discord só mostra essa lista com o servidor da call aberto. Se você abrir outro servidor " +
+                  "ou fechar o Discord na bandeja, a ilha para de ver quem entra até você voltar. Aparece o nome como " +
+                  "está na call (sem o @), e a foto quando a janela do Discord está visível."
+                : "A ilha conversa com o Discord aberto neste PC. Só a troca da chave de acesso passa pela internet " +
+                  (own ? "(direto com o Discord)." : "(pelo servidor da ilha, que guarda a senha do app).") +
+                  " O Discord só libera isso para quem o dono do app cadastrou como tester (até 50 pessoas)."),
             calls, leaves, which,
         };
 
@@ -315,7 +326,7 @@ public sealed class SettingsWindow : DarkWindow
             rows.Add(Row("Client Secret", discord.HasOwnApp ? "Salvo e criptografado neste PC. Cole de novo só para trocar." : "Fica criptografado neste PC.", secretRow));
             rows.Add(Row("Ajuda", "Onde criar o app e pegar o Client ID e o Client Secret.", portal));
         }
-        rows.Add(Row("Acesso", "Conectar abre um pedido de permissão no próprio Discord: é só aceitar.", actions));
+        if (!window) rows.Add(Row("Acesso", "Conectar abre um pedido de permissão no próprio Discord: é só aceitar.", actions));
         rows.Add(state);
         return Card("Discord", [.. rows]);
     }

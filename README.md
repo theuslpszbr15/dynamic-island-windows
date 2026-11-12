@@ -42,7 +42,7 @@ atrapalhar: os cliques passam por ela.
 | **Bandeja de arquivos** — arraste arquivos até a ilha, arraste de volta quando precisar. | <img src="docs/img/07-expanded-files.png" width="380"> |
 | **Timer / Pomodoro** — 5, 15, 25, 45 min ou 1 h; a contagem fica na ilha e ela toca um alarme no fim. | <img src="docs/img/15-expanded-timer.png" width="380"> |
 | **Notificações do Windows** — WhatsApp, Teams, Slack, e-mail… aparecem na ilha com o ícone do app. | <img src="docs/img/17-notification.png" width="380"> |
-| **Quem entra na call do Discord** — a foto, o nome e o @ de quem entra na call em que você está (e uma pílula quando alguém sai). Conversa com o Discord aberto no PC: é só ligar em *Configurações → Na ilha → Discord* e clicar em Conectar (o app da ilha troca a chave pelo repasse; dá para usar um app seu). O Discord só libera isso para até 50 testers do app. | |
+| **Quem entra na call do Discord** — a foto e o nome de quem entra na sua call (e uma pílula quando alguém sai). Sem configurar nada: a ilha lê a lista da call na janela do Discord (só enquanto você está numa call, e com o servidor da call aberto). Opcional: modo RPC pelo app da ilha ou um app seu, que mostra o @ (o Discord só libera para até 50 testers). | |
 | **Microfone e câmera** — avisa qual app começou a usar e deixa um ponto laranja (mic) ou verde (câmera) ao lado. | <img src="docs/img/18-microphone.png" width="380"> |
 | **Formato notch** — colado na borda, com cantos invertidos. | <img src="docs/img/12-notch-expanded.png" width="380"> |
 
@@ -168,7 +168,7 @@ Para um fork: troque `UpdateRepository` em `DynamicIsland.csproj` (atualizaçõe
 | `Services/Brightness.cs`, `BluetoothBattery.cs`, `AgentStats.cs` | Brilho (DDC/CI e WMI), bateria Bluetooth e estatísticas locais |
 | `PetView.cs`, `IslandWindow.Pet.cs` | Mascotes (desenhados com formas WPF, humores e reações), temas, vidro e detalhe do agente |
 | `Services/NotificationService.cs` | Notificações do Windows (UserNotificationListener) |
-| `Services/DiscordVoice.cs`, `IslandWindow.Discord.cs` | Quem entra e sai da call do Discord (RPC local pelo pipe `discord-ipc`) |
+| `Services/DiscordWindow.cs`, `DiscordVoice.cs`, `IslandWindow.Discord.cs` | Quem entra e sai da call do Discord: lendo a janela (UI Automation) ou pelo RPC local (`discord-ipc`) |
 | `Services/PrivacyMonitor.cs` | Apps usando microfone/câmera (mesmos dados do indicador do Windows) |
 | `Services/Installer.cs` | Instalação por usuário, atalho e entrada em Aplicativos |
 | `Services/MediaService.cs` | Sessão de mídia do Windows (GSMTC) |

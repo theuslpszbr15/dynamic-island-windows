@@ -198,6 +198,7 @@ public partial class IslandWindow
         if (state.Same(_privacy)) return;
         var previous = _privacy;
         _privacy = state;
+        _discordWindow?.SetInCall(state.Microphone.Contains("Discord"));
 
         var mic = state.Microphone.Count > 0;
         var cam = state.Camera.Count > 0;
