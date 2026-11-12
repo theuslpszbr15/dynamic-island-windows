@@ -160,6 +160,7 @@ public partial class IslandWindow : Window
         _battery.Start();
         _hub.Start();
         StartExtras();
+        ApplyDiscord();
         await _media.StartAsync();
         if (_settings.ShowNotifications) await _notifications.StartAsync();
 
@@ -222,6 +223,7 @@ public partial class IslandWindow : Window
         StopExtras();
         _privacyWatch.Cancel();
         _notifications.Stop();
+        _discord?.Dispose();
         _glassTimer?.Stop();
         _hub.Dispose();
         _volume.Dispose();

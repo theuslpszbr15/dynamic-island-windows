@@ -49,6 +49,10 @@ public sealed class IslandSettings
     public bool PhoneTray { get; set; } = true;
     /// <summary>Files can be sent to the paired phone (dropped on the island's "celular" side, or from the tray).</summary>
     public bool PhoneFiles { get; set; } = true;
+    /// <summary>Who joins the Discord call the user is in shows on the island (local RPC, see Services/DiscordVoice).</summary>
+    public bool DiscordCalls { get; set; }
+    /// <summary>Also a small pill when someone leaves that call.</summary>
+    public bool DiscordLeaves { get; set; } = true;
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

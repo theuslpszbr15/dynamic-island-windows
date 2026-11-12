@@ -42,6 +42,7 @@ atrapalhar: os cliques passam por ela.
 | **Bandeja de arquivos** — arraste arquivos até a ilha, arraste de volta quando precisar. | <img src="docs/img/07-expanded-files.png" width="380"> |
 | **Timer / Pomodoro** — 5, 15, 25, 45 min ou 1 h; a contagem fica na ilha e ela toca um alarme no fim. | <img src="docs/img/15-expanded-timer.png" width="380"> |
 | **Notificações do Windows** — WhatsApp, Teams, Slack, e-mail… aparecem na ilha com o ícone do app. | <img src="docs/img/17-notification.png" width="380"> |
+| **Quem entra na call do Discord** — a foto e o nome de quem entra na call em que você está (e uma pílula quando alguém sai). Conversa direto com o Discord aberto no PC, sem servidor; precisa de um app seu no Developer Portal (*Configurações → Na ilha → Discord*). | |
 | **Microfone e câmera** — avisa qual app começou a usar e deixa um ponto laranja (mic) ou verde (câmera) ao lado. | <img src="docs/img/18-microphone.png" width="380"> |
 | **Formato notch** — colado na borda, com cantos invertidos. | <img src="docs/img/12-notch-expanded.png" width="380"> |
 
@@ -60,7 +61,7 @@ atrapalhar: os cliques passam por ela.
 
 Clique direito na ilha (ou no ícone da bandeja) → **Configurações…**: um painel com tudo em um lugar — Geral
 (esconder, formato, monitor, iniciar com o Windows, timer, atalhos), Aparência (tema, mascote, roupinha, mascote na
-área de trabalho), Na ilha (notificações, letras, copiado, Caps Lock, vídeos), Agentes (Copilot, Claude Code, resumo da
+área de trabalho), Na ilha (notificações, letras, copiado, Caps Lock, vídeos, Discord), Agentes (Copilot, Claude Code, resumo da
 semana), Celular (pareamento por QR), Bandeja de arquivos (fixar/remover itens) e Atualizações.
 
 <img src="docs/img/40-settings-look.png" width="640">
@@ -167,6 +168,7 @@ Para um fork: troque `UpdateRepository` em `DynamicIsland.csproj` (atualizaçõe
 | `Services/Brightness.cs`, `BluetoothBattery.cs`, `AgentStats.cs` | Brilho (DDC/CI e WMI), bateria Bluetooth e estatísticas locais |
 | `PetView.cs`, `IslandWindow.Pet.cs` | Mascotes (desenhados com formas WPF, humores e reações), temas, vidro e detalhe do agente |
 | `Services/NotificationService.cs` | Notificações do Windows (UserNotificationListener) |
+| `Services/DiscordVoice.cs`, `IslandWindow.Discord.cs` | Quem entra e sai da call do Discord (RPC local pelo pipe `discord-ipc`) |
 | `Services/PrivacyMonitor.cs` | Apps usando microfone/câmera (mesmos dados do indicador do Windows) |
 | `Services/Installer.cs` | Instalação por usuário, atalho e entrada em Aplicativos |
 | `Services/MediaService.cs` | Sessão de mídia do Windows (GSMTC) |

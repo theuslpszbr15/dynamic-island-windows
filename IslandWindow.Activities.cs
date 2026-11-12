@@ -174,14 +174,21 @@ public partial class IslandWindow
     void OnNotification(IslandNotification n)
     {
         if (!_settings.ShowNotifications) return;
-        NotifyLogo.Background = n.Logo != null
-            ? new ImageBrush(n.Logo) { Stretch = Stretch.UniformToFill }
+        ShowCard(n.Logo, n.Title, n.App, n.Body);
+    }
+
+    /// <summary>The notification card: an app icon (or a round profile picture), a title, who sent it and a line of text.</summary>
+    void ShowCard(ImageSource? image, string title, string app, string body, bool round = false, double seconds = 5)
+    {
+        NotifyLogo.Background = image != null
+            ? new ImageBrush(image) { Stretch = Stretch.UniformToFill }
             : new SolidColorBrush(Color.FromRgb(0x2C, 0x2C, 0x2E));
-        NotifyGlyph.Visibility = Vis(n.Logo == null);
-        NotifyTitle.Text = n.Title;
-        NotifyApp.Text = n.App;
-        NotifyBody.Text = n.Body;
-        ShowTransient(Transient.Notification, 5);
+        NotifyLogo.CornerRadius = new CornerRadius(round ? NotifyLogo.Width / 2 : 10);
+        NotifyGlyph.Visibility = Vis(image == null);
+        NotifyTitle.Text = title;
+        NotifyApp.Text = app;
+        NotifyBody.Text = body;
+        ShowTransient(Transient.Notification, seconds);
     }
 
     // ───────────────────────── microphone / camera ─────────────────────────

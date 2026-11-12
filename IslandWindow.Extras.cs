@@ -179,9 +179,10 @@ public partial class IslandWindow
     // ───────────────────────── info pill ─────────────────────────
 
     public void ShowInfo(string glyph, string text, string right, BitmapSource? thumb = null, Color? glyphColor = null,
-        Action? action = null, double seconds = 2.2)
+        Action? action = null, double seconds = 2.2, bool round = false)
     {
         if (!_ready || _hiddenFullscreen) return;
+        InfoThumb.CornerRadius = new CornerRadius(round ? InfoThumb.Width / 2 : 6);
         InfoIcon.Text = glyph;
         if (glyphColor is { } c) InfoIcon.Foreground = new SolidColorBrush(c);
         else InfoIcon.SetResourceReference(TextBlock.ForegroundProperty, "Ink");

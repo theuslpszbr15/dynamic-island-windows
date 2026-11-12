@@ -38,13 +38,23 @@ public sealed class SettingsWindow : DarkWindow
     {
         _app = app;
         if (_app.Island.Phone is { } link) link.PhonesChanged += OnPhones;
-        Closed += (_, _) => { if (_app.Island.Phone is { } l) l.PhonesChanged -= OnPhones; };
+        _app.Island.Discord.StatusChanged += OnDiscordStatus;
+        Closed += (_, _) =>
+        {
+            if (_app.Island.Phone is { } l) l.PhonesChanged -= OnPhones;
+            _app.Island.Discord.StatusChanged -= OnDiscordStatus;
+        };
         Render();
     }
 
     void OnPhones()
     {
         if (_page == "phone") Render();
+    }
+
+    void OnDiscordStatus()
+    {
+        if (_page == "island") Render();
     }
 
     public void ShowDownloadQr()
@@ -221,6 +231,78 @@ public sealed class SettingsWindow : DarkWindow
             Toggle("Caps Lock e Num Lock", "Avisa quando liga ou desliga.", S.ShowLockKeys, _ => _app.ToggleLockKeys()),
             Toggle("Vídeos", "YouTube, Netflix, Prime Video, Twitch… Desligado: vídeo não abre aviso nem deixa a pílula aberta.",
                 !S.QuietVideos, _ => _app.ToggleQuietVideos())));
+        page.Children.Add(DiscordCard());
+    }
+
+    /// <summary>Who joins the Discord call: the user's own Discord app (id + secret, kept with DPAPI), then one consent in
+    /// Discord. Nothing goes through a server; the island talks to the Discord app on this PC.</summary>
+    Border DiscordCard()
+    {
+        var discord = _app.Island.Discord;
+        var calls = Toggle("Quem entra na call", "Mostra a foto e o nome de quem entra na call do Discord em que você está.",
+            S.DiscordCalls, _ => _app.ToggleDiscord());
+        var leaves = Toggle("Avisar quando alguém sai", "Uma pílula pequena com a foto de quem saiu.",
+            S.DiscordLeaves, _ => _app.ToggleDiscordLeaves(), enabled: S.DiscordCalls);
+
+        var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+        var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
+        var state = Note(!S.DiscordCalls ? "Desligado." : (discord.Authenticated ? "✓ " : "") + discord.Status);
+        state.Foreground = !S.DiscordCalls ? Muted : discord.Authenticated ? green : orange;
+
+        TextBox Field(string text, string tip) => new()
+        {
+            Text = text, Width = 210, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5,
+            Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = tip,
+        };
+        var id = Field(discord.ClientId, "Developer Portal › seu app › OAuth2 › Client ID");
+        var secret = new PasswordBox
+        {
+            Width = 210, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White,
+            CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+            ToolTip = "Developer Portal › seu app › OAuth2 › Client Secret (fica criptografado neste PC)",
+        };
+        var save = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        save.Click += (_, _) =>
+        {
+            if (!discord.SetApp(id.Text, secret.Password))
+            {
+                state.Text = "Confira: o Client ID tem só números, e o Client Secret vem da mesma página.";
+                state.Foreground = orange;
+                return;
+            }
+            Render();
+        };
+        var appRow = new StackPanel { Orientation = Orientation.Horizontal };
+        appRow.Children.Add(id);
+        var secretRow = new StackPanel { Orientation = Orientation.Horizontal };
+        secretRow.Children.Add(secret);
+        secretRow.Children.Add(save);
+
+        var portal = new Button { Content = "Abrir Developer Portal", Style = (Style)Resources["Action"] };
+        portal.Click += (_, _) => Open("https://discord.com/developers/applications");
+        var connect = new Button
+        {
+            Content = discord.HasToken ? "Conectar de novo" : "Conectar", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0),
+            IsEnabled = S.DiscordCalls && discord.HasApp && !discord.Authenticated,
+        };
+        connect.Click += (_, _) => discord.Authorize();
+        var forget = new Button { Content = "Esquecer app", Style = (Style)Resources["Action"], IsEnabled = discord.HasApp };
+        forget.Click += (_, _) => { discord.Forget(); Render(); };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        actions.Children.Add(connect);
+        actions.Children.Add(forget);
+
+        return Card("Discord",
+            Note("A ilha conversa com o Discord aberto neste PC, sem servidor no meio. Precisa de um app seu no Developer Portal " +
+                 $"(uma vez só): crie o app, em OAuth2 adicione o redirect {Services.DiscordVoice.RedirectUri} e cole aqui o Client ID e o Client Secret. " +
+                 "O Discord só libera isso para o dono do app e até 50 testers."),
+            calls, leaves,
+            Row("Client ID", null, appRow),
+            Row("Client Secret", discord.HasApp ? "Salvo e criptografado neste PC. Cole de novo só para trocar." : "Fica criptografado neste PC.", secretRow),
+            Row("Acesso", "Conectar abre um pedido de permissão no próprio Discord: é só aceitar.", actions),
+            Row("Ajuda", "Onde criar o app e pegar o Client ID e o Client Secret.", portal),
+            state);
     }
 
     void Agents(Panel page)

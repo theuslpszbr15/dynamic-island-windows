@@ -323,6 +323,19 @@ public partial class App : Application
         _window.PositionWindow();
     }
 
+    public void ToggleDiscord()
+    {
+        Settings.DiscordCalls = !Settings.DiscordCalls;
+        Settings.Save();
+        _window.ApplyDiscord();
+    }
+
+    public void ToggleDiscordLeaves()
+    {
+        Settings.DiscordLeaves = !Settings.DiscordLeaves;
+        Settings.Save();
+    }
+
     public void ToggleNotifications()
     {
         Settings.ShowNotifications = !Settings.ShowNotifications;
