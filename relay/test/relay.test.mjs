@@ -19,10 +19,10 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 let runs = 0;
 
 /** A fresh relay from wrangler.toml (its own storage, rooms and counters), served by a local workerd. */
-async function relay(key = KEY) {
+async function relay(key = KEY, extra = {}) {
   const worker = await unstable_startWorker({
     config: fileURLToPath(new URL("../wrangler.toml", import.meta.url)),
-    bindings: key ? { RELAY_KEY: { type: "plain_text", value: key } } : {},
+    bindings: { ...(key ? { RELAY_KEY: { type: "plain_text", value: key } } : {}), ...extra },
     dev: { server: { port: 0 }, inspector: false, persist: join(dir, String(++runs)), logLevel: "none" },
   });
   await worker.ready;
@@ -274,6 +274,43 @@ test("50 MB a day per room: the tunnel is closed with 4429 and new phones are re
     const refused = await within(late.closed);
     assert.equal(refused.code, 4429);
     assert.equal(refused.reason, "daily limit");
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("discord: without the app's secrets both endpoints answer 503", async () => {
+  const mf = await relay();
+  try {
+    const app = await mf.dispatchFetch("https://relay.test/discord/app");
+    assert.equal(app.status, 503);
+    assert.deepEqual(await app.json(), { error: "not_configured" });
+    const token = await mf.dispatchFetch("https://relay.test/discord/token", { method: "POST", body: "{}" });
+    assert.equal(token.status, 503);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("discord: the app id is public, the secret never comes back, bad requests are refused before Discord", async () => {
+  const mf = await relay(KEY, {
+    DISCORD_CLIENT_ID: { type: "plain_text", value: "123456789012345678" },
+    DISCORD_CLIENT_SECRET: { type: "plain_text", value: "s3cret_s3cret_s3cret_s3cret_abcd" },
+  });
+  try {
+    const app = await mf.dispatchFetch("https://relay.test/discord/app");
+    assert.equal(app.status, 200);
+    const body = await app.text();
+    assert.deepEqual(JSON.parse(body), { client_id: "123456789012345678" });
+    assert.ok(!body.includes("s3cret"));
+    const post = (b) => mf.dispatchFetch("https://relay.test/discord/token", {
+      method: "POST", body: b, headers: { "CF-Connecting-IP": newIp() },
+    });
+    assert.equal((await post("not json")).status, 400);
+    assert.equal((await post(JSON.stringify({ grant_type: "client_credentials" }))).status, 400);
+    assert.equal((await post(JSON.stringify({ grant_type: "authorization_code", code: "a b" }))).status, 400);
+    assert.equal((await post("x".repeat(5000))).status, 413);
+    assert.equal((await mf.dispatchFetch("https://relay.test/discord/token")).status, 405);
   } finally {
     await mf.dispose();
   }

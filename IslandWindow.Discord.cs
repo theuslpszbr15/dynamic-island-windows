@@ -22,6 +22,7 @@ public partial class IslandWindow
     public void ApplyDiscord()
     {
         if (SnapshotMode) return;
+        Discord.OwnApp = _settings.DiscordOwnApp;
         if (_settings.DiscordCalls) Discord.Start();
         else _discord?.Stop();
     }

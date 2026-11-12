@@ -42,6 +42,26 @@ Na ilha: **Configurações → Celular → Fora de casa → Usar meu próprio re
 `wss://dynamic-island-relay.<seu-usuario>.workers.dev` (e a chave, se tiver) e clique em Salvar. O celular pareado
 recebe o endereço na próxima conexão (ou escaneie o QR de novo).
 
+## Discord (quem entra na call)
+
+O mesmo Worker faz a troca de chave do **app do Discord da ilha**, para o usuário só clicar em *Conectar*:
+
+- `GET /discord/app` → `{"client_id":"…"}` (público; a ilha pergunta qual app usar).
+- `POST /discord/token` com `{"grant_type":"authorization_code","code":"…"}` ou `{"grant_type":"refresh_token","refresh_token":"…"}`:
+  o Worker junta o Client Secret e repassa ao `discord.com`. Não guarda nem registra nada; tem o mesmo limite por IP.
+
+Configurar (uma vez, com o app criado no Discord Developer Portal e `http://localhost` em OAuth2 › Redirects):
+
+```bash
+cd relay
+npx wrangler secret put DISCORD_CLIENT_ID
+npx wrangler secret put DISCORD_CLIENT_SECRET
+npx wrangler deploy
+```
+
+Sem esses dois segredos as rotas respondem `503 not_configured` e a ilha avisa. Lembre: o Discord só libera o RPC
+para o dono do app e até 50 testers (Developer Portal › App Testers).
+
 ## Como funciona
 
 | Caminho | Quem | Para quê |

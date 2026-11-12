@@ -330,6 +330,13 @@ public partial class App : Application
         _window.ApplyDiscord();
     }
 
+    public void SetDiscordOwnApp(bool own)
+    {
+        Settings.DiscordOwnApp = own;
+        Settings.Save();
+        _window.ApplyDiscord();
+    }
+
     public void ToggleDiscordLeaves()
     {
         Settings.DiscordLeaves = !Settings.DiscordLeaves;

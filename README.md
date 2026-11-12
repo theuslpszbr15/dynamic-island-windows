@@ -42,7 +42,7 @@ atrapalhar: os cliques passam por ela.
 | **Bandeja de arquivos** — arraste arquivos até a ilha, arraste de volta quando precisar. | <img src="docs/img/07-expanded-files.png" width="380"> |
 | **Timer / Pomodoro** — 5, 15, 25, 45 min ou 1 h; a contagem fica na ilha e ela toca um alarme no fim. | <img src="docs/img/15-expanded-timer.png" width="380"> |
 | **Notificações do Windows** — WhatsApp, Teams, Slack, e-mail… aparecem na ilha com o ícone do app. | <img src="docs/img/17-notification.png" width="380"> |
-| **Quem entra na call do Discord** — a foto e o nome de quem entra na call em que você está (e uma pílula quando alguém sai). Conversa direto com o Discord aberto no PC, sem servidor; precisa de um app seu no Developer Portal (*Configurações → Na ilha → Discord*). | |
+| **Quem entra na call do Discord** — a foto, o nome e o @ de quem entra na call em que você está (e uma pílula quando alguém sai). Conversa com o Discord aberto no PC: é só ligar em *Configurações → Na ilha → Discord* e clicar em Conectar (o app da ilha troca a chave pelo repasse; dá para usar um app seu). O Discord só libera isso para até 50 testers do app. | |
 | **Microfone e câmera** — avisa qual app começou a usar e deixa um ponto laranja (mic) ou verde (câmera) ao lado. | <img src="docs/img/18-microphone.png" width="380"> |
 | **Formato notch** — colado na borda, com cantos invertidos. | <img src="docs/img/12-notch-expanded.png" width="380"> |
 

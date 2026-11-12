@@ -1,4 +1,5 @@
 // Dynamic Island relay: a blind pipe between the PC and the phone when they are not on the same network.
+// (It also does the Discord token exchange for the island's Discord app: see "Discord token exchange" below.)
 //
 // Everything that matters stays end to end: the phone runs TLS against the PC's pinned certificate and sends the
 // pairing token inside it, exactly as on the LAN. This Worker only sees the room name (a SHA-256 of the token,
@@ -34,6 +35,9 @@ export interface Env {
   RELAY_KEY?: string;
   /** Cloudflare's Rate Limiting binding, keyed by IP (see wrangler.toml). Without it a rough per-isolate count is used. */
   PER_IP?: RateLimit;
+  /** The island's Discord application (secrets): see discordToken. Without them /discord/* answers 503. */
+  DISCORD_CLIENT_ID?: string;
+  DISCORD_CLIENT_SECRET?: string;
 }
 
 const PATH = /^\/(pc|phone)\/([0-9a-f]{64})(?:\/([0-9a-f]{32}))?$/;
@@ -116,8 +120,92 @@ async function ipAllowed(request: Request, env: Env): Promise<boolean> {
   return ++w.count <= IP_CONNECTIONS_PER_MINUTE;
 }
 
+// ───────────────────────── Discord token exchange ─────────────────────────
+//
+// The island shows who joins the user's Discord call through the Discord app on the PC (local RPC). Discord hands the
+// island an authorization code; turning it into a token needs the application's client secret, which must not ship
+// inside the island. So the island posts the code here and this Worker adds the secret:
+//
+//   GET  /discord/app     {"client_id":"…"}                          which app the island should ask Discord for
+//   POST /discord/token   {"grant_type":"authorization_code","code":"…"}  or  {"grant_type":"refresh_token","refresh_token":"…"}
+//                         → {"access_token","refresh_token","expires_in","scope","token_type"} or {"error":"…"}
+//
+// Nothing is stored or logged; codes and tokens only pass through. A code is useless without the user's consent in
+// their own Discord, and only the app's owner and testers can use RPC at all, so the endpoint gives nobody new access.
+
+const DISCORD_TOKEN_URL = "https://discord.com/api/v10/oauth2/token";
+/** Must be listed under OAuth2 › Redirects of the app; the code exchange has to name one. */
+const DISCORD_REDIRECT = "http://localhost";
+const DISCORD_FIELD = /^[A-Za-z0-9._~-]{8,512}$/;
+const DISCORD_CLIENT_ID = /^[0-9]{15,22}$/;
+const DISCORD_MAX_BODY = 4096;
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
+
+async function discord(request: Request, env: Env, path: string): Promise<Response> {
+  const clientId = env.DISCORD_CLIENT_ID ?? "";
+  const secret = env.DISCORD_CLIENT_SECRET ?? "";
+  if (!DISCORD_CLIENT_ID.test(clientId) || secret.length < 16) return json(503, { error: "not_configured" });
+  if (path === "/discord/app") {
+    if (request.method !== "GET") return json(405, { error: "method" });
+    return json(200, { client_id: clientId });
+  }
+  if (request.method !== "POST") return json(405, { error: "method" });
+  if (!(await ipAllowed(request, env))) return json(429, { error: "rate_limit" });
+  const text = await request.text();
+  if (text.length > DISCORD_MAX_BODY) return json(413, { error: "too_large" });
+  let body: { grant_type?: unknown; code?: unknown; refresh_token?: unknown };
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return json(400, { error: "bad_request" });
+  }
+  const form = new URLSearchParams({ client_id: clientId, client_secret: secret });
+  if (body?.grant_type === "authorization_code" && typeof body.code === "string" && DISCORD_FIELD.test(body.code)) {
+    form.set("grant_type", "authorization_code");
+    form.set("code", body.code);
+    form.set("redirect_uri", DISCORD_REDIRECT);
+  } else if (body?.grant_type === "refresh_token" && typeof body.refresh_token === "string" && DISCORD_FIELD.test(body.refresh_token)) {
+    form.set("grant_type", "refresh_token");
+    form.set("refresh_token", body.refresh_token);
+  } else {
+    return json(400, { error: "bad_request" });
+  }
+  let res: Response;
+  let data: Record<string, unknown>;
+  try {
+    res = await fetch(DISCORD_TOKEN_URL, {
+      method: "POST",
+      body: form,
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    return json(502, { error: "upstream" });
+  }
+  if (!res.ok || typeof data.access_token !== "string") {
+    // Discord's own error name (invalid_grant…) helps the island word the message; nothing else is passed on.
+    const error = typeof data.error === "string" && /^[a-z_]{1,40}$/.test(data.error) ? data.error : "invalid_grant";
+    return json(res.status === 429 ? 429 : 400, { error });
+  }
+  return json(200, {
+    access_token: data.access_token,
+    refresh_token: typeof data.refresh_token === "string" ? data.refresh_token : undefined,
+    expires_in: typeof data.expires_in === "number" ? data.expires_in : undefined,
+    scope: typeof data.scope === "string" ? data.scope : undefined,
+    token_type: typeof data.token_type === "string" ? data.token_type : undefined,
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    if (path === "/discord/app" || path === "/discord/token") return discord(request, env, path);
     if (!isUpgrade(request)) return new Response("Dynamic Island relay\n", { status: 426, headers: { "content-type": "text/plain" } });
     // Before the upgrade and before anything touches a room.
     const key = keyCheck(request, env);

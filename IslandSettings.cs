@@ -53,6 +53,8 @@ public sealed class IslandSettings
     public bool DiscordCalls { get; set; }
     /// <summary>Also a small pill when someone leaves that call.</summary>
     public bool DiscordLeaves { get; set; } = true;
+    /// <summary>Use the user's own Discord application instead of the island's (which needs no setup).</summary>
+    public bool DiscordOwnApp { get; set; }
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

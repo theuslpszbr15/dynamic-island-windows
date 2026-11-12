@@ -16,9 +16,11 @@ public sealed record DiscordVoiceEvent(bool Joined, string UserId, string Name, 
 
 /// <summary>
 /// Who joins and leaves the voice call the user is in, from the Discord app running on this PC (local RPC over the
-/// discord-ipc named pipe; nothing goes through a server of ours). Needs the user's own Discord application (client id
-/// and secret, see Configurações › Na ilha): Discord only lets an app's owner and its testers use RPC.
-/// The app id, secret and tokens live in a DPAPI blob for this Windows user and are never logged.
+/// discord-ipc named pipe). By default it uses the island's own Discord application: the island only knows its client
+/// id, and the code → token exchange goes through the public relay Worker, which holds the client secret
+/// (relay/src/index.ts, /discord/*). The user can use their own app instead (client id + secret, exchanged directly
+/// with discord.com). Either way Discord only lets an app's owner and its testers (up to 50) use RPC.
+/// The own app's secret and the tokens live in a DPAPI blob for this Windows user and are never logged.
 /// Authorizing pops up Discord's own consent dialog, so it only happens when the user clicks "Conectar".
 /// </summary>
 public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
@@ -43,10 +45,16 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
 
     sealed record Member(string Id, string Name, string Username, string? Avatar, string? Discriminator, bool Bot);
 
+    /// <summary>The relay Worker that exchanges codes for the island's app (https form of the public relay).</summary>
+    static readonly string IslandAppServer = "https://" + PhoneLink.PublicRelay["wss://".Length..];
+
     sealed class Secrets
     {
+        /// <summary>The user's own app (empty: the island's app).</summary>
         public string ClientId { get; set; } = "";
         public string ClientSecret { get; set; } = "";
+        /// <summary>The app the tokens below belong to.</summary>
+        public string TokenClientId { get; set; } = "";
         public string AccessToken { get; set; } = "";
         public string RefreshToken { get; set; } = "";
         public DateTimeOffset Expires { get; set; }
@@ -63,6 +71,11 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
     /// <summary>"Conectar" was clicked and not yet acted on (so a reconnect doesn't make the user click twice).</summary>
     volatile bool _wantAuthorize;
     string? _channelId, _channelName, _me;
+    /// <summary>The app this connection uses (the user's own or the island's).</summary>
+    string _clientId = "";
+    bool _ownApp;
+    /// <summary>The island app's id, asked once per run (not on every reconnect while Discord is closed).</summary>
+    string? _islandClientId;
     DateTime _quietUntil;
 
     public event Action<DiscordVoiceEvent>? Changed;
@@ -72,7 +85,20 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
     public string Status { get; private set; } = "Desligado";
     public bool Running => _cts != null;
     public bool Authenticated { get; private set; }
-    public bool HasApp => _secrets.ClientId.Length > 0 && _secrets.ClientSecret.Length > 0;
+    /// <summary>The user's own app id and secret are saved.</summary>
+    public bool HasOwnApp => _secrets.ClientId.Length > 0 && _secrets.ClientSecret.Length > 0;
+
+    /// <summary>Use the user's own app instead of the island's (Configurações › Na ilha › Discord).</summary>
+    public bool OwnApp
+    {
+        get => _ownApp;
+        set
+        {
+            if (_ownApp == value) return;
+            _ownApp = value;
+            Restart();
+        }
+    }
     public bool HasToken => _secrets.RefreshToken.Length > 0;
     public string ClientId => _secrets.ClientId;
     /// <summary>The voice channel the user is in right now, if any.</summary>
@@ -88,18 +114,26 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         clientId = clientId.Trim();
         clientSecret = clientSecret.Trim();
         if (!ValidClientId(clientId) || !ValidSecret(clientSecret)) return false;
-        if (clientId != _secrets.ClientId) _secrets = new Secrets { ClientId = clientId };
+        _secrets.ClientId = clientId;
         _secrets.ClientSecret = clientSecret;
         SaveSecrets();
         Restart();
         return true;
     }
 
-    /// <summary>Forgets the app and its tokens (the user can also revoke it in Discord › Apps autorizados).</summary>
+    /// <summary>Forgets the own app and all tokens (the user can also revoke access in Discord › Apps autorizados).</summary>
     public void Forget()
     {
         _secrets = new Secrets();
         try { File.Delete(SecretFile); } catch { }
+        Restart();
+    }
+
+    /// <summary>Drops the tokens only (the own app stays saved); the next "Conectar" asks Discord again.</summary>
+    public void Disconnect()
+    {
+        _secrets.AccessToken = _secrets.RefreshToken = "";
+        SaveSecrets();
         Restart();
     }
 
@@ -143,7 +177,15 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         {
             try
             {
-                if (!HasApp) { SetStatus("Coloque o Client ID e o Client Secret do seu app do Discord.", false); return; }
+                if (_ownApp && !HasOwnApp) { SetStatus("Coloque o Client ID e o Client Secret do seu app do Discord.", false); return; }
+                _clientId = _ownApp ? _secrets.ClientId : _islandClientId ??= await IslandClientIdAsync(cancel);
+                if (_secrets.TokenClientId != _clientId)
+                {
+                    // Tokens belong to one app: another app starts from "Conectar" again.
+                    _secrets.TokenClientId = _clientId;
+                    _secrets.AccessToken = _secrets.RefreshToken = "";
+                    SaveSecrets();
+                }
                 if (await ConnectAsync(cancel) is not { } pipe)
                 {
                     SetStatus("Discord fechado. A ilha tenta de novo sozinha.", false);
@@ -225,7 +267,7 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         lock (_pending) _pending["READY"] = ready;
         var reader = ReadLoopAsync(pipe, cancel);
         _readerTask = reader;
-        await WriteAsync(pipe, 0, new JsonObject { ["v"] = 1, ["client_id"] = _secrets.ClientId }, cancel);
+        await WriteAsync(pipe, 0, new JsonObject { ["v"] = 1, ["client_id"] = _clientId }, cancel);
         var hello = await Wait(ready.Task, reader);
         _me = Str(hello, "user", "id");
 
@@ -243,7 +285,7 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
             SetStatus("Aceite o pedido na janela do Discord…", false);
             var code = Str(await CommandAsync(pipe, reader, "AUTHORIZE", new JsonObject
             {
-                ["client_id"] = _secrets.ClientId, ["scopes"] = new JsonArray(Scopes.Split(' ').Select(s => (JsonNode)s).ToArray()),
+                ["client_id"] = _clientId, ["scopes"] = new JsonArray(Scopes.Split(' ').Select(s => (JsonNode)s).ToArray()),
             }, cancel), "code") ?? throw new DiscordError("O Discord não devolveu a autorização.");
             await ExchangeAsync(new()
             {
@@ -279,12 +321,30 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         }
     }
 
-    /// <summary>The OAuth2 token endpoint (code → tokens, or refresh). The secret only ever goes to discord.com.</summary>
+    /// <summary>Code → tokens, or a refresh: straight with discord.com for the user's own app (the secret only ever goes
+    /// there), through the relay Worker for the island's app (the Worker adds the island's secret).</summary>
     async Task ExchangeAsync(Dictionary<string, string> form, CancellationToken cancel)
     {
-        form["client_id"] = _secrets.ClientId;
-        form["client_secret"] = _secrets.ClientSecret;
-        using var response = await Http.PostAsync("https://discord.com/api/v10/oauth2/token", new FormUrlEncodedContent(form), cancel);
+        HttpResponseMessage response;
+        if (_ownApp)
+        {
+            form["client_id"] = _secrets.ClientId;
+            form["client_secret"] = _secrets.ClientSecret;
+            response = await Http.PostAsync("https://discord.com/api/v10/oauth2/token", new FormUrlEncodedContent(form), cancel);
+        }
+        else
+        {
+            form.Remove("redirect_uri"); // the Worker sets it
+            var payload = new JsonObject();
+            foreach (var (k, v) in form) payload[k] = v;
+            try
+            {
+                response = await Http.PostAsync(IslandAppServer + "/discord/token",
+                    new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json"), cancel);
+            }
+            catch (HttpRequestException) { throw new DiscordError("Sem conexão com o servidor da ilha. Confira a internet."); }
+        }
+        using var _ = response;
         var body = await response.Content.ReadAsStringAsync(cancel);
         if (!response.IsSuccessStatusCode)
         {
@@ -292,9 +352,13 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
             try { error = JsonDocument.Parse(body).RootElement.TryGetProperty("error", out var e) ? e.GetString() ?? "" : ""; } catch { }
             throw error switch
             {
-                "invalid_client" => new DiscordError("Client ID ou Client Secret errado.", fatal: true),
-                "invalid_grant" when form["grant_type"] == "authorization_code" =>
-                    new DiscordError($"O Discord recusou o código. Em OAuth2 › Redirects do app, adicione {RedirectUri}.", fatal: true),
+                "invalid_client" => new DiscordError(_ownApp ? "Client ID ou Client Secret errado."
+                    : "O app da ilha está mal configurado no servidor.", fatal: true),
+                "not_configured" => new DiscordError("O app da ilha ainda não foi configurado no servidor.", fatal: true),
+                "invalid_grant" when form["grant_type"] == "authorization_code" => new DiscordError(_ownApp
+                    ? $"O Discord recusou o código. Em OAuth2 › Redirects do app, adicione {RedirectUri}."
+                    : "O Discord recusou o código. Clique em Conectar de novo.", fatal: true),
+                "rate_limit" => new DiscordError("Muitas tentativas. Espere um minuto."),
                 _ => new DiscordError($"O Discord recusou o acesso ({(int)response.StatusCode}).", fatal: false),
             };
         }
@@ -304,6 +368,25 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         if (root.TryGetProperty("refresh_token", out var refresh)) _secrets.RefreshToken = refresh.GetString() ?? "";
         _secrets.Expires = DateTimeOffset.UtcNow.AddSeconds(root.TryGetProperty("expires_in", out var e2) ? e2.GetInt32() : 3600);
         SaveSecrets();
+    }
+
+    /// <summary>The island's Discord app id, from the relay Worker (so it can change without a new build of the island).</summary>
+    async Task<string> IslandClientIdAsync(CancellationToken cancel)
+    {
+        try
+        {
+            using var response = await Http.GetAsync(IslandAppServer + "/discord/app", cancel);
+            if ((int)response.StatusCode == 503) throw new DiscordError("O app da ilha ainda não foi configurado no servidor.", fatal: true);
+            response.EnsureSuccessStatusCode();
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancel));
+            if (Str(json.RootElement, "client_id") is { } id && ValidClientId(id)) return id;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !cancel.IsCancellationRequested)
+        {
+            // fall through: keep the last one we used, if any
+        }
+        if (_secrets.TokenClientId.Length > 0 && _secrets.ClientId != _secrets.TokenClientId) return _secrets.TokenClientId;
+        throw new DiscordError("Sem conexão com o servidor da ilha. Confira a internet.");
     }
 
     // ───────────────────────── voice ─────────────────────────
