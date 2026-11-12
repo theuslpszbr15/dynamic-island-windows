@@ -329,9 +329,9 @@ public partial class App : Application
         _window.ApplyDiscord();
     }
 
-    public void SetDiscordOwnApp(bool own)
+    public void SetDiscordSource(DiscordSource source)
     {
-        Settings.DiscordOwnApp = own;
+        Settings.DiscordSource = source;
         Settings.Save();
         _window.ApplyDiscord();
     }

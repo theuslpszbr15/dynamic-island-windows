@@ -224,6 +224,7 @@ public partial class IslandWindow : Window
         _privacyWatch.Cancel();
         _notifications.Stop();
         _discord?.Dispose();
+        _discordWindow?.Dispose();
         _glassTimer?.Stop();
         _hub.Dispose();
         _volume.Dispose();
