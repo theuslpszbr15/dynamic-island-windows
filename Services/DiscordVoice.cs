@@ -10,7 +10,9 @@ using System.Windows.Threading;
 namespace DynamicIsland.Services;
 
 /// <summary>Someone joined or left the voice channel the user is in.</summary>
-public sealed record DiscordVoiceEvent(bool Joined, string UserId, string Name, string Channel, int Count, BitmapSource? Avatar);
+/// <remarks><paramref name="Name"/> is how Discord shows them in the call; <paramref name="Username"/> is the unique @handle.</remarks>
+public sealed record DiscordVoiceEvent(bool Joined, string UserId, string Name, string Username, string Channel, int Count,
+    BitmapSource? Avatar);
 
 /// <summary>
 /// Who joins and leaves the voice call the user is in, from the Discord app running on this PC (local RPC over the
@@ -39,7 +41,7 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         return http;
     }
 
-    sealed record Member(string Id, string Name, string? Avatar, string? Discriminator, bool Bot);
+    sealed record Member(string Id, string Name, string Username, string? Avatar, string? Discriminator, bool Bot);
 
     sealed class Secrets
     {
@@ -379,11 +381,14 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
     {
         if (!state.TryGetProperty("user", out var user) || Str(user, "id") is not { } id || id == _me) return null;
         // As Discord shows them in the call: server nickname, then display name, then username.
+        var username = Str(user, "username") ?? "";
+        // Old-style usernames still carry their #tag.
+        if (Str(user, "discriminator") is { Length: > 0 } tag && tag != "0") username += "#" + tag;
         var name = Str(state, "nick") is { Length: > 0 } nick ? nick
             : Str(user, "global_name") is { Length: > 0 } global ? global
-            : Str(user, "username") ?? "Alguém";
+            : username.Length > 0 ? username : "Alguém";
         var bot = user.TryGetProperty("bot", out var b) && b.ValueKind == JsonValueKind.True;
-        return new Member(id, name, Str(user, "avatar"), Str(user, "discriminator"), bot);
+        return new Member(id, name, username, Str(user, "avatar"), Str(user, "discriminator"), bot);
     }
 
     void Raise(bool joined, Member m)
@@ -395,7 +400,7 @@ public sealed class DiscordVoice(Dispatcher dispatcher) : IDisposable
         _ = Task.Run(async () =>
         {
             var avatar = await AvatarAsync(m);
-            await dispatcher.InvokeAsync(() => Changed?.Invoke(new DiscordVoiceEvent(joined, m.Id, m.Name, channel, count, avatar)));
+            await dispatcher.InvokeAsync(() => Changed?.Invoke(new DiscordVoiceEvent(joined, m.Id, m.Name, m.Username, channel, count, avatar)));
         });
     }
 

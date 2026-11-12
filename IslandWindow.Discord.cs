@@ -29,9 +29,14 @@ public partial class IslandWindow
     void OnDiscordVoice(DiscordVoiceEvent e)
     {
         if (!_settings.DiscordCalls) return;
+        // The name as shown in the call, plus the @username (unique, so a nickname can't pass for someone else).
+        var handle = e.Username.Length > 0 ? "@" + e.Username : "";
+        var same = handle.Length == 0 || e.Name.Equals(e.Username, StringComparison.OrdinalIgnoreCase);
         if (e.Joined)
-            ShowCard(e.Avatar, e.Name, "Discord", $"Entrou em {e.Channel} · {e.Count} na call", round: true);
+            ShowCard(e.Avatar, same ? e.Name : $"{e.Name}  {handle}", "Discord",
+                $"Entrou em {e.Channel} · {e.Count} na call", round: true);
         else if (_settings.DiscordLeaves)
-            ShowInfo("", $"{e.Name} saiu da call", e.Channel, thumb: e.Avatar, seconds: 2.6, round: true);
+            ShowInfo("\uE77B", same ? $"{e.Name} saiu da call" : $"{e.Name} ({handle}) saiu da call", e.Channel,
+                thumb: e.Avatar, seconds: 2.6, round: true);
     }
 }
