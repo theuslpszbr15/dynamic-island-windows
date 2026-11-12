@@ -95,8 +95,11 @@ fun AppScreen(
     onPause: () -> Unit,
     onFixNotifications: () -> Unit = {},
 ) {
+    var connecting by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Ground).statusBarsPadding().navigationBarsPadding()) {
-        if (state.pairing == null) PairScreen(onScan, onPaste)
+        // No PC needed to open the app: the island works on its own, pairing is the extra
+        if (state.pairing == null && !connecting) LocalScreen(onConnect = { connecting = true })
+        else if (state.pairing == null) PairScreen(onScan, onPaste, onBack = { connecting = false })
         else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onPause, onScan, onFixNotifications)
     }
     if (pending != null) {
@@ -110,14 +113,41 @@ fun AppScreen(
     }
 }
 
+/** The app without a PC: the floating island and its settings, and "Conectar ao PC" for the rest. */
 @Composable
-private fun PairScreen(onScan: () -> Unit, onPaste: (String) -> Unit) {
+private fun LocalScreen(onConnect: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Bit(BitMood.Happy, size = 56.dp)
+            Column(Modifier.padding(start = 14.dp)) {
+                Text("Dynamic Island", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Ilha flutuante neste celular. O PC é opcional.", color = Muted, fontSize = 13.sp)
+            }
+        }
+        IslandSettingsCard()
+        Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
+            Text("Conectar ao PC", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text("Com a ilha do PC: aprovar pedidos do Claude Code, mandar arquivos e textos, e ver quem entra na call " +
+                "do Discord com foto.", color = Muted, fontSize = 13.sp)
+            Button(onClick = onConnect, modifier = Modifier.padding(top = 10.dp), shape = RoundedCornerShape(14.dp)) {
+                Text("Conectar ao PC")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PairScreen(onScan: () -> Unit, onPaste: (String) -> Unit, onBack: () -> Unit) {
     var link by remember { mutableStateOf("") }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(40.dp))
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("‹ Voltar") }
+        Spacer(Modifier.height(16.dp))
         Bit(BitMood.Happy, size = 140.dp)
         Spacer(Modifier.height(18.dp))
         Text("Dynamic Island", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)

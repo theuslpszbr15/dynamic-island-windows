@@ -81,8 +81,8 @@ private val Discord = Color(0xFF5865F2)
  * Pendentes, Aprovações, Transferências and Discord. It is an ordinary overlay window (`SYSTEM_ALERT_WINDOW`, one
  * switch in Android's settings), so it sits just under the status bar, never shows on the lock screen and Android
  * hides it over its own screens (installer, permission prompts). The window is only as big as the pill or the card,
- * so it never takes touches from the app underneath. Lives while the link to the PC runs, or while a Discord call
- * is going on this phone.
+ * so it never takes touches from the app underneath. Works with or without a PC: the link service keeps the app alive
+ * when there is one, [IslandService] otherwise.
  */
 object IslandOverlay {
     private const val PREFS = "island"
@@ -114,13 +114,15 @@ object IslandOverlay {
         refresh(context)
     }
 
-    /** Shows or removes the window to match the switch, the permission and whether there is anything to serve. */
+    /** Shows or removes the window to match the switch and the permission; without the link service running, a
+     * small service of its own keeps the island alive. */
     fun refresh(context: Context) {
         val app = context.applicationContext
         main.post {
-            val want = isOn(app) && canDraw(app) && (linkRunning || Island.call.value != null)
+            val want = isOn(app) && canDraw(app)
             if (want && window == null) window = try { Shown(app) } catch (_: Exception) { null }
             else if (!want) { window?.remove(); window = null }
+            if (want && !linkRunning) IslandService.start(app) else IslandService.stop(app)
         }
     }
 

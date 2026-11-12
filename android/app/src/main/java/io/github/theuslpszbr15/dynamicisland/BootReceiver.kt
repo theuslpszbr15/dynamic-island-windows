@@ -8,6 +8,8 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        // the floating island comes back too, with or without a PC
+        if (IslandOverlay.isOn(context)) IslandOverlay.refresh(context)
         if (PairingStore.isPaused(context) || PairingStore.load(context) == null) return
         try {
             LinkService.start(context)
