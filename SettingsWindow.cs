@@ -13,7 +13,7 @@ using QRCoder;
 namespace DynamicIsland;
 
 /// <summary>All of the island's settings in one window: a section list on the left, live changes on the right.</summary>
-public sealed class SettingsWindow : DarkWindow
+public sealed partial class SettingsWindow : DarkWindow
 {
     static string ReleasesUrl => Services.Updater.RepositoryUrl + "/releases/latest";
     static string ApkUrl => ReleasesUrl + "/download/DynamicIsland-Android.apk";
@@ -25,6 +25,7 @@ public sealed class SettingsWindow : DarkWindow
         ("island", "\uE8A1", "Na ilha"),
         ("agents", "\uE99A", "Agentes"),
         ("phone", "\uE8EA", "Celular"),
+        (TransferPage, "\uE724", "Enviar e receber"),
         ("tray", "\uE718", "Bandeja de arquivos"),
         ("updates", "\uE895", "Atualizações e sobre"),
     ];
@@ -37,19 +38,10 @@ public sealed class SettingsWindow : DarkWindow
     public SettingsWindow(App app) : base("Configurações — Dynamic Island", "Configurações", Sections)
     {
         _app = app;
-        if (_app.Island.Phone is { } link) link.PhonesChanged += OnPhones;
+        SetUpTransfers();
         _app.Island.Discord.StatusChanged += OnDiscordStatus;
-        Closed += (_, _) =>
-        {
-            if (_app.Island.Phone is { } l) l.PhonesChanged -= OnPhones;
-            _app.Island.Discord.StatusChanged -= OnDiscordStatus;
-        };
+        Closed += (_, _) => _app.Island.Discord.StatusChanged -= OnDiscordStatus;
         Render();
-    }
-
-    void OnPhones()
-    {
-        if (_page == "phone") Render();
     }
 
     void OnDiscordStatus()
@@ -72,6 +64,7 @@ public sealed class SettingsWindow : DarkWindow
             case "island": OnIsland(page); break;
             case "agents": Agents(page); break;
             case "phone": Phone(page); break;
+            case TransferPage: Transfers(page); break;
             case "tray": Tray(page); break;
             case "updates": Updates(page); break;
         }
@@ -538,15 +531,15 @@ public sealed class SettingsWindow : DarkWindow
         var download = new Button { Content = "Abrir no navegador", Style = (Style)Resources["Action"] };
         download.Click += (_, _) => Open(ReleasesUrl);
         var window = new Button { Content = "Abrir", Style = (Style)Resources["Action"] };
-        window.Click += (_, _) => _app.ShowPhoneWindow("send");
+        window.Click += (_, _) => ShowTransfers("send");
         page.Children.Add(Card("No celular",
             Toggle("Bandeja de arquivos no celular", "O celular vê os itens fixados na bandeja da ilha e pode abri-los neste PC (pede sua digital).",
                 S.PhoneTray, _ => _app.TogglePhoneTray()),
             Toggle("Arquivos e textos com o celular", "Solte arquivos ou texto no lado \"celular\" da ilha, use o botão no item da bandeja " +
-                   "ou a janela Celular (menu da bandeja → Enviar pro celular…). Do celular, use Compartilhar → Mandar pro PC: a ilha pergunta antes, " +
+                   "ou a aba Enviar e receber, aqui ao lado. Do celular, use Compartilhar → Mandar pro PC: a ilha pergunta antes, " +
                    "e tudo vai para Downloads\\Dynamic Island. Até 30 MB por arquivo (vídeo 60 MB), criptografado de ponta a ponta.",
                 S.PhoneFiles, _ => _app.TogglePhoneFiles()),
-            Row("Janela Celular", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
+            Row("Enviar e receber", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
     }
 

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
@@ -139,20 +139,11 @@ public partial class App : Application
     public IslandWindow Island => _window;
 
     SettingsWindow? _settingsWindow;
-    PhoneWindow? _phoneWindow;
-
-    /// <summary>The "Celular" window: send files, folders, text or the clipboard to the phone, and the history.</summary>
-    public void ShowPhoneWindow(string? page = null)
+    /// <summary>The "Enviar e receber" tab of the settings: send files, folders, text or the clipboard to the phone, and the history.</summary>
+    public void ShowPhoneWindow(string tab = "send")
     {
-        if (_phoneWindow == null)
-        {
-            _phoneWindow = new PhoneWindow(this);
-            _phoneWindow.Closed += (_, _) => _phoneWindow = null;
-            _phoneWindow.Show();
-        }
-        if (page != null) _phoneWindow.Navigate(page);
-        if (_phoneWindow.WindowState == WindowState.Minimized) _phoneWindow.WindowState = WindowState.Normal;
-        _phoneWindow.Activate();
+        ShowSettings();
+        _settingsWindow!.ShowTransfers(tab);
     }
 
     public void ShowSettings(string? page = null)
