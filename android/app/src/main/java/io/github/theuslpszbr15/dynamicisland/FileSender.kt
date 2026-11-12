@@ -91,6 +91,9 @@ object FileSender {
         val folder = File(outbox(context), id).apply { mkdirs() }
         val items = mutableListOf<OfferItem>()
         var total = 0L
+        // Offers now wait in Pendentes even with no connection: check the 10 MB relay cap against the
+        // current route when there is one (the PC checks again when the bytes actually go).
+        val route = Link.client?.route ?: Route.Lan
         try {
             uris.forEachIndexed { i, uri ->
                 val name = FileOffer.safeName(displayName(context, uri) ?: "arquivo")
@@ -108,7 +111,7 @@ object FileSender {
                             size += n
                             total += n
                             if (size > limit) throw IllegalStateException("$name é grande demais (${FileOffer.limitText(name)}).")
-                            if (!FileOffer.fitsRoute(total, client.route)) throw IllegalStateException(FileOffer.RELAY_TOO_BIG)
+                            if (!FileOffer.fitsRoute(total, route)) throw IllegalStateException(FileOffer.RELAY_TOO_BIG)
                             digest.update(buffer, 0, n)
                             out.write(buffer, 0, n)
                         }
