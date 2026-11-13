@@ -34,7 +34,7 @@ class IslandService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!IslandOverlay.isOn(this) || !IslandOverlay.canDraw(this)) stopSelf()
+        if (!IslandOverlay.isOn(this) || !IslandOverlay.canShow(this)) stopSelf()
         else IslandOverlay.refresh(this)
         return START_STICKY
     }

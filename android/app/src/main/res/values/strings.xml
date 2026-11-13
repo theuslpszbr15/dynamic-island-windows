@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Dynamic Island</string>
+    <string name="island_accessibility_description">Desenha a ilha por cima da barra de notificações, na câmera, para dar para tocar nela lá em cima. Não lê nada da tela nem do que você digita.</string>
 </resources>

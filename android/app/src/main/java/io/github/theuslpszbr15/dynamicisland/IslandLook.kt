@@ -19,6 +19,11 @@ data class Look(
     val media: Boolean = true,
     /** With nothing to show, the island shrinks into a dot and goes; it comes back the same way when something arrives. */
     val hide: Boolean = true,
+    /**
+     * Docked to the top edge, like a notch: flat on top, round below, curving into the edge. Only drawn so when the
+     * island can go above the status bar ([IslandAccessibility]); [y] is then ignored.
+     */
+    val dock: Boolean = false,
 ) {
     /** Always inside what the screen can show. */
     fun clamped() = copy(
@@ -36,11 +41,11 @@ data class Look(
 
         /** Ready-made shapes: name to look (keeping the person's other choices). */
         val presets: List<Pair<String, (Look) -> Look>> = listOf(
-            "Câmera no centro" to { l -> l.copy(width = 110, height = 32, corner = 1f, x = 0, y = 8) },
-            "Câmera no canto" to { l -> l.copy(width = 90, height = 30, corner = 1f, x = -125, y = 8) },
-            "Pílula larga" to { l -> l.copy(width = 170, height = 36, corner = 1f, x = 0, y = 10) },
-            "Compacta" to { l -> l.copy(width = 72, height = 26, corner = 1f, x = 0, y = 10) },
-            "Encostada no topo" to { l -> l.copy(width = 150, height = 30, corner = 0.55f, x = 0, y = 0) },
+            "Câmera no centro" to { l -> l.copy(width = 110, height = 32, corner = 1f, x = 0, y = 8, dock = false) },
+            "Câmera no canto" to { l -> l.copy(width = 90, height = 30, corner = 1f, x = -125, y = 8, dock = false) },
+            "Presa no topo" to { l -> l.copy(width = 175, height = 35, corner = 1f, x = 0, y = 0, dock = true) },
+            "Pílula larga" to { l -> l.copy(width = 170, height = 36, corner = 1f, x = 0, y = 10, dock = false) },
+            "Compacta" to { l -> l.copy(width = 72, height = 26, corner = 1f, x = 0, y = 10, dock = false) },
         )
     }
 }
@@ -59,7 +64,7 @@ object IslandLook {
         _state.value = Look(
             p.getInt("w", d.width), p.getInt("h", d.height), p.getFloat("c", d.corner),
             p.getInt("x", d.x), p.getInt("y", d.y), p.getFloat("o", d.opacity), p.getBoolean("m", d.media),
-            p.getBoolean("hd", d.hide),
+            p.getBoolean("hd", d.hide), p.getBoolean("dk", d.dock),
         ).clamped()
         loaded = true
         return _state.value
@@ -72,7 +77,7 @@ object IslandLook {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt("w", l.width).putInt("h", l.height).putFloat("c", l.corner)
             .putInt("x", l.x).putInt("y", l.y).putFloat("o", l.opacity).putBoolean("m", l.media)
-            .putBoolean("hd", l.hide).apply()
+            .putBoolean("hd", l.hide).putBoolean("dk", l.dock).apply()
         IslandOverlay.place(context)
     }
 }

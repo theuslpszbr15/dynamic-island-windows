@@ -52,7 +52,9 @@ fun IslandSettingsCard() {
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { IslandLook.load(context); while (true) { delay(1_000); tick++ } }
     val on = remember(tick) { IslandOverlay.isOn(context) }
-    val canDraw = remember(tick) { IslandOverlay.canDraw(context) }
+    val canDraw = remember(tick) { IslandOverlay.canShow(context) }
+    val above = remember(tick) { IslandOverlay.isAbove() }
+    val aboveOn = remember(tick) { IslandAccessibility.enabled(context) }
     val access = remember(tick) { DiscordListener.enabled(context) }
     val look by IslandLook.state.collectAsState()
     var showSeen by remember { mutableStateOf(false) }
@@ -67,7 +69,7 @@ fun IslandSettingsCard() {
             }
             Switch(checked = on, onCheckedChange = {
                 IslandOverlay.setOn(context, it)
-                if (it && !IslandOverlay.canDraw(context)) context.startActivity(IslandOverlay.permissionIntent(context))
+                if (it && !IslandOverlay.canShow(context)) context.startActivity(IslandOverlay.permissionIntent(context))
                 tick++
             }, modifier = Modifier.padding(start = 12.dp))
         }
@@ -101,7 +103,9 @@ fun IslandSettingsCard() {
             val v = it.roundToInt()
             change(look.copy(x = if (kotlin.math.abs(v) < 6) 0 else v))
         }
-        Setting("Altura na tela", "${look.y} dp do topo", look.y.toFloat(), 0f..Look.MAX_Y.toFloat()) {
+        if (look.dock && above) Text("Altura na tela: presa na borda de cima", color = MutedColor, fontSize = 13.sp,
+            modifier = Modifier.padding(vertical = 8.dp))
+        else Setting("Altura na tela", "${look.y} dp do topo", look.y.toFloat(), 0f..Look.MAX_Y.toFloat()) {
             change(look.copy(y = it.roundToInt()))
         }
         Setting("Opacidade", "${(look.opacity * 100).roundToInt()}%", look.opacity, 0.4f..1f) {
@@ -115,7 +119,27 @@ fun IslandSettingsCard() {
             }
             Switch(checked = look.hide, onCheckedChange = { change(look.copy(hide = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
-        TextButton(onClick = { change(Look(media = look.media, hide = look.hide)) }) { Text("Voltar ao padrão") }
+        TextButton(onClick = { change(Look(media = look.media, hide = look.hide, dock = look.dock)) }) { Text("Voltar ao padrão") }
+
+        Section("Por cima da barra de notificações")
+        Text(
+            if (above) "Ligado: a ilha fica na câmera, por cima da barra, e dá para tocar nela lá em cima."
+            else "Desligado: a ilha fica logo abaixo da barra para continuar clicável. Para ela ficar na câmera, ligue " +
+                "\"Ilha por cima da barra\" em Acessibilidade › Apps instalados. Se o Android disser que está bloqueado: " +
+                "Configurações › Apps › Dynamic Island › ⋮ › Permitir configurações restritas, e tente de novo. Ela não lê nada da tela.",
+            color = MutedColor, fontSize = 13.sp,
+        )
+        TextButton(onClick = { context.startActivity(IslandAccessibility.settingsIntent()) }) {
+            Text(if (aboveOn) "Desligar na acessibilidade" else "Ligar na acessibilidade")
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Presa na borda de cima", color = Color.White, fontSize = 13.5.sp)
+                Text(if (above) "Como um notch: reta em cima, redonda embaixo, saindo da borda da tela."
+                    else "Só aparece com \"Por cima da barra\" ligado.", color = MutedColor, fontSize = 12.sp)
+            }
+            Switch(checked = look.dock, onCheckedChange = { change(look.copy(dock = it)) }, modifier = Modifier.padding(start = 12.dp))
+        }
 
         Section("Música e Discord")
         Row(verticalAlignment = Alignment.CenterVertically) {

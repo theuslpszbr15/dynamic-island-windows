@@ -81,6 +81,9 @@ class IslandTest {
         assertFalse(Look.presets.first().second(Look(hide = false)).hide)
         // hiding when there is nothing to show is the default
         assertTrue(Look().hide)
+        // only the "Presa no topo" preset docks the island
+        assertEquals(listOf("Presa no topo"), Look.presets.filter { it.second(Look()).dock }.map { it.first })
+        assertFalse(Look.presets.first().second(Look(dock = true)).dock)
     }
 
     @Test fun finishedTransfersLeaveAfterAMinute() {

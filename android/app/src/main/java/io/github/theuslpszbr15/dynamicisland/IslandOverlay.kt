@@ -1,5 +1,6 @@
 package io.github.theuslpszbr15.dynamicisland
 
+import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
@@ -63,9 +65,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
@@ -74,7 +79,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,6 +120,8 @@ object IslandOverlay {
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private var window: Shown? = null
     @Volatile private var linkRunning = false
+    /** The accessibility service, while the person has it on: the island then goes above the status bar. */
+    @Volatile private var above: AccessibilityService? = null
 
     /** The person turned it on in the app (off until then). */
     fun isOn(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ON, false)
@@ -123,6 +132,18 @@ object IslandOverlay {
     }
 
     fun canDraw(context: Context) = Settings.canDrawOverlays(context)
+
+    /** The island can show: as an ordinary overlay, or above the status bar through the accessibility service. */
+    fun canShow(context: Context) = above != null || canDraw(context)
+
+    /** The island is above the status bar right now (the accessibility service is running). */
+    fun isAbove() = above != null
+
+    /** The accessibility service connected (the service) or went away (null). */
+    fun accessibility(context: Context, service: AccessibilityService?) {
+        above = service
+        refresh(context)
+    }
 
     /** Android's "Sobrepor a outros apps" screen for this app. */
     fun permissionIntent(context: Context) =
@@ -141,18 +162,24 @@ object IslandOverlay {
         val app = context.applicationContext
         main.post {
             IslandLook.load(app)
-            val want = isOn(app) && canDraw(app)
-            if (want && window == null) window = try { Shown(app) } catch (_: Exception) { null }
-            else if (!want) { window?.remove(); window = null }
-            if (want && !linkRunning) IslandService.start(app) else IslandService.stop(app)
+            val host = above
+            val want = isOn(app) && (host != null || canDraw(app))
+            // the accessibility service came or went: the window moves to (or from) above the status bar
+            window?.let { if (!want || it.host !== host) { it.remove(); window = null } }
+            if (want && window == null) window = try { Shown(host ?: app, host) } catch (_: Exception) { null }
+            // the accessibility service keeps the app alive by itself
+            if (want && !linkRunning && host == null) IslandService.start(app) else IslandService.stop(app)
         }
     }
 
     /** The size or position changed: move the window (the pill redraws by itself). */
     fun place(context: Context) = main.post { window?.place() }.let { }
 
-    /** The window, its view and the lifecycle Compose needs outside an activity. */
-    private class Shown(val context: Context) : LifecycleOwner, SavedStateRegistryOwner {
+    /**
+     * The window, its view and the lifecycle Compose needs outside an activity. With [host] (the accessibility
+     * service) it is an accessibility overlay, above the status bar; otherwise an ordinary overlay, kept under it.
+     */
+    private class Shown(val context: Context, val host: AccessibilityService?) : LifecycleOwner, SavedStateRegistryOwner {
         private val registry = LifecycleRegistry(this)
         private val saved = SavedStateRegistryController.create(this)
         override val lifecycle: Lifecycle get() = registry
@@ -163,7 +190,7 @@ object IslandOverlay {
         private val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            if (host != null) WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY else WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
@@ -184,7 +211,7 @@ object IslandOverlay {
             view.setViewTreeSavedStateRegistryOwner(this)
             view.setContent {
                 // while the window is staged it is bigger than the island: keep the island where it always is
-                Box(contentAlignment = Alignment.TopCenter) { IslandUi(open.value, { open.value = it }, ::stage) }
+                Box(contentAlignment = Alignment.TopCenter) { IslandUi(open.value, { open.value = it }, ::stage, above = host != null) }
             }
             // a tap anywhere else closes the card
             view.setOnTouchListener { _, e ->
@@ -200,8 +227,18 @@ object IslandOverlay {
         private fun setPosition() {
             val look = IslandLook.state.value
             params.x = (look.x * density).toInt()
-            params.y = (look.y * density).toInt()
+            val y = (look.y * density).toInt()
+            params.y = when {
+                host != null && look.dock -> 0
+                host != null -> y
+                // under the status bar the island could not be tapped: keep it just below the bar
+                else -> maxOf(y, statusBar() + (4 * density).toInt())
+            }
         }
+
+        private fun statusBar(): Int = try {
+            manager.currentWindowMetrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top
+        } catch (_: Exception) { (24 * density).toInt() }
 
         fun place() {
             setPosition()
@@ -240,7 +277,7 @@ private const val HIDE_AFTER_MS = 4_000L
 private val Pop = CubicBezierEasing(0.34f, 1.36f, 0.64f, 1f)
 
 @Composable
-private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boolean) -> Unit) {
+private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boolean) -> Unit, above: Boolean) {
     val context = LocalContext.current
     val link by Link.state.collectAsState()
     val outgoing by FileSender.waiting.collectAsState()
@@ -278,6 +315,9 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boo
         spring(dampingRatio = 0.8f, stiffness = 380f), label = "corner",
     )
     val dot = with(LocalDensity.current) { look.height.dp.roundToPx() }
+    // docked: hangs from the top edge (only possible above the status bar)
+    val docked = above && look.dock
+    val shoulder = if (docked) 10.dp else 0.dp
 
     // A tap on the pill: open what it is about (the player when only a song is around); again: close.
     val tapKind = when {
@@ -288,17 +328,21 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boo
     Box(
         Modifier
             .alpha(look.opacity)
-            .clip(RoundedCornerShape(radius))
+            .clip(if (docked) DockShape(radius, shoulder) else RoundedCornerShape(radius))
             .background(Black)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 onOpen(if (open != null) null else tapKind)
             }
+            .padding(horizontal = shoulder)
     ) {
         AnimatedContent(
             targetState = target,
             transitionSpec = {
                 (fadeIn(tween(160, delayMillis = 110)) togetherWith fadeOut(tween(70))) using SizeTransform(clip = true) { from, to ->
                     when {
+                        // docked: it goes back up into the edge, and comes down out of it
+                        docked && to == IntSize.Zero -> tween(360, easing = FastOutSlowInEasing)
+                        docked && from == IntSize.Zero -> tween(520, easing = Pop)
                         // going away: into a dot, then the dot goes
                         to == IntSize.Zero -> keyframes {
                             durationMillis = 420
@@ -328,6 +372,32 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boo
                 else -> {}
             }
         }
+    }
+}
+
+/**
+ * Hanging from the top edge: flat on top, [radius] below, and a small inward curve ([shoulder] wide) on each side
+ * where it meets the edge, so it looks like it comes out of the screen. The body sits between the shoulders.
+ */
+private class DockShape(val radius: Dp, val shoulder: Dp) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val w = size.width
+        val h = size.height
+        val s = with(density) { shoulder.toPx() }.coerceAtMost(minOf(w / 4, h / 2)).coerceAtLeast(0f)
+        val r = with(density) { radius.toPx() }.coerceAtMost(minOf((w - 2 * s) / 2, h - s)).coerceAtLeast(0f)
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(w, 0f)
+            quadraticBezierTo(w - s, 0f, w - s, s)
+            lineTo(w - s, h - r)
+            arcTo(Rect(w - s - 2 * r, h - 2 * r, w - s, h), 0f, 90f, false)
+            lineTo(s + r, h)
+            arcTo(Rect(s, h - 2 * r, s + 2 * r, h), 90f, 90f, false)
+            lineTo(s, s)
+            quadraticBezierTo(s, 0f, 0f, 0f)
+            close()
+        }
+        return Outline.Generic(path)
     }
 }
 
