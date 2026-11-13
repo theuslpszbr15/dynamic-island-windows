@@ -63,9 +63,29 @@ data class LiveTransfer(
     enum class State { Running, Done, Failed }
 }
 
-/** What the small pill says right now. */
-data class Pill(val kind: Kind, val text: String, val count: Int = 0) {
-    enum class Kind { Idle, Approval, Transfer, Discord, Pending, Call }
+/** What the pill says right now: one short line and, under it, what a tap does (or a detail). */
+data class Pill(val kind: Kind, val text: String, val hint: String = "", val count: Int = 0) {
+    enum class Kind { Idle, Approval, Offer, Transfer, Discord, Media, Call, Outgoing }
+}
+
+/** The song playing in any app (Spotify, YouTube Music…), from its media session. Plain data, tested off the phone. */
+data class NowPlaying(
+    val app: String,
+    val title: String,
+    val artist: String,
+    val playing: Boolean,
+    val positionMs: Long,
+    val durationMs: Long,
+    /** When [positionMs] was read (elapsedRealtime of the session's playback state, turned into wall clock). */
+    val at: Long,
+    val speed: Float = 1f,
+) {
+    /** Where the song is now: the position moves on by itself while playing. */
+    fun positionAt(now: Long): Long {
+        val moved = if (playing) ((now - at).coerceAtLeast(0) * speed).toLong() else 0L
+        val p = positionMs + moved
+        return if (durationMs > 0) p.coerceIn(0, durationMs) else p.coerceAtLeast(0)
+    }
 }
 
 /**
@@ -85,6 +105,11 @@ object Island {
 
     private val _call = MutableStateFlow<PhoneCall?>(null)
     val call: StateFlow<PhoneCall?> = _call
+
+    private val _media = MutableStateFlow<NowPlaying?>(null)
+    val media: StateFlow<NowPlaying?> = _media
+
+    fun media(playing: NowPlaying?) { _media.value = playing }
 
     private val _transfers = MutableStateFlow<List<LiveTransfer>>(emptyList())
     val transfers: StateFlow<List<LiveTransfer>> = _transfers
@@ -109,8 +134,9 @@ object Island {
     }
 
     /**
-     * Most urgent first: an agent waiting for an answer, something moving, someone who just joined the call,
-     * things to accept, the call itself. Nothing: the idle pill.
+     * Most urgent first: an agent waiting for an answer, a file to accept, something moving, someone who just joined
+     * the call, the song playing, the phone's call, what the PC still has to accept. Nothing: the resting pill.
+     * The phone is small, so the pill only tells; a tap opens what to do.
      */
     fun pill(
         approvals: Int,
@@ -119,21 +145,26 @@ object Island {
         transfers: List<LiveTransfer>,
         discord: List<DiscordEvent>,
         call: PhoneCall?,
+        media: NowPlaying?,
         now: Long,
     ): Pill {
-        if (approvals > 0) return Pill(Pill.Kind.Approval, if (approvals == 1) "Agente pedindo permissão" else "$approvals pedidos de permissão", approvals)
+        if (approvals > 0) return Pill(Pill.Kind.Approval,
+            if (approvals == 1) "Agente pedindo permissão" else "$approvals pedidos de permissão", "Toque para responder", approvals)
+        if (incoming > 0) return Pill(Pill.Kind.Offer,
+            if (incoming == 1) "Nova solicitação de envio" else "$incoming solicitações de envio", "Toque para aceitar ou rejeitar", incoming)
         transfers.firstOrNull { it.state == LiveTransfer.State.Running }?.let {
-            return Pill(Pill.Kind.Transfer, if (it.percent >= 0) "${it.title} · ${it.percent}%" else it.title)
+            return Pill(Pill.Kind.Transfer, it.title, if (it.percent >= 0) "${it.percent}%" else "Aguardando")
         }
         discord.firstOrNull()?.takeIf { now - it.at in 0..FLASH_MS }?.let {
-            return Pill(Pill.Kind.Discord, if (it.joined) "${it.name} entrou" else "${it.name} saiu")
+            return Pill(Pill.Kind.Discord, if (it.joined) "${it.name} entrou na call" else "${it.name} saiu da call", it.channel)
         }
         transfers.firstOrNull()?.takeIf { now - it.at in 0..FLASH_MS }?.let {
-            return Pill(Pill.Kind.Transfer, it.title)
+            return Pill(Pill.Kind.Transfer, it.title, if (it.state == LiveTransfer.State.Done) "Pronto" else "Falhou")
         }
-        val pending = incoming + outgoing
-        if (pending > 0) return Pill(Pill.Kind.Pending, if (pending == 1) "1 pendente" else "$pending pendentes", pending)
-        if (call != null) return Pill(Pill.Kind.Call, call.title.ifEmpty { "Na call" })
+        if (media != null && media.playing) return Pill(Pill.Kind.Media, media.title, media.artist)
+        if (call != null) return Pill(Pill.Kind.Call, call.title.ifEmpty { "Na call" }, "Call do Discord")
+        if (outgoing > 0) return Pill(Pill.Kind.Outgoing, "Esperando o PC aceitar",
+            if (outgoing == 1) "1 envio" else "$outgoing envios", outgoing)
         return Pill(Pill.Kind.Idle, "")
     }
 }

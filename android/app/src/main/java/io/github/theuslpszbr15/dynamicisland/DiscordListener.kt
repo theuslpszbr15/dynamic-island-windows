@@ -18,12 +18,15 @@ import android.service.notification.StatusBarNotification
 class DiscordListener : NotificationListenerService() {
     override fun onListenerConnected() {
         connected = true
+        // the same permission lets the island read the song playing
+        MediaWatcher.start(this)
         try { activeNotifications?.forEach(::look) } catch (_: Exception) {}
         if (current == null) Island.phoneCall(null)
     }
 
     override fun onListenerDisconnected() {
         connected = false
+        MediaWatcher.stop()
         clear()
     }
 

@@ -46,13 +46,38 @@ class IslandTest {
         val running = LiveTransfer("a", "Mandando pro PC", "foto.jpg", 40, LiveTransfer.State.Running, now)
         val joined = DiscordEvent(true, "Ana", "Geral", 2, null, now - 1_000)
         val call = PhoneCall("Geral", "Servidor", now - 60_000, emptyList())
-        assertEquals(Pill.Kind.Approval, Island.pill(1, 2, 0, listOf(running), listOf(joined), call, now).kind)
-        assertEquals("Mandando pro PC · 40%", Island.pill(0, 2, 0, listOf(running), listOf(joined), call, now).text)
-        assertEquals("Ana entrou", Island.pill(0, 2, 0, emptyList(), listOf(joined), call, now).text)
-        // an old event no longer lights the pill
-        assertEquals(Pill(Pill.Kind.Pending, "3 pendentes", 3), Island.pill(0, 2, 1, emptyList(), listOf(joined), call, now + Island.FLASH_MS + 1))
-        assertEquals(Pill.Kind.Call, Island.pill(0, 0, 0, emptyList(), emptyList(), call, now).kind)
-        assertEquals(Pill.Kind.Idle, Island.pill(0, 0, 0, emptyList(), emptyList(), null, now).kind)
+        val song = NowPlaying("com.spotify.music", "Música", "Artista", true, 0, 200_000, now)
+        assertEquals(Pill.Kind.Approval, Island.pill(1, 2, 0, listOf(running), listOf(joined), call, song, now).kind)
+        // the phone is small: the pill only says what it is and what a tap does
+        assertEquals(Pill(Pill.Kind.Offer, "Nova solicitação de envio", "Toque para aceitar ou rejeitar", 1),
+            Island.pill(0, 1, 0, listOf(running), listOf(joined), call, song, now))
+        assertEquals(Pill(Pill.Kind.Transfer, "Mandando pro PC", "40%"), Island.pill(0, 0, 0, listOf(running), listOf(joined), call, song, now))
+        assertEquals("Ana entrou na call", Island.pill(0, 0, 0, emptyList(), listOf(joined), call, song, now).text)
+        // an old event no longer lights the pill: the song does
+        val later = now + Island.FLASH_MS + 1
+        assertEquals(Pill(Pill.Kind.Media, "Música", "Artista"), Island.pill(0, 0, 1, emptyList(), listOf(joined), call, song, later))
+        assertEquals(Pill.Kind.Call, Island.pill(0, 0, 1, emptyList(), emptyList(), call, song.copy(playing = false), later).kind)
+        assertEquals(Pill.Kind.Outgoing, Island.pill(0, 0, 1, emptyList(), emptyList(), null, null, later).kind)
+        assertEquals(Pill.Kind.Idle, Island.pill(0, 0, 0, emptyList(), emptyList(), null, song.copy(playing = false), later).kind)
+    }
+
+    @Test fun songPositionMovesOnlyWhilePlaying() {
+        val song = NowPlaying("app", "t", "a", true, 10_000, 60_000, at = 1_000)
+        assertEquals(15_000, song.positionAt(6_000))
+        assertEquals(60_000, song.positionAt(1_000_000))
+        assertEquals(10_000, song.copy(playing = false).positionAt(6_000))
+    }
+
+    @Test fun lookStaysOnScreen() {
+        val l = Look(width = 5000, height = 1, corner = 3f, x = -999, y = -5, opacity = 0f).clamped()
+        assertEquals(Look.MAX_W, l.width)
+        assertEquals(Look.MIN_H, l.height)
+        assertEquals(1f, l.corner)
+        assertEquals(-Look.MAX_X, l.x)
+        assertEquals(0, l.y)
+        assertEquals(0.4f, l.opacity)
+        // presets keep the other choices
+        assertFalse(Look.presets.first().second(Look(media = false)).media)
     }
 
     @Test fun finishedTransfersLeaveAfterAMinute() {
