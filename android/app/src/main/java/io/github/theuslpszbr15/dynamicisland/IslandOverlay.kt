@@ -14,6 +14,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import android.view.WindowManager
@@ -196,8 +197,10 @@ object IslandOverlay {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             if (host != null) WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY else WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                // split: the drawing takes no touch at all (the touch window over the island does)
+                (if (host != null) WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE else WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH),
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -212,6 +215,38 @@ object IslandOverlay {
         /** Which card is open (null: just the pill). */
         private val open = mutableStateOf<Pill.Kind?>(null)
         private val view = ComposeView(context)
+
+        /**
+         * Above the status bar (accessibility overlays are trusted, so a window may let touches through): the island
+         * is drawn in a window that never changes size and takes no touch, and an invisible window just over the
+         * island takes the taps and hands them to the drawing. Resizing the drawn window is what made the island
+         * flash out of place for a frame; the touch window can move and resize freely, nobody sees it.
+         */
+        private val touch: View? = if (host != null) View(context) else null
+        private val touchParams = WindowManager.LayoutParams(
+            1, 1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            fitInsetsTypes = 0
+            fitInsetsSides = 0
+            title = "Dynamic Island (toque)"
+        }
+        private val moveTouch = Runnable { placeTouch() }
+
+        /** The touch window goes exactly over the island (the drawn window is screen wide, moved by x). */
+        private fun placeTouch() {
+            val t = touch ?: return
+            touchParams.x = (context.resources.displayMetrics.widthPixels - params.width) / 2 + params.x + island.left
+            touchParams.y = params.y + island.top
+            touchParams.width = island.width().coerceAtLeast(1)
+            touchParams.height = island.height().coerceAtLeast(1)
+            try { manager.updateViewLayout(t, touchParams) } catch (_: Exception) {}
+        }
         /** Where the island is in the window: the only part that takes touches when [fixed]. */
         private val island = android.graphics.Rect()
         /** The window never changes size (see [touchOnlyTheIsland]). */
@@ -230,7 +265,8 @@ object IslandOverlay {
             if (r == island) return
             island.set(r)
             // the touchable part is read on the window's next pass
-            if (fixed) view.invalidate()
+            if (touch != null) { main.removeCallbacks(moveTouch); main.postDelayed(moveTouch, 24) }
+            else if (fixed) view.invalidate()
             // the island changed size while the window was fitted to it: give it room again, then fit once more
             else if (!staged && (r.width() != params.width || r.height() != params.height)) stage()
         }
@@ -285,11 +321,25 @@ object IslandOverlay {
             }
             // The window keeps one size for good and only the island's own rectangle takes touches; everything else
             // goes to the app below. Without that (an Android that refuses it), the window follows the island's size.
-            fixed = touchOnlyTheIsland()
+            fixed = touch != null || touchOnlyTheIsland()
             params.width = context.resources.displayMetrics.widthPixels
             params.height = (STAGE_HEIGHT_DP * density).toInt()
             setPosition()
             manager.addView(view, params)
+            touch?.let { t ->
+                t.setOnTouchListener { _, e ->
+                    if (e.action == MotionEvent.ACTION_OUTSIDE) open.value = null
+                    else {
+                        // the same touch, where the island is in the drawn window
+                        val moved = MotionEvent.obtain(e)
+                        moved.offsetLocation(island.left.toFloat(), island.top.toFloat())
+                        view.dispatchTouchEvent(moved)
+                        moved.recycle()
+                    }
+                    true
+                }
+                manager.addView(t, touchParams)
+            }
             if (!fixed) { staged = true; main.postDelayed(settle, STAGE_MS) }
             registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
             registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
@@ -314,6 +364,7 @@ object IslandOverlay {
         fun place() {
             setPosition()
             try { manager.updateViewLayout(view, params) } catch (_: Exception) {}
+            placeTouch()
         }
 
         /**
@@ -341,8 +392,10 @@ object IslandOverlay {
 
         fun remove() {
             main.removeCallbacks(settle)
+            main.removeCallbacks(moveTouch)
             registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
             try { manager.removeView(view) } catch (_: Exception) {}
+            touch?.let { try { manager.removeView(it) } catch (_: Exception) {} }
         }
     }
 }
