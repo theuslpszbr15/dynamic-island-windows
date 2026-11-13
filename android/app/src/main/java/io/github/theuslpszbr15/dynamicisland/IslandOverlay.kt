@@ -76,7 +76,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
@@ -415,8 +415,10 @@ private fun IslandUi(
     Box(
         Modifier
             .onGloballyPositioned { c ->
-                val b = c.boundsInWindow()
-                bounds(android.graphics.Rect(b.left.toInt(), b.top.toInt(), kotlin.math.ceil(b.right).toInt(), kotlin.math.ceil(b.bottom).toInt()))
+                // its whole size, not boundsInWindow: that is cut to the window, so an island that outgrew a window
+                // fitted to its old size (a new shape or preset) never asked for room and stayed cut
+                val p = c.positionInWindow()
+                bounds(android.graphics.Rect(p.x.toInt(), p.y.toInt(), p.x.toInt() + c.size.width, p.y.toInt() + c.size.height))
             }
             .alpha(look.opacity)
             .clip(if (docked) DockShape(radius, shoulder) else RoundedCornerShape(radius))
