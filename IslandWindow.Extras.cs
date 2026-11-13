@@ -355,6 +355,15 @@ public partial class IslandWindow
         var showing = ReferenceEquals(approval, _approvals.FirstOrDefault());
         DropApprovals(a => ReferenceEquals(a, approval));
         _ = AgentHub.Reply(approval.Id, decision);
+        // Answered here or on the phone: the session stops "waiting for you" right away, everywhere (the agent's next
+        // hook would say the same, but a denied or last step may never send one).
+        if (Agents.FirstOrDefault(s => s.Key == approval.SessionKey) is { State: "waiting" } session)
+        {
+            session.Update("working", decision == "allow" ? "Permitido" : "Negado");
+            if (_expanded && _page == PageAgents) RefreshPage();
+            Retarget();
+            PublishPhoneSessions();
+        }
         if (decision == "allow")
         {
             AgentStats.Record(null, false, true, TimeSpan.Zero, null);
