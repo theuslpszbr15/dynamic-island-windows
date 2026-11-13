@@ -7,12 +7,14 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
+import android.graphics.Region
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Toast
@@ -73,6 +75,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -198,11 +202,56 @@ object IslandOverlay {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             // up into the camera cutout, like the real thing
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            // y always counts from the top of the screen. By default Android keeps a window clear of the status bar
+            // in some sizes and not in others, so the island jumped up and down as the window grew and shrank.
+            fitInsetsTypes = 0
+            fitInsetsSides = 0
             title = "Dynamic Island"
         }
         /** Which card is open (null: just the pill). */
         private val open = mutableStateOf<Pill.Kind?>(null)
         private val view = ComposeView(context)
+        /** Where the island is in the window: the only part that takes touches when [fixed]. */
+        private val island = android.graphics.Rect()
+        /** The window never changes size (see [touchOnlyTheIsland]). */
+        private var fixed = false
+
+        /** The island moved or changed size. */
+        fun bounds(r: android.graphics.Rect) {
+            if (r == island) return
+            island.set(r)
+            // the touchable part is read on the window's next pass
+            if (fixed) view.invalidate()
+        }
+
+        /**
+         * Tells Android which part of the window takes touches (the island) through ViewTreeObserver's internal
+         * insets listener, which Android keeps hidden from apps, so it is reached by name. False if this Android
+         * does not allow it.
+         */
+        private fun touchOnlyTheIsland(): Boolean = try {
+            val listener = Class.forName("android.view.ViewTreeObserver\$OnComputeInternalInsetsListener")
+            val info = Class.forName("android.view.ViewTreeObserver\$InternalInsetsInfo")
+            val setTouchable = info.getMethod("setTouchableInsets", Int::class.javaPrimitiveType)
+            val region = info.getField("touchableRegion")
+            val onlyRegion = info.getField("TOUCHABLE_INSETS_REGION").getInt(null)
+            val add = ViewTreeObserver::class.java.getMethod("addOnComputeInternalInsetsListener", listener)
+            val proxy = java.lang.reflect.Proxy.newProxyInstance(listener.classLoader, arrayOf(listener)) { self, method, args ->
+                when (method.name) {
+                    "onComputeInternalInsets" -> {
+                        setTouchable.invoke(args!![0], onlyRegion)
+                        (region.get(args[0]) as Region).set(island)
+                        null
+                    }
+                    "equals" -> self === args?.get(0)
+                    "hashCode" -> System.identityHashCode(self)
+                    "toString" -> "IslandTouch"
+                    else -> null
+                }
+            }
+            add.invoke(view.viewTreeObserver, proxy)
+            true
+        } catch (_: Throwable) { false }
 
         init {
             saved.performRestore(null)
@@ -211,12 +260,21 @@ object IslandOverlay {
             view.setViewTreeSavedStateRegistryOwner(this)
             view.setContent {
                 // while the window is staged it is bigger than the island: keep the island where it always is
-                Box(contentAlignment = Alignment.TopCenter) { IslandUi(open.value, { open.value = it }, ::stage, above = host != null) }
+                Box(contentAlignment = Alignment.TopCenter) {
+                    IslandUi(open.value, { open.value = it }, ::stage, ::bounds, above = host != null)
+                }
             }
             // a tap anywhere else closes the card
             view.setOnTouchListener { _, e ->
                 if (e.action == MotionEvent.ACTION_OUTSIDE) open.value = null
                 false
+            }
+            // The window keeps one size for good and only the island's own rectangle takes touches; everything else
+            // goes to the app below. Without that (an Android that refuses it), the window follows the island's size.
+            fixed = touchOnlyTheIsland()
+            if (fixed) {
+                params.width = context.resources.displayMetrics.widthPixels
+                params.height = (STAGE_HEIGHT_DP * density).toInt()
             }
             setPosition()
             manager.addView(view, params)
@@ -251,6 +309,7 @@ object IslandOverlay {
          * every frame (what it did before) is slow on Android and made the animation stutter.
          */
         fun stage(on: Boolean) {
+            if (fixed) return
             val w = if (on) context.resources.displayMetrics.widthPixels else WindowManager.LayoutParams.WRAP_CONTENT
             val h = if (on) (STAGE_HEIGHT_DP * density).toInt() else WindowManager.LayoutParams.WRAP_CONTENT
             if (params.width == w && params.height == h) return
@@ -277,7 +336,13 @@ private const val HIDE_AFTER_MS = 4_000L
 private val Pop = CubicBezierEasing(0.34f, 1.36f, 0.64f, 1f)
 
 @Composable
-private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boolean) -> Unit, above: Boolean) {
+private fun IslandUi(
+    open: Pill.Kind?,
+    onOpen: (Pill.Kind?) -> Unit,
+    stage: (Boolean) -> Unit,
+    bounds: (android.graphics.Rect) -> Unit,
+    above: Boolean,
+) {
     val context = LocalContext.current
     val link by Link.state.collectAsState()
     val outgoing by FileSender.waiting.collectAsState()
@@ -327,6 +392,10 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boo
     }
     Box(
         Modifier
+            .onGloballyPositioned { c ->
+                val b = c.boundsInWindow()
+                bounds(android.graphics.Rect(b.left.toInt(), b.top.toInt(), kotlin.math.ceil(b.right).toInt(), kotlin.math.ceil(b.bottom).toInt()))
+            }
             .alpha(look.opacity)
             .clip(if (docked) DockShape(radius, shoulder) else RoundedCornerShape(radius))
             .background(Black)
@@ -338,7 +407,7 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boo
         AnimatedContent(
             targetState = target,
             transitionSpec = {
-                (fadeIn(tween(160, delayMillis = 110)) togetherWith fadeOut(tween(70))) using SizeTransform(clip = true) { from, to ->
+                (fadeIn(tween(150, delayMillis = 50)) togetherWith fadeOut(tween(50))) using SizeTransform(clip = true) { from, to ->
                     when {
                         // docked: it goes back up into the edge, and comes down out of it
                         docked && to == IntSize.Zero -> tween(360, easing = FastOutSlowInEasing)
@@ -388,13 +457,13 @@ private class DockShape(val radius: Dp, val shoulder: Dp) : Shape {
         val path = Path().apply {
             moveTo(0f, 0f)
             lineTo(w, 0f)
-            quadraticBezierTo(w - s, 0f, w - s, s)
+            quadraticTo(w - s, 0f, w - s, s)
             lineTo(w - s, h - r)
             arcTo(Rect(w - s - 2 * r, h - 2 * r, w - s, h), 0f, 90f, false)
             lineTo(s + r, h)
             arcTo(Rect(s, h - 2 * r, s + 2 * r, h), 90f, 90f, false)
             lineTo(s, s)
-            quadraticBezierTo(s, 0f, 0f, 0f)
+            quadraticTo(s, 0f, 0f, 0f)
             close()
         }
         return Outline.Generic(path)
