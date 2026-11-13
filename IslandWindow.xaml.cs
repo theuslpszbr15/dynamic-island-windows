@@ -540,6 +540,7 @@ public partial class IslandWindow : Window
 
         var interactive = over && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
                                    || (_transient == Transient.Info && _infoAction != null)
+                                   || (_transient == Transient.Notification && _notifyAction != null)
                                    || (!_settings.DiscreetIdle && !IsHandle));
         SetClickThrough(!interactive);
         AdjustPollRate(bounds, local, over || button);
@@ -597,9 +598,12 @@ public partial class IslandWindow : Window
         }
         if (_transient == Transient.Notification)
         {
+            var action = _notifyAction;
+            _notifyAction = null;
             _transientTimer.Stop();
             _transient = Transient.None;
             Retarget();
+            action?.Invoke();
             return;
         }
         int? page = _transient switch

@@ -6,7 +6,14 @@ using Windows.UI.Notifications.Management;
 
 namespace DynamicIsland.Services;
 
-public sealed record IslandNotification(string App, string Title, string Body, ImageSource? Logo);
+/// <param name="AppId">The sending app's AppUserModelId (to open it again), or null.</param>
+public sealed record IslandNotification(string App, string Title, string Body, ImageSource? Logo, string? AppId = null)
+{
+    /// <summary>The Claude desktop app (a decision card waiting, an answer ready), by name or by its app id.</summary>
+    public bool IsClaude => App.Trim().Equals("Claude", StringComparison.OrdinalIgnoreCase)
+                            || (AppId ?? "").Contains("AnthropicClaude", StringComparison.OrdinalIgnoreCase)
+                            || (AppId ?? "").StartsWith("Claude_", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>
 /// Mirrors new Windows toasts. NotificationChanged needs package identity, so new toasts are found by polling.
@@ -73,7 +80,7 @@ public sealed class NotificationService(Dispatcher dispatcher)
         if (texts.Count == 0) return null;
         var title = texts[0]!;
         var body = string.Join(" ", texts.Skip(1));
-        return new IslandNotification(app, title, body, await Logo(n.AppInfo));
+        return new IslandNotification(app, title, body, await Logo(n.AppInfo), n.AppInfo?.AppUserModelId);
     }
 
     async Task<ImageSource?> Logo(Windows.ApplicationModel.AppInfo? info)

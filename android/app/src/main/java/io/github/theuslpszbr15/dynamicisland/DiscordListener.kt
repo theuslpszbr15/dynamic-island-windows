@@ -9,7 +9,9 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 /**
- * Reads only the Discord app's ongoing notification (the one it shows while you are in a voice call) so the island
+ * Reads only two apps' notifications. The Claude app's (a decision card waiting, an answer ready): its title and
+ * text light the island until it leaves the shade, and a tap opens it like the notification would. And the
+ * Discord app's ongoing notification (the one it shows while you are in a voice call) so the island
  * can show the channel, how long the call has been going and its buttons (sair, mutar…). Every other notification
  * is ignored on arrival: nothing is stored, logged or sent anywhere. Off until the person turns on
  * "Acesso a notificações" for the app (Android asks; on an APK from outside the Play Store, Android 13+ first wants
@@ -28,15 +30,19 @@ class DiscordListener : NotificationListenerService() {
         connected = false
         MediaWatcher.stop()
         clear()
+        if (listener === this) listener = null
+        forgetClaude()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) = look(sbn)
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.key == current) clear()
+        if (sbn.key == claudeKey) forgetClaude()
     }
 
     private fun look(sbn: StatusBarNotification) {
+        if (sbn.packageName in CLAUDE) return claude(sbn)
         if (sbn.packageName !in PACKAGES) return
         val n = sbn.notification ?: return
         val ongoing = n.flags and Notification.FLAG_ONGOING_EVENT != 0
@@ -59,11 +65,32 @@ class DiscordListener : NotificationListenerService() {
         IslandOverlay.refresh(this)
     }
 
+    private fun claude(sbn: StatusBarNotification) {
+        val n = sbn.notification ?: return
+        // a group's summary repeats its children; ongoing is the app working, not something for you
+        if (n.flags and (Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_ONGOING_EVENT) != 0) return
+        val extras = n.extras
+        val title = DiscordEvent.clean(extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(), 60)
+        val text = DiscordEvent.clean((extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)
+            ?: extras?.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty().replace('\n', ' '), 120)
+        if (title.isEmpty() && text.isEmpty()) return
+        claudeKey = sbn.key
+        claudeIntent = n.contentIntent
+        claudeSeen = ClaudeSeen(System.currentTimeMillis(), n.channelId.orEmpty(), n.category.orEmpty(),
+            n.actions.orEmpty().map { it.title?.toString().orEmpty().take(30) })
+        Island.claude(ClaudeNote(sbn.key, title, text, sbn.postTime.takeIf { it > 0 } ?: System.currentTimeMillis()))
+        listener = this
+        IslandOverlay.refresh(this)
+    }
+
     private fun clear() {
         current = null
         intents = emptyList()
         Island.phoneCall(null)
     }
+
+    /** How the last Claude notification was sent (channel, category, its buttons), for checking; never its text. */
+    data class ClaudeSeen(val at: Long, val channel: String, val category: String, val actions: List<String>)
 
     /** What the last Discord notifications looked like (for "Ver o que o Discord mandou", in memory only). */
     data class Seen(val at: Long, val channel: String, val category: String, val ongoing: Boolean, val title: String,
@@ -72,6 +99,49 @@ class DiscordListener : NotificationListenerService() {
     companion object {
         /** Discord and its beta / alpha builds. */
         private val PACKAGES = setOf("com.discord", "com.discord.beta", "com.discord.alpha")
+        /** The Claude app. */
+        private val CLAUDE = setOf("com.anthropic.claude")
+
+        @Volatile private var claudeKey: String? = null
+        @Volatile private var claudeIntent: PendingIntent? = null
+        @Volatile private var listener: DiscordListener? = null
+        @Volatile var claudeSeen: ClaudeSeen? = null
+            private set
+
+        private fun forgetClaude() {
+            claudeKey = null
+            claudeIntent = null
+            Island.claude(null)
+        }
+
+        /** Opens what the Claude notification is about (the conversation), as tapping it in the shade would. */
+        fun openClaude(context: Context): Boolean {
+            val intent = claudeIntent
+            val ok = try {
+                if (intent != null) {
+                    // Android 14+: the island is on screen, so it may open the app, but only if it says so
+                    val options = if (android.os.Build.VERSION.SDK_INT >= 34) android.app.ActivityOptions.makeBasic()
+                        .setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                        .toBundle() else null
+                    intent.send(context, 0, null, null, null, null, options)
+                    true
+                } else {
+                    context.packageManager.getLaunchIntentForPackage(CLAUDE.first())
+                        ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)?.let(context::startActivity) != null
+                }
+            } catch (_: Exception) {
+                false
+            }
+            dismissClaude()
+            return ok
+        }
+
+        /** Takes it off the island and out of the shade. */
+        fun dismissClaude() {
+            val key = claudeKey
+            forgetClaude()
+            if (key != null) try { listener?.cancelNotification(key) } catch (_: Exception) {}
+        }
 
         @Volatile private var current: String? = null
         @Volatile private var intents: List<PendingIntent?> = emptyList()

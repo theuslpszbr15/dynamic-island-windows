@@ -51,6 +51,12 @@ data class DiscordEvent(
 /** The Discord call notification on this phone (read only with "Acesso a notificações" on): channel, server, buttons. */
 data class PhoneCall(val title: String, val text: String, val since: Long, val actions: List<String>)
 
+/**
+ * A notification of the Claude app on this phone (a decision card waiting, an answer ready): only its title and
+ * text, kept in memory while it is in the shade. [at]: when it came.
+ */
+data class ClaudeNote(val key: String, val title: String, val text: String, val at: Long)
+
 /** A transfer in progress or just finished, mirrored from its notification. [percent] -1: waiting. */
 data class LiveTransfer(
     val id: String,
@@ -65,7 +71,7 @@ data class LiveTransfer(
 
 /** What the pill says right now: one short line and, under it, what a tap does (or a detail). */
 data class Pill(val kind: Kind, val text: String, val hint: String = "", val count: Int = 0) {
-    enum class Kind { Idle, Approval, Offer, Transfer, Discord, Media, Call, Outgoing }
+    enum class Kind { Idle, Approval, Claude, Offer, Transfer, Discord, Media, Call, Outgoing }
 }
 
 /** The song playing in any app (Spotify, YouTube Music…), from its media session. Plain data, tested off the phone. */
@@ -99,6 +105,8 @@ object Island {
     const val KEEP_DONE_MS = 60_000L
     /** The last joins and leaves, newest first. */
     const val MAX_EVENTS = 20
+    /** A Claude notification left unread stops lighting the pill after this (it stays in the shade). */
+    const val CLAUDE_MS = 10 * 60_000L
 
     private val _discord = MutableStateFlow<List<DiscordEvent>>(emptyList())
     val discord: StateFlow<List<DiscordEvent>> = _discord
@@ -110,6 +118,11 @@ object Island {
     val media: StateFlow<NowPlaying?> = _media
 
     fun media(playing: NowPlaying?) { _media.value = playing }
+
+    private val _claude = MutableStateFlow<ClaudeNote?>(null)
+    val claude: StateFlow<ClaudeNote?> = _claude
+
+    fun claude(note: ClaudeNote?) { _claude.value = note }
 
     private val _transfers = MutableStateFlow<List<LiveTransfer>>(emptyList())
     val transfers: StateFlow<List<LiveTransfer>> = _transfers
@@ -134,7 +147,7 @@ object Island {
     }
 
     /**
-     * Most urgent first: an agent waiting for an answer, a file to accept, something moving, someone who just joined
+     * Most urgent first: an agent waiting for an answer, the Claude app waiting for you, a file to accept, something moving, someone who just joined
      * the call, the song playing, the phone's call, what the PC still has to accept. Nothing: the resting pill.
      * The phone is small, so the pill only tells; a tap opens what to do.
      */
@@ -147,9 +160,13 @@ object Island {
         call: PhoneCall?,
         media: NowPlaying?,
         now: Long,
+        claude: ClaudeNote? = null,
     ): Pill {
         if (approvals > 0) return Pill(Pill.Kind.Approval,
             if (approvals == 1) "Agente pedindo permissão" else "$approvals pedidos de permissão", "Toque para responder", approvals)
+        claude?.takeIf { now - it.at in 0..CLAUDE_MS }?.let {
+            return Pill(Pill.Kind.Claude, it.title.ifEmpty { "Claude" }, it.text.ifEmpty { "Toque para abrir no Claude" })
+        }
         if (incoming > 0) return Pill(Pill.Kind.Offer,
             if (incoming == 1) "Nova solicitação de envio" else "$incoming solicitações de envio", "Toque para aceitar ou rejeitar", incoming)
         transfers.firstOrNull { it.state == LiveTransfer.State.Running }?.let {

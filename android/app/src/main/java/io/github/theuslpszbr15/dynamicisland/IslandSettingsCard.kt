@@ -141,14 +141,15 @@ fun IslandSettingsCard() {
             Switch(checked = look.dock, onCheckedChange = { change(look.copy(dock = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
 
-        Section("Música e Discord")
+        Section("Música, Discord e Claude")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Mostrar a música tocando (Spotify, YouTube Music…)", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
             Switch(checked = look.media, onCheckedChange = { change(look.copy(media = it)) })
         }
         Text(
-            if (access) "Acesso a notificações ligado: a ilha lê a música tocando e a notificação de call do Discord. Nada sai do celular."
-            else "Para a música e a call do Discord, ligue o acesso a notificações do Dynamic Island. Se o Android disser que está " +
+            if (access) "Acesso a notificações ligado: a ilha lê a música tocando, a notificação de call do Discord e os avisos do " +
+                "app do Claude (como um cartão esperando sua decisão). Nada sai do celular."
+            else "Para a música, a call do Discord e os avisos do app do Claude, ligue o acesso a notificações do Dynamic Island. Se o Android disser que está " +
                 "bloqueado: Configurações › Apps › Dynamic Island › ⋮ › Permitir configurações restritas, e tente de novo.",
             color = MutedColor, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp),
         )
@@ -161,7 +162,7 @@ fun IslandSettingsCard() {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }) { Text("Informações do app") }
-            if (access) TextButton(onClick = { showSeen = !showSeen }) { Text("O que o Discord mandou") }
+            if (access) TextButton(onClick = { showSeen = !showSeen }) { Text("O que chegou") }
         }
         if (showSeen) {
             val seen = remember(tick) { DiscordListener.lastSeen() }
@@ -173,6 +174,11 @@ fun IslandSettingsCard() {
                     (if (it.actions.isNotEmpty()) " · botões: ${it.actions.joinToString()}" else ""),
                     color = MutedColor, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
             }
+            val claude = remember(tick) { DiscordListener.claudeSeen }
+            Text(if (claude == null) "Nada do Claude ainda. Quando o app do Claude avisar algo, abra de novo."
+                else "${time.format(Date(claude.at))} · Claude · canal \"${claude.channel}\" · ${claude.category.ifEmpty { "sem categoria" }}" +
+                    (if (claude.actions.isNotEmpty()) " · botões: ${claude.actions.joinToString()}" else ""),
+                color = MutedColor, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }

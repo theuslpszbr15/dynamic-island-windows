@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -171,10 +172,25 @@ public partial class IslandWindow
 
     // ───────────────────────── notifications ─────────────────────────
 
+    /// <summary>What a click on the notification card does (open the app that sent it), or null: the click just closes it.</summary>
+    Action? _notifyAction;
+
     void OnNotification(IslandNotification n)
     {
         if (!_settings.ShowNotifications) return;
-        ShowCard(n.Logo, n.Title, n.App, n.Body);
+        // the Claude app waiting for you stays longer, and a click takes you to it (choosing stays in the app)
+        var claude = n.IsClaude;
+        ShowCard(n.Logo, n.Title, n.App, n.Body, seconds: claude ? 15 : 5);
+        _notifyAction = claude ? () => OpenApp(n.AppId) : null;
+    }
+
+    /// <summary>Brings an app forward by its AppUserModelId (an app already open just comes to the front).</summary>
+    static void OpenApp(string? appId)
+    {
+        // only plain ids reach the shell: letters, digits and . _ ! -
+        if (string.IsNullOrEmpty(appId) || !appId.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '!' or '-')) return;
+        try { Process.Start(new ProcessStartInfo("explorer.exe", $"shell:AppsFolder\\{appId}") { UseShellExecute = false }); }
+        catch { }
     }
 
     /// <summary>The notification card: an app icon (or a round profile picture), a title, who sent it and a line of text.</summary>
@@ -188,6 +204,7 @@ public partial class IslandWindow
         NotifyTitle.Text = title;
         NotifyApp.Text = app;
         NotifyBody.Text = body;
+        _notifyAction = null;
         ShowTransient(Transient.Notification, seconds);
     }
 

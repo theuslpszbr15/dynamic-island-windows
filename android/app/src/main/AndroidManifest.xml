@@ -15,6 +15,11 @@
     <!-- keeps the island alive without a PC link (IslandService) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- to open the Claude app from the island when its notification has nothing to open -->
+    <queries>
+        <package android:name="com.anthropic.claude" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

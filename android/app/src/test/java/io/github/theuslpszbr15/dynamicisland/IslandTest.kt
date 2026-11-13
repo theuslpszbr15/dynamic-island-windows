@@ -61,6 +61,19 @@ class IslandTest {
         assertEquals(Pill.Kind.Idle, Island.pill(0, 0, 0, emptyList(), emptyList(), null, song.copy(playing = false), later).kind)
     }
 
+    @Test fun claudeComesRightAfterAgents() {
+        val now = 100_000L
+        val note = ClaudeNote("k", "Precisa da sua decisão", "Qual caminho seguir?", now - 1_000)
+        // an agent asking on the PC still comes first
+        assertEquals(Pill.Kind.Approval, Island.pill(1, 1, 0, emptyList(), emptyList(), null, null, now, note).kind)
+        assertEquals(Pill(Pill.Kind.Claude, "Precisa da sua decisão", "Qual caminho seguir?"),
+            Island.pill(0, 1, 0, emptyList(), emptyList(), null, null, now, note))
+        assertEquals(Pill(Pill.Kind.Claude, "Claude", "Toque para abrir no Claude"),
+            Island.pill(0, 0, 0, emptyList(), emptyList(), null, null, now, note.copy(title = "", text = "")))
+        // left unread for long, it stops lighting the pill
+        assertEquals(Pill.Kind.Offer, Island.pill(0, 1, 0, emptyList(), emptyList(), null, null, now + Island.CLAUDE_MS, note).kind)
+    }
+
     @Test fun songPositionMovesOnlyWhilePlaying() {
         val song = NowPlaying("app", "t", "a", true, 10_000, 60_000, at = 1_000)
         assertEquals(15_000, song.positionAt(6_000))

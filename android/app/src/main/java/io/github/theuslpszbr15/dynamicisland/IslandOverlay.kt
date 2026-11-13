@@ -110,6 +110,7 @@ private val Orange = Color(0xFFFF9F0A)
 private val Green = Color(0xFF30D158)
 private val Red = Color(0xFFFF453A)
 private val DiscordBlue = Color(0xFF5865F2)
+private val ClaudeOrange = Color(0xFFD97757)
 
 /**
  * The island: a black pill at the top of the screen, over any app, sized and placed as the person set it
@@ -431,6 +432,7 @@ private fun IslandUi(
     val transfers by Island.transfers.collectAsState()
     val discord by Island.discord.collectAsState()
     val call by Island.call.collectAsState()
+    val claude by Island.claude.collectAsState()
     val mediaState by Island.media.collectAsState()
     val art by MediaWatcher.art.collectAsState()
     val look by IslandLook.state.collectAsState()
@@ -438,7 +440,7 @@ private fun IslandUi(
     LaunchedEffect(Unit) { while (true) { delay(500); now = System.currentTimeMillis() } }
 
     val media = if (look.media) mediaState else null
-    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now)
+    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude)
     val screen = LocalConfiguration.current.screenWidthDp.dp
 
     // What shows: an open card, a short notice, the song (cover and bars beside the camera) or the resting pill;
@@ -520,7 +522,7 @@ private fun IslandUi(
                 "media" -> MediaPill(look, art, media)
                 "pill" -> Notice(pill, look, art, discord, screen)
                 is Pill.Kind -> Box(Modifier.width(minOf(screen - 16.dp, 380.dp)).padding(14.dp)) {
-                    OpenCard(which, context, link, outgoing, transfers, discord, call, media, art, now, onOpen)
+                    OpenCard(which, context, link, outgoing, transfers, discord, call, claude, media, art, now, onOpen)
                 }
                 else -> {}
             }
@@ -600,6 +602,7 @@ private fun Notice(pill: Pill, look: Look, art: Bitmap?, discord: List<DiscordEv
 
 private fun colorOf(kind: Pill.Kind) = when (kind) {
     Pill.Kind.Approval -> Orange
+    Pill.Kind.Claude -> ClaudeOrange
     Pill.Kind.Offer -> Green
     Pill.Kind.Transfer, Pill.Kind.Outgoing -> Blue
     Pill.Kind.Discord, Pill.Kind.Call -> DiscordBlue
@@ -616,6 +619,7 @@ private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
         else -> {
             val glyph = when (pill.kind) {
                 Pill.Kind.Approval -> "!"
+                Pill.Kind.Claude -> "✳"
                 Pill.Kind.Offer -> "↓"
                 Pill.Kind.Transfer -> "⇅"
                 Pill.Kind.Outgoing -> "↑"
@@ -676,6 +680,7 @@ private fun OpenCard(
     transfers: List<LiveTransfer>,
     discord: List<DiscordEvent>,
     call: PhoneCall?,
+    claude: ClaudeNote?,
     media: NowPlaying?,
     art: Bitmap?,
     now: Long,
@@ -706,6 +711,16 @@ private fun OpenCard(
                     close()
                 },
             )
+        } ?: Gone(close)
+        // what to choose stays in the Claude app (it has no way in from outside): the island tells and takes you there
+        Pill.Kind.Claude -> claude?.let { c ->
+            Column {
+                Title(c.title.ifEmpty { "Claude" }, c.text)
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button("Dispensar", Card, Modifier.weight(1f)) { DiscordListener.dismissClaude(); close() }
+                    Button("Abrir no Claude", ClaudeOrange, Modifier.weight(1f)) { DiscordListener.openClaude(context); close() }
+                }
+            }
         } ?: Gone(close)
         Pill.Kind.Transfer -> if (transfers.isEmpty()) Gone(close) else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             transfers.take(3).forEach { t ->
