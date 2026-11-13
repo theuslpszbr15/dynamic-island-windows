@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -215,6 +216,14 @@ object IslandOverlay {
         private val island = android.graphics.Rect()
         /** The window never changes size (see [touchOnlyTheIsland]). */
         private var fixed = false
+        /** Big for an animation; [settle] fits it back to the island. */
+        private var staged = false
+        private val settle = Runnable {
+            staged = false
+            // Exactly the island's size, never WRAP_CONTENT: Android first measures a WRAP_CONTENT window at a
+            // dialog's width, and the open card came out squeezed after it had opened wide.
+            resize(island.width().coerceAtLeast(1), island.height().coerceAtLeast(1))
+        }
 
         /** The island moved or changed size. */
         fun bounds(r: android.graphics.Rect) {
@@ -222,6 +231,8 @@ object IslandOverlay {
             island.set(r)
             // the touchable part is read on the window's next pass
             if (fixed) view.invalidate()
+            // the island changed size while the window was fitted to it: give it room again, then fit once more
+            else if (!staged && (r.width() != params.width || r.height() != params.height)) stage()
         }
 
         /**
@@ -259,9 +270,12 @@ object IslandOverlay {
             view.setViewTreeLifecycleOwner(this)
             view.setViewTreeSavedStateRegistryOwner(this)
             view.setContent {
-                // while the window is staged it is bigger than the island: keep the island where it always is
+                // The window can be bigger than the island (staged) or, for a moment, smaller (fitted to its old size):
+                // the island always keeps its own size and its place at the top center.
                 Box(contentAlignment = Alignment.TopCenter) {
-                    IslandUi(open.value, { open.value = it }, ::stage, ::bounds, above = host != null)
+                    Box(Modifier.wrapContentSize(Alignment.TopCenter, unbounded = true)) {
+                        IslandUi(open.value, { open.value = it }, ::stage, ::bounds, above = host != null)
+                    }
                 }
             }
             // a tap anywhere else closes the card
@@ -272,12 +286,11 @@ object IslandOverlay {
             // The window keeps one size for good and only the island's own rectangle takes touches; everything else
             // goes to the app below. Without that (an Android that refuses it), the window follows the island's size.
             fixed = touchOnlyTheIsland()
-            if (fixed) {
-                params.width = context.resources.displayMetrics.widthPixels
-                params.height = (STAGE_HEIGHT_DP * density).toInt()
-            }
+            params.width = context.resources.displayMetrics.widthPixels
+            params.height = (STAGE_HEIGHT_DP * density).toInt()
             setPosition()
             manager.addView(view, params)
+            if (!fixed) { staged = true; main.postDelayed(settle, STAGE_MS) }
             registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
             registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         }
@@ -308,10 +321,18 @@ object IslandOverlay {
          * goes back to the island's own size, so it never takes touches from the app below. Resizing the window on
          * every frame (what it did before) is slow on Android and made the animation stutter.
          */
-        fun stage(on: Boolean) {
+        /** The island is about to change: the window takes its big size until the animation settles. */
+        fun stage() {
             if (fixed) return
-            val w = if (on) context.resources.displayMetrics.widthPixels else WindowManager.LayoutParams.WRAP_CONTENT
-            val h = if (on) (STAGE_HEIGHT_DP * density).toInt() else WindowManager.LayoutParams.WRAP_CONTENT
+            main.removeCallbacks(settle)
+            if (!staged) {
+                staged = true
+                resize(context.resources.displayMetrics.widthPixels, (STAGE_HEIGHT_DP * density).toInt())
+            }
+            main.postDelayed(settle, STAGE_MS)
+        }
+
+        private fun resize(w: Int, h: Int) {
             if (params.width == w && params.height == h) return
             params.width = w
             params.height = h
@@ -319,6 +340,7 @@ object IslandOverlay {
         }
 
         fun remove() {
+            main.removeCallbacks(settle)
             registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
             try { manager.removeView(view) } catch (_: Exception) {}
         }
@@ -339,7 +361,7 @@ private val Pop = CubicBezierEasing(0.34f, 1.36f, 0.64f, 1f)
 private fun IslandUi(
     open: Pill.Kind?,
     onOpen: (Pill.Kind?) -> Unit,
-    stage: (Boolean) -> Unit,
+    stage: () -> Unit,
     bounds: (android.graphics.Rect) -> Unit,
     above: Boolean,
 ) {
@@ -372,7 +394,7 @@ private fun IslandUi(
         if (look.hide && shown == "rest") { delay(HIDE_AFTER_MS); hidden = true }
     }
     val target: Any = if (hidden && shown == "rest") "hidden" else shown
-    LaunchedEffect(target, pill.kind) { stage(true); delay(STAGE_MS); stage(false) }
+    LaunchedEffect(target, pill.kind) { stage() }
 
     val rest = (look.height / 2f * look.corner).dp
     val radius by animateDpAsState(
