@@ -17,6 +17,8 @@ data class Look(
     val opacity: Float = 1f,
     /** The song playing shows on the island. */
     val media: Boolean = true,
+    /** With nothing to show, the island shrinks into a dot and goes; it comes back the same way when something arrives. */
+    val hide: Boolean = true,
 ) {
     /** Always inside what the screen can show. */
     fun clamped() = copy(
@@ -57,6 +59,7 @@ object IslandLook {
         _state.value = Look(
             p.getInt("w", d.width), p.getInt("h", d.height), p.getFloat("c", d.corner),
             p.getInt("x", d.x), p.getInt("y", d.y), p.getFloat("o", d.opacity), p.getBoolean("m", d.media),
+            p.getBoolean("hd", d.hide),
         ).clamped()
         loaded = true
         return _state.value
@@ -68,7 +71,8 @@ object IslandLook {
         loaded = true
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt("w", l.width).putInt("h", l.height).putFloat("c", l.corner)
-            .putInt("x", l.x).putInt("y", l.y).putFloat("o", l.opacity).putBoolean("m", l.media).apply()
+            .putInt("x", l.x).putInt("y", l.y).putFloat("o", l.opacity).putBoolean("m", l.media)
+            .putBoolean("hd", l.hide).apply()
         IslandOverlay.place(context)
     }
 }

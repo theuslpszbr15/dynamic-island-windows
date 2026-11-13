@@ -107,7 +107,15 @@ fun IslandSettingsCard() {
         Setting("Opacidade", "${(look.opacity * 100).roundToInt()}%", look.opacity, 0.4f..1f) {
             change(look.copy(opacity = it))
         }
-        TextButton(onClick = { change(Look(media = look.media)) }) { Text("Voltar ao padrão") }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Esconder quando parada", color = Color.White, fontSize = 13.5.sp)
+                Text("Sem nada para mostrar, ela vira uma bolinha e some. Quando chega algo, a bolinha aparece e se abre na pílula.",
+                    color = MutedColor, fontSize = 12.sp)
+            }
+            Switch(checked = look.hide, onCheckedChange = { change(look.copy(hide = it)) }, modifier = Modifier.padding(start = 12.dp))
+        }
+        TextButton(onClick = { change(Look(media = look.media, hide = look.hide)) }) { Text("Voltar ao padrão") }
 
         Section("Música e Discord")
         Row(verticalAlignment = Alignment.CenterVertically) {

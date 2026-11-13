@@ -15,17 +15,22 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -38,11 +43,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -68,9 +71,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -177,7 +182,10 @@ object IslandOverlay {
             registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
             view.setViewTreeLifecycleOwner(this)
             view.setViewTreeSavedStateRegistryOwner(this)
-            view.setContent { IslandUi(open.value) { open.value = it } }
+            view.setContent {
+                // while the window is staged it is bigger than the island: keep the island where it always is
+                Box(contentAlignment = Alignment.TopCenter) { IslandUi(open.value, { open.value = it }, ::stage) }
+            }
             // a tap anywhere else closes the card
             view.setOnTouchListener { _, e ->
                 if (e.action == MotionEvent.ACTION_OUTSIDE) open.value = null
@@ -200,6 +208,20 @@ object IslandOverlay {
             try { manager.updateViewLayout(view, params) } catch (_: Exception) {}
         }
 
+        /**
+         * While the island grows or shrinks, the window is made big once, so the animation runs inside it; then it
+         * goes back to the island's own size, so it never takes touches from the app below. Resizing the window on
+         * every frame (what it did before) is slow on Android and made the animation stutter.
+         */
+        fun stage(on: Boolean) {
+            val w = if (on) context.resources.displayMetrics.widthPixels else WindowManager.LayoutParams.WRAP_CONTENT
+            val h = if (on) (STAGE_HEIGHT_DP * density).toInt() else WindowManager.LayoutParams.WRAP_CONTENT
+            if (params.width == w && params.height == h) return
+            params.width = w
+            params.height = h
+            try { manager.updateViewLayout(view, params) } catch (_: Exception) {}
+        }
+
         fun remove() {
             registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
             try { manager.removeView(view) } catch (_: Exception) {}
@@ -207,10 +229,18 @@ object IslandOverlay {
     }
 }
 
-private val bouncy = spring<androidx.compose.ui.unit.IntSize>(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+/** The tallest open card fits in this while the window is staged (see `Shown.stage`). */
+private const val STAGE_HEIGHT_DP = 440
+/** Long enough for the slowest animation below to settle. */
+private const val STAGE_MS = 800L
+/** With nothing to show, the island waits this long before it tucks away (when the person chose so). */
+private const val HIDE_AFTER_MS = 4_000L
+
+/** Overshoots a little and settles: the island's "pop". */
+private val Pop = CubicBezierEasing(0.34f, 1.36f, 0.64f, 1f)
 
 @Composable
-private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit) {
+private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit, stage: (Boolean) -> Unit) {
     val context = LocalContext.current
     val link by Link.state.collectAsState()
     val outgoing by FileSender.waiting.collectAsState()
@@ -226,8 +256,28 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit) {
     val media = if (look.media) mediaState else null
     val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now)
     val screen = LocalConfiguration.current.screenWidthDp.dp
+
+    // What shows: an open card, a short notice, the song (cover and bars beside the camera) or the resting pill;
+    // the resting pill tucks away after a while if the person chose so.
+    val shown: Any = open ?: when (pill.kind) {
+        Pill.Kind.Idle -> "rest"
+        Pill.Kind.Media -> "media"
+        else -> "pill"
+    }
+    var hidden by remember { mutableStateOf(false) }
+    LaunchedEffect(shown, look.hide) {
+        hidden = false
+        if (look.hide && shown == "rest") { delay(HIDE_AFTER_MS); hidden = true }
+    }
+    val target: Any = if (hidden && shown == "rest") "hidden" else shown
+    LaunchedEffect(target, pill.kind) { stage(true); delay(STAGE_MS); stage(false) }
+
     val rest = (look.height / 2f * look.corner).dp
-    val shape = RoundedCornerShape(if (open != null) maxOf(14.dp, 30.dp * look.corner) else maxOf(rest, 6.dp))
+    val radius by animateDpAsState(
+        if (open != null) maxOf(14.dp, 30.dp * look.corner) else maxOf(rest, 6.dp),
+        spring(dampingRatio = 0.8f, stiffness = 380f), label = "corner",
+    )
+    val dot = with(LocalDensity.current) { look.height.dp.roundToPx() }
 
     // A tap on the pill: open what it is about (the player when only a song is around); again: close.
     val tapKind = when {
@@ -238,21 +288,40 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit) {
     Box(
         Modifier
             .alpha(look.opacity)
-            .clip(shape)
+            .clip(RoundedCornerShape(radius))
             .background(Black)
-            .animateContentSize(bouncy)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 onOpen(if (open != null) null else tapKind)
             }
     ) {
         AnimatedContent(
-            targetState = open ?: pill.kind.takeIf { it != Pill.Kind.Idle }?.let { "pill" } ?: "rest",
-            transitionSpec = { fadeIn(tween(180, delayMillis = 60)) togetherWith fadeOut(tween(90)) },
+            targetState = target,
+            transitionSpec = {
+                (fadeIn(tween(160, delayMillis = 110)) togetherWith fadeOut(tween(70))) using SizeTransform(clip = true) { from, to ->
+                    when {
+                        // going away: into a dot, then the dot goes
+                        to == IntSize.Zero -> keyframes {
+                            durationMillis = 420
+                            from at 0 using FastOutSlowInEasing
+                            IntSize(dot, dot) at 250 using FastOutLinearInEasing
+                        }
+                        // coming back: a dot first, then it opens into the pill
+                        from == IntSize.Zero -> keyframes {
+                            durationMillis = 620
+                            IntSize.Zero at 0 using LinearOutSlowInEasing
+                            IntSize(dot, dot) at 170 using Pop
+                        }
+                        else -> spring(dampingRatio = 0.78f, stiffness = 420f)
+                    }
+                }
+            },
             label = "island",
         ) { which ->
             when (which) {
+                "hidden" -> Box(Modifier.size(0.dp))
                 "rest" -> Box(Modifier.size(look.width.dp, look.height.dp))
-                "pill" -> Notice(pill, look, art, media, discord, screen)
+                "media" -> MediaPill(look, art, media)
+                "pill" -> Notice(pill, look, art, discord, screen)
                 is Pill.Kind -> Box(Modifier.width(minOf(screen - 16.dp, 380.dp)).padding(14.dp)) {
                     OpenCard(which, context, link, outgoing, transfers, discord, call, media, art, now, onOpen)
                 }
@@ -262,23 +331,44 @@ private fun IslandUi(open: Pill.Kind?, onOpen: (Pill.Kind?) -> Unit) {
     }
 }
 
-/** The grown pill: an icon, one line and what a tap does. */
+/**
+ * The song while it plays: the cover on one side of the camera and the bars on the other, the pill only a little
+ * wider than at rest. Its size follows the person's choices, never the song's name (that is in the player).
+ */
 @Composable
-private fun Notice(pill: Pill, look: Look, art: Bitmap?, media: NowPlaying?, discord: List<DiscordEvent>, screen: Dp) {
-    val height = maxOf(look.height.dp, if (pill.hint.isNotEmpty()) 44.dp else 0.dp)
+private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?) {
+    val h = look.height.dp
+    val icon = (h - 8.dp).coerceAtLeast(14.dp)
     Row(
-        Modifier.heightIn(min = height).widthIn(min = look.width.dp, max = screen - 16.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+        Modifier.size(look.width.dp + h * 2, h).padding(horizontal = (h - icon) / 2 + 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (art != null) Cover(art, icon, icon * 0.28f)
+        else Box(Modifier.size(icon).background(Green, CircleShape), contentAlignment = Alignment.Center) {
+            Text("♪", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.weight(1f))
+        Wave(media?.playing == true)
+    }
+}
+
+/** The grown pill: an icon, one line and what a tap does. Always the same width: a long text is cut, never stretches it. */
+@Composable
+private fun Notice(pill: Pill, look: Look, art: Bitmap?, discord: List<DiscordEvent>, screen: Dp) {
+    val height = maxOf(look.height.dp, if (pill.hint.isNotEmpty()) 44.dp else 0.dp)
+    val width = minOf(screen - 16.dp, maxOf(look.width.dp + 120.dp, 250.dp))
+    Row(
+        Modifier.size(width, height).padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Leading(pill, art, discord.firstOrNull(), size = (height - 12.dp).coerceIn(20.dp, 32.dp))
-        Column(Modifier.padding(horizontal = 8.dp).weight(1f, fill = false)) {
+        Column(Modifier.padding(horizontal = 8.dp).weight(1f)) {
             Text(pill.text, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
             if (pill.hint.isNotEmpty())
                 Text(pill.hint, color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         when (pill.kind) {
-            Pill.Kind.Media -> Wave(media?.playing == true)
             Pill.Kind.Offer, Pill.Kind.Approval, Pill.Kind.Outgoing -> if (pill.count > 1) Badge(pill.count, colorOf(pill.kind))
             else -> {}
         }

@@ -78,6 +78,9 @@ class IslandTest {
         assertEquals(0.4f, l.opacity)
         // presets keep the other choices
         assertFalse(Look.presets.first().second(Look(media = false)).media)
+        assertFalse(Look.presets.first().second(Look(hide = false)).hide)
+        // hiding when there is nothing to show is the default
+        assertTrue(Look().hide)
     }
 
     @Test fun finishedTransfersLeaveAfterAMinute() {
