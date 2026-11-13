@@ -1,4 +1,6 @@
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Threading;
@@ -21,13 +23,46 @@ public sealed class AgentHub(Dispatcher ui) : IDisposable
     {
         try
         {
-            using var client = new NamedPipeClientStream(".", ReplyPipe(requestId), PipeDirection.Out, PipeOptions.CurrentUserOnly);
-            client.Connect(1000);
+            using var client = ConnectOwnPipe(ReplyPipe(requestId), 1000);
+            if (client == null) return;
             client.Write(Encoding.UTF8.GetBytes(decision));
             client.Flush();
         }
         catch { }
     });
+
+    // PipeOptions.CurrentUserOnly compares the pipe's owner with the token's *default owner*, which is not the
+    // same everywhere for one user: an elevated process owns what it creates as "Administrators", while Git Bash
+    // (where Claude Code runs its hooks) sets the owner to the user. The island and its hooks then refused each
+    // other and every hook message arrived empty. So both ends use the user's SID explicitly instead.
+    static SecurityIdentifier CurrentUser => WindowsIdentity.GetCurrent().User!;
+
+    /// <summary>A pipe server owned by, and only open to, the current user, whatever the process's default owner.</summary>
+    public static NamedPipeServerStream CreateOwnPipe(string name, int maxInstances)
+    {
+        var user = CurrentUser;
+        var security = new PipeSecurity();
+        security.SetOwner(user);
+        security.SetAccessRuleProtection(true, false);
+        security.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.FullControl, AccessControlType.Allow));
+        return NamedPipeServerStreamAcl.Create(name, PipeDirection.In, maxInstances, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous, 0, 0, security);
+    }
+
+    /// <summary>Connects to a pipe made by <see cref="CreateOwnPipe"/>; null if it isn't there or someone else owns it.</summary>
+    public static NamedPipeClientStream? ConnectOwnPipe(string name, int timeoutMs)
+    {
+        var client = new NamedPipeClientStream(".", name, PipeDirection.Out);
+        try
+        {
+            client.Connect(timeoutMs);
+            if (client.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) is SecurityIdentifier owner && owner == CurrentUser)
+                return client;
+        }
+        catch { }
+        client.Dispose();
+        return null;
+    }
     // Diffs and full commands are clipped by AgentCli (4000 chars each), so this is ample; a longer message
     // is dropped (and logged) rather than parsed half.
     const int MaxMessage = 64 * 1024;
@@ -51,9 +86,7 @@ public sealed class AgentHub(Dispatcher ui) : IDisposable
             NamedPipeServerStream? server = null;
             try
             {
-                server = new NamedPipeServerStream(PipeName, PipeDirection.In,
-                    NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                server = CreateOwnPipe(PipeName, NamedPipeServerStream.MaxAllowedServerInstances);
                 await server.WaitForConnectionAsync(token);
                 var connected = server;
                 server = null;

@@ -32,8 +32,7 @@ public static class AgentCli
     // Claude Code falls back to its own prompt in the terminal.
     static void AwaitDecision(AgentMessage message)
     {
-        using var server = new NamedPipeServerStream(AgentHub.ReplyPipe(message.RequestId!), PipeDirection.In, 1,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        using var server = AgentHub.CreateOwnPipe(AgentHub.ReplyPipe(message.RequestId!), 1);
         if (!Send(message)) return;
         if (!server.WaitForConnectionAsync().Wait(DecisionWait)) return;
         using var reader = new StreamReader(server, Encoding.UTF8);
@@ -243,9 +242,8 @@ public static class AgentCli
 
     static bool Send(AgentMessage message)
     {
-        using var client = new NamedPipeClientStream(".", AgentHub.PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly);
-        try { client.Connect(400); }
-        catch { return false; } // island not running
+        using var client = AgentHub.ConnectOwnPipe(AgentHub.PipeName, 400);
+        if (client == null) return false; // island not running
         var bytes = JsonSerializer.SerializeToUtf8Bytes(message, JsonSerializerOptions.Web);
         client.Write(bytes);
         client.Flush();
