@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -308,8 +309,14 @@ object IslandOverlay {
             view.setContent {
                 // The window can be bigger than the island (staged) or, for a moment, smaller (fitted to its old size):
                 // the island always keeps its own size and its place at the top center.
+                // Split (above the status bar): the window stays put at the top and the island moves inside it, so a
+                // new place or the docked shape animates instead of the window jumping there.
+                val look by IslandLook.state.collectAsState()
+                val moveSpec = spring<androidx.compose.ui.unit.Dp>(dampingRatio = 0.85f, stiffness = 380f)
+                val ox by animateDpAsState(if (touch != null) look.x.dp else 0.dp, moveSpec, label = "x")
+                val oy by animateDpAsState(if (touch != null && !look.dock) look.y.dp else 0.dp, moveSpec, label = "y")
                 Box(contentAlignment = Alignment.TopCenter) {
-                    Box(Modifier.wrapContentSize(Alignment.TopCenter, unbounded = true)) {
+                    Box(Modifier.offset(ox, oy).wrapContentSize(Alignment.TopCenter, unbounded = true)) {
                         IslandUi(open.value, { open.value = it }, ::stage, ::bounds, above = host != null)
                     }
                 }
@@ -347,11 +354,11 @@ object IslandOverlay {
 
         private fun setPosition() {
             val look = IslandLook.state.value
-            params.x = (look.x * density).toInt()
+            // split: the island moves inside the window (see setContent)
+            params.x = if (touch != null) 0 else (look.x * density).toInt()
             val y = (look.y * density).toInt()
             params.y = when {
-                host != null && look.dock -> 0
-                host != null -> y
+                host != null -> 0
                 // under the status bar the island could not be tapped: keep it just below the bar
                 else -> maxOf(y, statusBar() + (4 * density).toInt())
             }
