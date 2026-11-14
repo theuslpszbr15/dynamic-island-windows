@@ -154,12 +154,12 @@ public sealed class DiscordWindow(Dispatcher dispatcher) : IDisposable
         if (_container == null && !Locate()) return false;
         AutomationElement tree;
         using (Props.Activate()) tree = _container!.GetUpdatedCache(Props);
-        if (!Class(tree, "containerDefault_") || Find(tree, e => Class(e, "modeConnected_")) is not { } channelRow)
+        if (!Class(tree, "containerDefault_") || Find(tree, Connected) is null)
         {
             Forget(); // the user moved to another channel or the row was rebuilt
             return retry && Locate() && Scan(retry: false);
         }
-        var channel = ChannelName(channelRow) ?? "";
+        var channel = ChannelName(tree) ?? "";
         var rows = new List<(string Name, Rect Row, Rect NameRect)>();
         foreach (var user in All(tree, e => Class(e, "voiceUser_")))
         {
@@ -209,15 +209,27 @@ public sealed class DiscordWindow(Dispatcher dispatcher) : IDisposable
         AutomationElementCollection groups;
         using (request.Activate())
             groups = root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Group));
-        AutomationElement? connected = null;
+        var marks = new List<AutomationElement>();
         foreach (AutomationElement g in groups)
         {
-            var cls = g.Cached.ClassName ?? "";
-            if (connected == null && cls.Contains("modeConnected_") && cls.Contains("selectedChannel_")) connected = g;
-            else if (_panel == null && cls.Contains("voiceUsers_")) _panel = g;
+            if (Connected(g)) marks.Add(g);
+            else if (_panel == null && Class(g, "voiceUsers_")) _panel = g;
         }
-        if (connected == null) return false;
-        var container = TreeWalker.RawViewWalker.GetParent(connected);
+        // up to the channel's own container (the row and its member list): the parent of the row, or a few levels
+        // above the call timer (a timer somewhere else in the window has no such container above it)
+        AutomationElement? container = null;
+        using (request.Activate())
+            foreach (var mark in marks)
+            {
+                var up = mark;
+                for (var i = 0; i < 8 && container == null; i++)
+                {
+                    up = TreeWalker.RawViewWalker.GetParent(up, request);
+                    if (up == null) break;
+                    if (Class(up, "containerDefault_")) container = up;
+                }
+                if (container != null) break;
+            }
         if (container == null) return false;
         _container = container;
         _handler = (_, _) => _wake.Set();
@@ -225,6 +237,12 @@ public sealed class DiscordWindow(Dispatcher dispatcher) : IDisposable
         catch { _handler = null; } // the safety-net timer still covers it
         return true;
     }
+
+    /// <summary>
+    /// Marks the voice channel the user is connected to. Discord used to put modeConnected_ on its row; the 2026
+    /// layout dropped it, and the connected channel is now the one whose row carries the call timer (tabularNumbers_).
+    /// </summary>
+    static bool Connected(AutomationElement e) => Class(e, "modeConnected_") || Class(e, "tabularNumbers_");
 
     /// <summary>"🍄・Mushyo (canal de voz), Bea, …" → "🍄・Mushyo" (the text before " (" in any language).</summary>
     static string? ChannelName(AutomationElement row)
