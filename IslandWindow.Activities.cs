@@ -106,7 +106,7 @@ public partial class IslandWindow
             StopTimer();
             PlayChime();
             ShowAlert(TimerDoneBrush, "\uE916", "Tempo esgotado",
-                $"Timer de {FormatMinutes(total)} concluído", false, 6);
+                $"Timer de {FormatMinutes(total)} concluído", false, 6, important: true);
             return;
         }
         UpdateTimerUi();
@@ -180,7 +180,7 @@ public partial class IslandWindow
         if (!_settings.ShowNotifications) return;
         // the Claude app waiting for you stays longer, and a click takes you to it (choosing stays in the app)
         var claude = n.IsClaude;
-        ShowCard(n.Logo, n.Title, n.App, n.Body, seconds: claude ? 15 : 5);
+        ShowCard(n.Logo, n.Title, n.App, n.Body, seconds: claude ? 15 : 5, important: claude);
         _notifyAction = claude ? () => OpenApp(n.AppId) : null;
     }
 
@@ -194,7 +194,8 @@ public partial class IslandWindow
     }
 
     /// <summary>The notification card: an app icon (or a round profile picture), a title, who sent it and a line of text.</summary>
-    void ShowCard(ImageSource? image, string title, string app, string body, bool round = false, double seconds = 5)
+    void ShowCard(ImageSource? image, string title, string app, string body, bool round = false, double seconds = 5,
+        bool important = false)
     {
         NotifyLogo.Background = image != null
             ? new ImageBrush(image) { Stretch = Stretch.UniformToFill }
@@ -205,7 +206,7 @@ public partial class IslandWindow
         NotifyApp.Text = app;
         NotifyBody.Text = body;
         _notifyAction = null;
-        ShowTransient(Transient.Notification, seconds);
+        ShowTransient(Transient.Notification, seconds, important);
     }
 
     // ───────────────────────── microphone / camera ─────────────────────────

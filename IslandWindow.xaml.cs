@@ -42,6 +42,9 @@ public partial class IslandWindow : Window
 
     readonly Spring _top = new(8);
     bool _expanded, _hover, _dragOver, _draggingOut, _menuOpen, _ready, _hiddenFullscreen, _compactPulsing, _pillPulsing;
+    // _fullscreen: an app is in full screen. _peek: the island shows over it anyway, for one shortcut or alert, until
+    // it is back to idle. _peekPinned: shown with the hide shortcut, stays until pressed again or full screen ends.
+    bool _fullscreen, _peek, _peekPinned;
     bool _clickThrough, _dwellBlocked, _dragCandidate;
     DateTime _lastDragOver, _lastWheel, _hoverSince;
     DateTime? _buttonSince;
@@ -301,6 +304,7 @@ public partial class IslandWindow : Window
         _h.Target = size.Height;
         _top.Target = IsHandle || IsNotch ? 0 : 8;
         UpdateLayers();
+        EndPeekIfIdle();
         if (_animating) return;
         _animating = true;
         _lastFrame = TimeSpan.Zero;
@@ -469,8 +473,11 @@ public partial class IslandWindow : Window
         if (_transient == Transient.None) Retarget();
     }
 
-    void ShowTransient(Transient kind, double seconds)
+    /// <param name="important">Shows even over a full-screen app (see <see cref="FullscreenMode.Alerts"/>): permission
+    /// requests always are; agents waiting, the timer, the Claude app and someone joining the call pass true.</param>
+    void ShowTransient(Transient kind, double seconds, bool important = false)
     {
+        if (_ready && _hiddenFullscreen && (important || kind == Transient.Approval)) TryPeek(alert: true);
         if (!_ready || _expanded || _hiddenFullscreen) return;
         if (_transient != Transient.None && _transient != kind && Priority(kind) < Priority(_transient)) return;
         Touch();
@@ -756,6 +763,43 @@ public partial class IslandWindow : Window
         HeaderInfo.Text = text;
     }
 
+    // ───────────────────────── full screen ─────────────────────────
+
+    /// <summary>Re-reads whether the island should be hidden now (after a settings change).</summary>
+    public void RefreshHidden() => GuardTick();
+
+    /// <summary>Hidden by the user, or by an app in full screen unless the island is peeking over it.</summary>
+    void ApplyHidden()
+    {
+        var hide = _userHidden || (_fullscreen && _settings.Fullscreen != FullscreenMode.Always && !_peek);
+        if (hide == _hiddenFullscreen) return;
+        _hiddenFullscreen = hide;
+        Root.IsHitTestVisible = !hide;
+        Root.BeginAnimation(OpacityProperty, new DoubleAnimation(hide ? 0 : 1, TimeSpan.FromMilliseconds(200)));
+        if (hide) SetExpanded(false); // so a later peek starts from the compact island
+        UpdateLayers(); // pauses or resumes the looping animations
+        if (!hide && _hwnd != IntPtr.Zero)
+            Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+    }
+
+    /// <summary>Shows the island over a full-screen app for one thing (a shortcut, or an alert when the setting allows
+    /// it); it hides again once back to idle. The window never takes focus (WS_EX_NOACTIVATE), so the game keeps it.</summary>
+    bool TryPeek(bool alert)
+    {
+        if (!_hiddenFullscreen) return true;
+        if (_userHidden || (alert && _settings.Fullscreen != FullscreenMode.Alerts)) return false;
+        _peek = true;
+        ApplyHidden();
+        return true;
+    }
+
+    void EndPeekIfIdle()
+    {
+        if (!_peek || _peekPinned || _expanded || _transient != Transient.None || _hover || _menuOpen || _dragOver) return;
+        _peek = false;
+        ApplyHidden();
+    }
+
     void GuardTick()
     {
         if (_unhideAt is { } unhide && DateTime.Now >= unhide)
@@ -763,15 +807,13 @@ public partial class IslandWindow : Window
             _userHidden = false;
             _unhideAt = null;
         }
-        var hide = _userHidden || (Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4);
-        if (hide != _hiddenFullscreen)
-        {
-            _hiddenFullscreen = hide;
-            Root.IsHitTestVisible = !hide;
-            Root.BeginAnimation(OpacityProperty, new DoubleAnimation(hide ? 0 : 1, TimeSpan.FromMilliseconds(200)));
-            UpdateLayers(); // pauses or resumes the looping animations
-        }
-        if (!hide && _hwnd != IntPtr.Zero)
+        // 2 = busy (a full-screen app, borderless included: Roblox, browser videos), 3 = Direct3D exclusive full screen,
+        // 4 = presentation mode.
+        _fullscreen = Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4;
+        if (!_fullscreen) _peek = _peekPinned = false;
+        ApplyHidden();
+        EndPeekIfIdle();
+        if (!_hiddenFullscreen && _hwnd != IntPtr.Zero)
             Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
 
         var now = DateTime.Now;
@@ -1040,9 +1082,9 @@ public partial class IslandWindow : Window
     void ShowAlert(AgentSession session, string glyph, string title) =>
         ShowAlert(session.OrbBrush, glyph, title,
             string.IsNullOrEmpty(session.Project) ? session.Detail : $"{session.Project} — {session.Detail}",
-            session.State == "waiting", session.State == "waiting" ? 8 : 3.5);
+            session.State == "waiting", session.State == "waiting" ? 8 : 3.5, important: session.State == "waiting");
 
-    void ShowAlert(Brush orb, string glyph, string title, string detail, bool pulse, double seconds)
+    void ShowAlert(Brush orb, string glyph, string title, string detail, bool pulse, double seconds, bool important = false)
     {
         AlertOrb.Fill = orb;
         AlertGlyph.Text = glyph;
@@ -1050,7 +1092,7 @@ public partial class IslandWindow : Window
         AlertDetail.Text = detail;
         Pulse((ScaleTransform)AlertOrb.RenderTransform, pulse);
         AlertPetFor(orb, pulse);
-        ShowTransient(Transient.AgentAlert, seconds);
+        ShowTransient(Transient.AgentAlert, seconds, important);
     }
 
     void UpdateCompactAgent()

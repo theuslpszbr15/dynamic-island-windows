@@ -84,7 +84,11 @@ public sealed partial class SettingsWindow : DarkWindow
             Toggle("Recolher quando ociosa", "Sem nada acontecendo, vira uma barrinha fina no topo e deixa as abas clicáveis.",
                 S.DiscreetIdle, _ => _app.ToggleDiscreet()),
             Choice("Monitor", "Em qual tela a ilha fica.", App.MonitorChoices().Select(m => (m.Id, m.Label)).ToArray(),
-                S.Monitor, _app.SetMonitor)));
+                S.Monitor, _app.SetMonitor),
+            Choice("Em tela cheia", "Jogos, vídeos e apresentações. A ilha fica escondida e aparece quando você usa um atalho.",
+                [(FullscreenMode.Alerts, "Atalhos e avisos importantes"), (FullscreenMode.Shortcuts, "Só atalhos"),
+                    (FullscreenMode.Always, "Sempre mostrar")],
+                S.Fullscreen, m => { S.Fullscreen = m; S.Save(); _app.Island.RefreshHidden(); })));
 
         var installed = Installer.IsInstalled;
         page.Children.Add(Card("Sistema",

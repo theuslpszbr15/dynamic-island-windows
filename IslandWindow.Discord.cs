@@ -67,7 +67,7 @@ public partial class IslandWindow
         var same = handle.Length == 0 || e.Name.Equals(e.Username, StringComparison.OrdinalIgnoreCase);
         if (e.Joined)
             ShowCard(e.Avatar, same ? e.Name : $"{e.Name}  {handle}", "Discord",
-                $"Entrou em {e.Channel} · {e.Count} na call", round: true);
+                $"Entrou em {e.Channel} · {e.Count} na call", round: true, important: true);
         else if (_settings.DiscordLeaves)
             ShowInfo("\uE77B", same ? $"{e.Name} saiu da call" : $"{e.Name} ({handle}) saiu da call", e.Channel,
                 thumb: e.Avatar, seconds: 2.6, round: true);

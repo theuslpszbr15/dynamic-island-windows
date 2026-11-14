@@ -13,6 +13,10 @@ public enum PhoneRelayMode { Public, Own, Off }
 /// island's app (testers only) or the user's own app.</summary>
 public enum DiscordSource { Window, IslandApp, OwnApp }
 
+/// <summary>What the island does while an app is in full screen (a game, a video, slides): stay hidden and show only
+/// for a shortcut, also for alerts that can't wait (the default), or never hide.</summary>
+public enum FullscreenMode { Shortcuts, Alerts, Always }
+
 public sealed class IslandSettings
 {
     public IslandShape Shape { get; set; } = IslandShape.Pill;
@@ -60,6 +64,7 @@ public sealed class IslandSettings
     /// <summary>Who joins and leaves also goes to the paired phone's floating island (over the same pinned link).</summary>
     public bool DiscordToPhone { get; set; } = true;
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
+    public FullscreenMode Fullscreen { get; set; } = FullscreenMode.Alerts;
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

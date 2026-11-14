@@ -156,10 +156,24 @@ public partial class IslandWindow
         if (action == null) return;
         if (action == "hide")
         {
+            // Over a full-screen app the island is already out of the way: the key shows it until pressed again.
+            if (_fullscreen && !_userHidden && _settings.Fullscreen != FullscreenMode.Always)
+            {
+                _peekPinned = _hiddenFullscreen;
+                if (_peekPinned) TryPeek(alert: false);
+                else
+                {
+                    _peek = false;
+                    SetExpanded(false);
+                    ApplyHidden();
+                }
+                return;
+            }
             SetUserHidden(!_userHidden);
             return;
         }
         if (_userHidden) SetUserHidden(false);
+        TryPeek(alert: false); // shortcuts always show the island, even over a game
         var page = action switch
         {
             "media" => PageMedia,
