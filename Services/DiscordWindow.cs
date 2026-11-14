@@ -205,6 +205,7 @@ public sealed class DiscordWindow(Dispatcher dispatcher) : IDisposable
             root = AutomationElement.FromHandle(hwnd);
         }
         var request = new CacheRequest();
+        request.TreeFilter = Automation.RawViewCondition;
         request.Add(AutomationElement.ClassNameProperty);
         AutomationElementCollection groups;
         using (request.Activate())
