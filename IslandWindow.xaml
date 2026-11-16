@@ -697,6 +697,9 @@
                                         <UniformGrid x:Name="CalGrid" Columns="7" />
                                     </StackPanel>
                                     <Border Grid.Column="1" Margin="16,0,0,0" CornerRadius="14" Background="{DynamicResource Card}" Padding="14,10">
+                                        <DockPanel>
+                                        <!-- the next meetings (iCal links / Outlook), above the weather -->
+                                        <StackPanel x:Name="EventsList" DockPanel.Dock="Top" Visibility="Collapsed" Margin="0,0,0,6" />
                                         <Grid>
                                             <StackPanel x:Name="WeatherBox">
                                                 <TextBlock x:Name="WeatherPlace" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
@@ -710,6 +713,7 @@
                                             <TextBlock x:Name="WeatherEmpty" Text="Carregando o clima…" FontSize="12" Foreground="{DynamicResource Muted}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
                                         </Grid>
+                                        </DockPanel>
                                     </Border>
                                 </Grid>
 

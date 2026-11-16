@@ -29,6 +29,8 @@ data class LinkUi(
     val notificationsOff: Boolean = false,
     /** Which tab opens first (screenshots). */
     val initialTab: Int = 0,
+    /** The PC's song, volume and shutdown timer (remote control); null until the PC says. */
+    val pc: PcState? = null,
 )
 
 /** What the UI and the notifications show; the service feeds it, the UI answers through it. */
@@ -119,6 +121,28 @@ object Link {
         val c = client ?: return
         io.execute {
             try { c.open(item.id) } catch (_: Exception) {}
+        }
+    }
+
+    /** Remote control (lock and shutdown come through the screen lock check, see MainActivity). */
+    fun remote(action: String, minutes: Int = 0) {
+        val c = client ?: return
+        io.execute {
+            try { c.remote(action, minutes) } catch (_: Exception) {}
+        }
+    }
+
+    fun sendClip(text: String) {
+        val c = client ?: return
+        io.execute {
+            try { c.clip(text) } catch (_: Exception) {}
+        }
+    }
+
+    fun call(state: String, name: String, number: String) {
+        val c = client ?: return
+        io.execute {
+            try { c.call(state, name, number) } catch (_: Exception) {}
         }
     }
 

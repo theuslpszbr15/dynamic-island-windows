@@ -20,6 +20,33 @@ public partial class IslandWindow
 
     bool TimerActive => _timerEnd != null || _timerPaused;
 
+    /// <summary>Focus mode: the timer is counting and Windows notifications wait.</summary>
+    bool FocusActive => _settings.FocusMode && _timerEnd != null && !_timerPaused;
+    int _heldNotifications;
+
+    /// <summary>Adds focused minutes to today and keeps only the last 30 days.</summary>
+    void RecordFocus(TimeSpan focused)
+    {
+        var minutes = (int)Math.Round(focused.TotalMinutes);
+        if (!_settings.FocusMode || minutes <= 0) return;
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        _settings.FocusLog[today] = _settings.FocusLog.GetValueOrDefault(today) + minutes;
+        var oldest = DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+        foreach (var day in _settings.FocusLog.Keys.Where(k => string.CompareOrdinal(k, oldest) < 0).ToList()) _settings.FocusLog.Remove(day);
+        _settings.Save();
+    }
+
+    /// <summary>Focused minutes today and in the last 7 days.</summary>
+    public (int Today, int Week) FocusTotals()
+    {
+        var today = DateTime.Today;
+        int week = 0;
+        for (var i = 0; i < 7; i++) week += _settings.FocusLog.GetValueOrDefault(today.AddDays(-i).ToString("yyyy-MM-dd"));
+        return (_settings.FocusLog.GetValueOrDefault(today.ToString("yyyy-MM-dd")), week);
+    }
+
+    static string Minutes(int minutes) => minutes >= 60 ? $"{minutes / 60}h{(minutes % 60 > 0 ? $" {minutes % 60:00}" : "")}" : $"{minutes} min";
+
     TimeSpan TimerRemaining => _timerPaused ? _timerLeft
         : _timerEnd is { } end && end > DateTime.Now ? end - DateTime.Now : TimeSpan.Zero;
 
@@ -52,6 +79,7 @@ public partial class IslandWindow
         _timerTotal = TimeSpan.FromMinutes(minutes);
         _timerEnd = DateTime.Now + _timerTotal;
         _timerPaused = false;
+        _heldNotifications = 0;
         _settings.TimerMinutes = minutes;
         _settings.Save();
         _countdownTimer.Start();
@@ -95,17 +123,30 @@ public partial class IslandWindow
         UpdateTimerUi();
     }
 
-    void TimerStop_Click(object sender, RoutedEventArgs e) => StopTimer();
+    void TimerStop_Click(object sender, RoutedEventArgs e)
+    {
+        RecordFocus(_timerTotal - TimerRemaining);
+        StopTimer();
+    }
 
     void CountdownTick()
     {
         if (_timerEnd != null && TimerRemaining <= TimeSpan.Zero)
         {
             var total = _timerTotal;
+            var held = _heldNotifications;
+            RecordFocus(total);
             StopTimer();
             PlayChime();
-            ShowAlert(TimerDoneBrush, "\uE916", "Tempo esgotado",
-                $"Timer de {FormatMinutes(total)} concluído", false, 6);
+            var detail = $"Timer de {FormatMinutes(total)} concluído";
+            if (_settings.FocusMode)
+            {
+                var (today, week) = FocusTotals();
+                detail = $"Foco hoje: {Minutes(today)} · 7 dias: {Minutes(week)}" +
+                         (held > 0 ? $" · {held} {(held == 1 ? "notificação esperou" : "notificações esperaram")}" : "");
+            }
+            ShowAlert(TimerDoneBrush, "\uE916", "Tempo esgotado", detail, false, 8);
+            PetsCelebrate();
             return;
         }
         UpdateTimerUi();
@@ -128,7 +169,8 @@ public partial class IslandWindow
         TimerPauseButton.Content = _timerPaused ? "\uE768" : "\uE769";
         TimerCaption.Text = _timerPaused
             ? $"Pausado · timer de {FormatMinutes(_timerTotal)}"
-            : $"Termina às {(_timerEnd ?? DateTime.Now).ToString("HH:mm", CultureInfo.CurrentCulture)}";
+            : $"Termina às {(_timerEnd ?? DateTime.Now).ToString("HH:mm", CultureInfo.CurrentCulture)}" +
+              (FocusActive ? $" · modo foco{(_heldNotifications > 0 ? $" ({_heldNotifications} esperando)" : "")}" : "");
         CompactTimerText.Opacity = _timerPaused ? 0.55 : 1;
     }
 
@@ -174,12 +216,18 @@ public partial class IslandWindow
     void OnNotification(IslandNotification n)
     {
         if (!_settings.ShowNotifications) return;
+        if (FocusActive)
+        {
+            _heldNotifications++;
+            return;
+        }
         ShowCard(n.Logo, n.Title, n.App, n.Body);
     }
 
     /// <summary>The notification card: an app icon (or a round profile picture), a title, who sent it and a line of text.</summary>
-    void ShowCard(ImageSource? image, string title, string app, string body, bool round = false, double seconds = 5)
+    void ShowCard(ImageSource? image, string title, string app, string body, bool round = false, double seconds = 5, string glyph = "\uEA8F")
     {
+        NotifyGlyph.Text = glyph;
         NotifyLogo.Background = image != null
             ? new ImageBrush(image) { Stretch = Stretch.UniformToFill }
             : new SolidColorBrush(Color.FromRgb(0x2C, 0x2C, 0x2E));

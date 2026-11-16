@@ -206,7 +206,8 @@ public partial class IslandWindow
 
     void OnClipboard()
     {
-        if (!_ready || !_settings.ShowClipboard || _userHidden) return;
+        if (!_ready) return;
+        var show = _settings.ShowClipboard && !_userHidden;
         try
         {
             var data = Clipboard.GetDataObject();
@@ -220,15 +221,19 @@ public partial class IslandWindow
 
             if (data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
             {
-                ShowInfo("\uE8C8", files.Length == 1 ? Path.GetFileName(files[0].TrimEnd('\\')) : $"{files.Length} itens", "Copiado");
+                if (show) ShowInfo("\uE8C8", files.Length == 1 ? Path.GetFileName(files[0].TrimEnd('\\')) : $"{files.Length} itens", "Copiado");
             }
             else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
-                ShowInfo("\uE8C8", $"Imagem {image.PixelWidth} × {image.PixelHeight}", "Copiada", image);
+                if (show) ShowInfo("\uE8C8", $"Imagem {image.PixelWidth} × {image.PixelHeight}", "Copiada", image);
             }
             else if (Clipboard.ContainsText())
             {
-                var text = string.Join(' ', Clipboard.GetText().Split((char[])['\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
+                var raw = Clipboard.GetText();
+                var fromPhone = raw == _clipFromPhone;
+                SendClipToPhone(raw);
+                if (!show || fromPhone) return;
+                var text = string.Join(' ', raw.Split((char[])['\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
                 if (text.Length == 0) return;
                 if (text.Length > 80) text = text[..80] + "…";
                 ShowInfo("\uE8C8", text, "Copiado");
@@ -571,6 +576,7 @@ public partial class IslandWindow
         try { ShowBluetooth(await BluetoothBattery.ListAsync()); }
         catch { }
         CheckWaterReminder();
+        AgendaTick();
         OfferRecap();
         TrimWhenIdle();
     }
@@ -679,6 +685,7 @@ public partial class IslandWindow
             });
         }
         ShowWeather();
+        UpdateEventsList();
         if (DateTime.Now - _weatherAt > TimeSpan.FromMinutes(30)) LoadWeather();
     }
 

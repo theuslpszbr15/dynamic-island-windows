@@ -94,10 +94,11 @@ fun AppScreen(
     onRetry: () -> Unit,
     onPause: () -> Unit,
     onFixNotifications: () -> Unit = {},
+    onRemote: (String, Int) -> Unit = { _, _ -> },
 ) {
     Box(Modifier.fillMaxSize().background(Ground).statusBarsPadding().navigationBarsPadding()) {
         if (state.pairing == null) PairScreen(onScan, onPaste)
-        else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onPause, onScan, onFixNotifications)
+        else HomeScreen(state, focused, onAllow, onDeny, onOpen, onUnpair, onRetry, onPause, onScan, onFixNotifications, onRemote)
     }
     if (pending != null) {
         AlertDialog(
@@ -169,6 +170,7 @@ private fun HomeScreen(
     onPause: () -> Unit,
     onScan: () -> Unit,
     onFixNotifications: () -> Unit,
+    onRemote: (String, Int) -> Unit,
 ) {
     var tab by remember { mutableStateOf(state.initialTab) }
     val records by History.records.collectAsState()
@@ -203,7 +205,7 @@ private fun HomeScreen(
                 0 -> AgentsTab(state, focused, onAllow, onDeny, { confirmUnpair = true }, onRetry, onScan, onFixNotifications)
                 2 -> SendTab(state)
                 3 -> HistoryTab(records, state)
-                else -> TrayTab(state, onOpen)
+                else -> PcTab(state, onOpen, onRemote)
             }
         }
         NavigationBar(containerColor = Card) {
@@ -231,8 +233,8 @@ private fun HomeScreen(
             )
             NavigationBarItem(
                 selected = tab == 1, onClick = { tab = 1 },
-                icon = { Icon(painterResource(R.drawable.ic_tab_tray), contentDescription = null) },
-                label = { Text("Bandeja") },
+                icon = { Icon(painterResource(R.drawable.ic_pc), contentDescription = null) },
+                label = { Text("PC") },
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Blue.copy(alpha = 0.25f)),
             )
         }
@@ -303,6 +305,125 @@ private fun AgentsTab(
                 Text("Desparear deste PC", color = Red)
             }
         }
+    }
+}
+
+@Composable
+private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, Int) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val connected = state.status == LinkStatus.Connected
+    var clipOn by remember { mutableStateOf(ClipSync.enabled(context)) }
+    var callsOn by remember { mutableStateOf(Calls.enabled(context)) }
+    val askCalls = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val ok = result[android.Manifest.permission.READ_PHONE_STATE] == true
+        Calls.setEnabled(context, ok)
+        callsOn = Calls.enabled(context)
+        if (ok) LinkService.start(context)
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(104.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+    ) {
+        val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
+            { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
+        if (!connected) item(span = full) {
+            Text("Ligue-se ao PC para usar o controle remoto e a bandeja.", color = Muted, fontSize = 14.sp,
+                modifier = Modifier.padding(top = 4.dp))
+        }
+        if (connected) item(span = full) { RemoteCard(state.pc, onRemote) }
+        item(span = full) {
+            Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Área de transferência junto com o PC", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Copiou no PC, já está aqui. Do celular para o PC vai quando você abre o app, pelo botão abaixo " +
+                            "ou pelo bloco rápido \"Copiado → PC\" (barra de notificações › lápis).", color = Muted, fontSize = 13.sp)
+                    }
+                    androidx.compose.material3.Switch(checked = clipOn, onCheckedChange = {
+                        ClipSync.setEnabled(context, it); clipOn = it
+                    }, modifier = Modifier.padding(start = 12.dp))
+                }
+                TextButton(onClick = {
+                    val sent = ClipSync.offer(context, force = true)
+                    android.widget.Toast.makeText(context, if (sent) "Copiado enviado para o PC" else "Nada de texto copiado para enviar",
+                        android.widget.Toast.LENGTH_SHORT).show()
+                }, enabled = connected) { Text("Enviar copiado agora") }
+            }
+        }
+        item(span = full) {
+            Row(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Ligações na ilha do PC", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Quem está ligando aparece na ilha, com o nome do contato. Pede acesso ao telefone e aos contatos " +
+                        "(nada sai do celular além do nome e do número, só para o seu PC).", color = Muted, fontSize = 13.sp)
+                }
+                androidx.compose.material3.Switch(checked = callsOn, onCheckedChange = {
+                    if (it) askCalls.launch(Calls.permissions) else { Calls.setEnabled(context, false); callsOn = false }
+                }, modifier = Modifier.padding(start = 12.dp))
+            }
+        }
+        item(span = full) {
+            Text("Apps e arquivos fixados na ilha. Toque para abrir no PC.", color = Muted, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 6.dp))
+        }
+        if (connected && state.tray.isEmpty()) item(span = full) {
+            Text("A bandeja está vazia (ou desligada para o celular nas Configurações do PC). " +
+                "Arraste arquivos ou apps até a ilha para fixá-los.", color = Muted, fontSize = 14.sp)
+        }
+        gridItems(state.tray, key = { it.id }) { TrayTile(it, onOpen) }
+        item(span = full) { Spacer(Modifier.height(12.dp)) }
+    }
+}
+
+@Composable
+private fun RemoteCard(pc: PcState?, onRemote: (String, Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
+        Text("Controle remoto", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (pc != null && pc.title.isNotEmpty()) "${pc.title}${if (pc.artist.isNotEmpty()) " · ${pc.artist}" else ""}"
+            else "Nada tocando no PC", color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RemoteButton("⏮", Modifier.weight(1f)) { onRemote("prev", 0) }
+            RemoteButton(if (pc?.playing == true) "⏸" else "▶", Modifier.weight(1f)) { onRemote("play", 0) }
+            RemoteButton("⏭", Modifier.weight(1f)) { onRemote("next", 0) }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            RemoteButton("−", Modifier.weight(1f)) { onRemote("voldown", 0) }
+            Text(when { pc == null -> "Volume"; pc.muted -> "Mudo"; else -> "${pc.volume}%" }, color = Color.White,
+                fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            RemoteButton("+", Modifier.weight(1f)) { onRemote("volup", 0) }
+            RemoteButton(if (pc?.muted == true) "🔈" else "🔇", Modifier.weight(1f)) { onRemote("mute", 0) }
+        }
+        Text("Energia", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp))
+        val shutdownAt = pc?.shutdownAt ?: 0L
+        if (shutdownAt > System.currentTimeMillis()) {
+            val at = java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).format(java.util.Date(shutdownAt))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                Text("O PC desliga às $at", color = Orange, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onRemote("cancelShutdown", 0) }) { Text("Cancelar") }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RemoteButton("Bloquear", Modifier.weight(1f)) { onRemote("lock", 0) }
+        }
+        Text("Desligar daqui a", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h").forEach { (minutes, label) ->
+                RemoteButton(label, Modifier.weight(1f)) { onRemote("shutdown", minutes) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemoteButton(label: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier.height(44.dp).background(Ground, RoundedCornerShape(12.dp)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

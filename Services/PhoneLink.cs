@@ -66,6 +66,7 @@ public sealed partial class PhoneLink : IDisposable
     string _token = "";
     string _sessions = """{"type":"sessions","sessions":[]}""";
     string _tray = """{"type":"tray","items":[]}""";
+    string? _pcState;
     readonly Dictionary<string, string> _approvals = []; // fingerprint -> JSON line
 
     public PhoneLink(Dispatcher ui) => _ui = ui;
@@ -87,6 +88,17 @@ public sealed partial class PhoneLink : IDisposable
     /// <summary>Raised on the UI thread with a tray item id the phone wants opened.</summary>
     public event Action<string>? Open;
     public event Action? PhonesChanged;
+    /// <summary>Raised on the UI thread with text the phone copied (clipboard sync).</summary>
+    public event Action<string>? Clip;
+    /// <summary>Raised on the UI thread: (action, minutes) from the phone's remote control.</summary>
+    public event Action<string, int>? Remote;
+    /// <summary>Raised on the UI thread: ("ringing" | "offhook" | "idle", contact name, number) for the phone's calls.</summary>
+    public event Action<string, string, string>? Call;
+
+    /// <summary>Clipboard text that travels between the PC and the phone (a line stays well under <see cref="MaxLine"/>).</summary>
+    public const int MaxClipChars = 16_000;
+    public static readonly string[] RemoteActions =
+        ["play", "next", "prev", "volup", "voldown", "mute", "lock", "shutdown", "cancelShutdown"];
 
     public void Start()
     {
@@ -351,6 +363,26 @@ public sealed partial class PhoneLink : IDisposable
         foreach (var peer in peers) _ = peer.SendAsync(line);
     }
 
+    /// <summary>Text copied on the PC goes to the phone's clipboard (too long: not sent).</summary>
+    public void PublishClip(string text)
+    {
+        if (text.Length is 0 or > MaxClipChars) return;
+        Broadcast(new JsonObject { ["type"] = "clip", ["text"] = text }.ToJsonString());
+    }
+
+    /// <summary>What the phone's remote shows: the song, the volume and a pending shutdown (Unix ms, 0 = none).</summary>
+    public void PublishPcState(string title, string artist, bool playing, int volume, bool muted, long shutdownAt)
+    {
+        var line = new JsonObject
+        {
+            ["type"] = "pc", ["title"] = Cut(title, 120), ["artist"] = Cut(artist, 120), ["playing"] = playing,
+            ["volume"] = Math.Clamp(volume, 0, 100), ["muted"] = muted, ["shutdownAt"] = shutdownAt,
+        }.ToJsonString();
+        if (line == _pcState) return;
+        _pcState = line;
+        Broadcast(line);
+    }
+
     static string Cut(string text, int max) => text.Length <= max ? text : text[..max];
 
     // ───────────────────────── connections ─────────────────────────
@@ -441,6 +473,7 @@ public sealed partial class PhoneLink : IDisposable
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
+            if (_pcState != null) await peer.SendAsync(_pcState);
             List<string> pending;
             lock (_gate) pending = _approvals.Values.ToList();
             foreach (var line in pending) await peer.SendAsync(line);
@@ -465,6 +498,17 @@ public sealed partial class PhoneLink : IDisposable
                         break;
                     case "open" when Str(root, "id") is { Length: > 0 and <= 64 } id:
                         _ = _ui.InvokeAsync(() => Open?.Invoke(id));
+                        break;
+                    case "clip" when Str(root, "text") is { Length: > 0 and <= MaxClipChars } clip:
+                        _ = _ui.InvokeAsync(() => Clip?.Invoke(clip));
+                        break;
+                    case "remote" when Str(root, "action") is { } action && RemoteActions.Contains(action):
+                        var minutes = root.TryGetProperty("minutes", out var m) && m.TryGetInt32(out var mi) ? Math.Clamp(mi, 1, 720) : 0;
+                        _ = _ui.InvokeAsync(() => Remote?.Invoke(action, minutes));
+                        break;
+                    case "call" when Str(root, "state") is "ringing" or "offhook" or "idle":
+                        var (callState, caller, number) = (Str(root, "state")!, Cut(Str(root, "name") ?? "", 64), Cut(Str(root, "number") ?? "", 32));
+                        _ = _ui.InvokeAsync(() => Call?.Invoke(callState, caller, number));
                         break;
                     case "fileDecline" when Str(root, "id") is { } id:
                         EndOffer(id, FileOutcome.Declined);

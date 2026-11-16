@@ -10,7 +10,7 @@ using Path = System.Windows.Shapes.Path;
 
 namespace DynamicIsland;
 
-public enum PetSpecies { None, Coco, Pipoca, Bu, Bit }
+public enum PetSpecies { None, Coco, Pipoca, Bu, Bit, Custom }
 
 /// <summary>Accessory on top of the mascot. Auto follows the calendar (Christmas, festa junina, New Year).</summary>
 public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa }
@@ -88,6 +88,32 @@ public sealed class PetView : Canvas
     /// <summary>Playful idle animations (chasing a fly, playing with a ball) when sitting idle.</summary>
     public static bool PlayfulIdle { get; set; } = true;
 
+    /// <summary>The person's own mascot (Custom): a PNG, pixel art welcome. Null until one is imported.</summary>
+    public static BitmapSource? CustomImage { get; private set; }
+    static int _customVersion;
+    int _drawnCustom = -1;
+
+    /// <summary>Loads the custom mascot; false if it isn't a readable image (up to 1 MB, 512 px).</summary>
+    public static bool LoadCustomImage(string path)
+    {
+        try
+        {
+            if (!File.Exists(path) || new FileInfo(path).Length > 1024 * 1024) return false;
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(path);
+            image.EndInit();
+            if (image.PixelWidth > 512 || image.PixelHeight > 512) return false;
+            image.Freeze();
+            CustomImage = image;
+            _customVersion++;
+            SpeciesChanged?.Invoke();
+            return true;
+        }
+        catch { return false; }
+    }
+
     /// <summary>Raised when three quick pokes make it dizzy.</summary>
     public event Action? Dizzied;
 
@@ -139,6 +165,7 @@ public sealed class PetView : Canvas
     readonly Canvas _shell = new() { Width = 24, Height = 24 };
     readonly Canvas _hat = new() { Width = 24, Height = 24 }, _glasses = new() { Width = 24, Height = 24 };
     readonly Canvas _eyes;
+    readonly Canvas _face;
     readonly Path _happyEyes, _closedEyes, _annoyedEyes, _dizzyEyes;
     readonly TextBlock _z;
     readonly Ellipse _fly, _ball;
@@ -172,6 +199,7 @@ public sealed class PetView : Canvas
         body.Children.Add(_shell);
 
         var face = new Canvas { Width = 24, Height = 24, RenderTransform = _look };
+        _face = face;
         body.Children.Add(face);
         _eyes = new Canvas { Width = 24, Height = 24 };
         var eyeTransforms = new TransformGroup();
@@ -272,10 +300,23 @@ public sealed class PetView : Canvas
         get => _species;
         set
         {
-            if (_species == value || value == PetSpecies.None) return;
+            if (value == PetSpecies.Custom && CustomImage == null) value = PetSpecies.Bit;
+            if (value == PetSpecies.None || (_species == value && (value != PetSpecies.Custom || _drawnCustom == _customVersion))) return;
             _species = value;
             _shell.Children.Clear();
             _eyes.Children.Clear();
+            var custom = value == PetSpecies.Custom;
+            // a custom mascot brings its own face
+            _face.Visibility = custom ? Visibility.Collapsed : Visibility.Visible;
+            if (custom)
+            {
+                _drawnCustom = _customVersion;
+                var picture = new Image { Source = CustomImage, Width = 22, Height = 22, Stretch = Stretch.Uniform };
+                if (CustomImage!.PixelWidth <= 64) RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+                _shell.Children.Add(Place(picture, 1, 1.5));
+                DrawOutfit();
+                return;
+            }
             var bit = value == PetSpecies.Bit;
             _faceInk.Color = bit ? Colors.White : Color.FromRgb(0x1C, 0x1C, 0x1E);
             _fill.BeginAnimation(SolidColorBrush.ColorProperty, null);
@@ -366,7 +407,7 @@ public sealed class PetView : Canvas
     {
         _hat.Children.Clear();
         _glasses.Children.Clear();
-        var top = _species switch { PetSpecies.Pipoca => 7.4, PetSpecies.Bu => 5.4, PetSpecies.Bit => 6.2, _ => 7.0 };
+        var top = _species switch { PetSpecies.Pipoca => 7.4, PetSpecies.Bu => 5.4, PetSpecies.Bit => 6.2, PetSpecies.Custom => 2.4, _ => 7.0 };
         _hat.RenderTransform = new TranslateTransform(0, top);
         static Brush B(uint argb) => Frozen(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
         var white = B(0xFFF8F8F8);
@@ -535,7 +576,7 @@ public sealed class PetView : Canvas
         _hand.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(220)) { BeginTime = TimeSpan.FromMilliseconds(260) });
     }
 
-    double HeadTop => _species switch { PetSpecies.Coco => 6.2, PetSpecies.Pipoca => 6.6, _ => 4.4 };
+    double HeadTop => _species switch { PetSpecies.Coco => 6.2, PetSpecies.Pipoca => 6.6, PetSpecies.Custom => 2, _ => 4.4 };
 
     // The body squashes towards its feet (y 23.5), so the head comes down and the hand follows it.
     double[] PatHandY => PatHandLift.Select((lift, i) => (23.5 - HeadTop) * (1 - PatBodyY[i]) + lift).ToArray();

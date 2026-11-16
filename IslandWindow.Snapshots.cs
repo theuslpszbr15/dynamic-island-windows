@@ -266,6 +266,10 @@ public partial class IslandWindow
         ShowBluetooth([new("Galaxy Buds2", 80), new("MX Master 3", 12)]);
         await Shot("32-system-brightness-bt");
         SetWeather(new WeatherNow("Joinville", 24, 26, 78, 11, "Parcialmente nublado", 116, 19, 28));
+        SetEvents([
+            new(DateTime.Now.AddMinutes(5), DateTime.Now.AddMinutes(35), "Daily do time", "https://teams.microsoft.com/l/meetup-join/demo", "Outlook"),
+            new(DateTime.Today.AddHours(16), DateTime.Today.AddHours(17), "Revisão do app", "https://meet.google.com/abc-defg-hij", "google"),
+        ]);
         ShowPage(PageCalendar, 1);
         await Shot("33-calendar-weather");
         SetExpanded(false);

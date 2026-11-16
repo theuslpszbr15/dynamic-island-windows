@@ -40,6 +40,10 @@ public partial class IslandWindow
             _phone.IncomingDone += OnPhoneIncomingDone;
             _phone.RelayTrouble += OnRelayTrouble;
             _phone.PendingChanged += OnPhonePending;
+            _phone.Clip += OnPhoneClip;
+            _phone.Remote += OnPhoneRemote;
+            _phone.Call += OnPhoneCall;
+            _phone.PhonesChanged += PublishPhonePc;
             _phone.History = History;
         }
         _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);

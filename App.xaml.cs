@@ -53,6 +53,8 @@ public partial class App : Application
         }
 
         Settings = IslandSettings.Load();
+        IslandThemes.CustomColor = IslandThemes.ParseHex(Settings.CustomThemeColor) ?? IslandThemes.CustomColor;
+        PetView.LoadCustomImage(IslandSettings.CustomMascotFile);
         PetView.SetDefaultSpecies(Settings.Mascot);
         PetView.SetDefaultOutfit(Settings.Outfit);
         ListenForQuit();
@@ -403,6 +405,7 @@ public partial class App : Application
         (PetSpecies.Coco, "Coco (coquinho)"),
         (PetSpecies.Pipoca, "Pipoca (gatinho)"),
         (PetSpecies.Bu, "Bu (fantasminha)"),
+        (PetSpecies.Custom, "Meu mascote (PNG)"),
         (PetSpecies.None, "Nenhum"),
     ];
 

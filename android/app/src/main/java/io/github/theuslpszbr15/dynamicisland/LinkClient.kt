@@ -50,6 +50,9 @@ class FileRefusedException(message: String) : IOException(message)
 /** How a connection reaches the PC: straight over the local network, or through the relay. */
 enum class Route { Lan, Relay }
 
+/** What the remote control shows: the PC's song, volume and a pending shutdown (Unix ms, 0 = none). */
+data class PcState(val title: String, val artist: String, val playing: Boolean, val volume: Int, val muted: Boolean, val shutdownAt: Long)
+
 /**
  * One TLS connection to the PC (plain JVM code, so it can be tested off the phone). The PC's certificate is
  * accepted only if its SHA-256 is the one from the pairing QR code; then newline-delimited JSON. Through the
@@ -83,6 +86,10 @@ class LinkClient(
         fun onSendPending(id: String) {}
         /** Someone joined or left the Discord call the PC's island is watching. */
         fun onDiscord(event: DiscordEvent) {}
+        /** Text copied on the PC (clipboard sync). */
+        fun onClip(text: String) {}
+        /** The PC's song, volume and shutdown timer, for the remote control. */
+        fun onPcState(state: PcState) {}
     }
 
     private val writeLock = Any()
@@ -153,6 +160,11 @@ class LinkClient(
                     listener.onSendAnswer(o.optString("id"), o.optString("type") == "sendAccept")
                 "sendPending" -> if (FileOffer.isId(o.optString("id"))) listener.onSendPending(o.optString("id"))
                 "discord" -> DiscordEvent.parse(o)?.let(listener::onDiscord)
+                "clip" -> o.optString("text").takeIf { it.isNotEmpty() && it.length <= MAX_CLIP }?.let(listener::onClip)
+                "pc" -> listener.onPcState(PcState(
+                    o.optString("title").take(120), o.optString("artist").take(120), o.optBoolean("playing"),
+                    o.optInt("volume").coerceIn(0, 100), o.optBoolean("muted"), o.optLong("shutdownAt"),
+                ))
             }
         }
     }
@@ -317,6 +329,17 @@ class LinkClient(
     /** Opens a tray item on the PC (only ids the PC sent; it looks the path up itself). */
     fun open(id: String) = send(JSONObject().put("type", "open").put("id", id))
 
+    /** Text copied on the phone goes to the PC's clipboard. */
+    fun clip(text: String) = send(JSONObject().put("type", "clip").put("text", text))
+
+    /** Remote control: play, next, prev, volup, voldown, mute, lock, shutdown (in [minutes]), cancelShutdown. */
+    fun remote(action: String, minutes: Int = 0) =
+        send(JSONObject().put("type", "remote").put("action", action).apply { if (minutes > 0) put("minutes", minutes) })
+
+    /** A call on the phone: ringing (with who, if known), offhook or idle. */
+    fun call(state: String, name: String, number: String) =
+        send(JSONObject().put("type", "call").put("state", state).put("name", name.take(64)).put("number", number.take(32)))
+
     fun declineFile(id: String) = send(JSONObject().put("type", "fileDecline").put("id", id))
 
     /** Tells the PC whether the files arrived whole (saved) or not. */
@@ -378,6 +401,8 @@ class LinkClient(
 
         fun pingEvery(route: Route) = if (route == Route.Relay) RELAY_PING_EVERY_MS else PING_EVERY_MS
         const val MAX_COMMAND = 500
+        /** Same limit as the PC's PhoneLink.MaxClipChars. */
+        const val MAX_CLIP = 16_000
 
         /** Why the PC's address didn't answer, in words that say what to check. */
         fun lanError(pairing: Pairing, e: IOException): String {

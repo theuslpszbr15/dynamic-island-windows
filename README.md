@@ -13,6 +13,8 @@ atrapalhar: os cliques passam por ela.
 
 ## Baixar
 
+Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.github.io/dynamic-island-windows/)** (dá para testar a ilha no navegador).
+
 1. Baixe **[DynamicIsland.exe](https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe)**
    (não precisa instalar o .NET).
 2. Abra. Se o Windows mostrar "O Windows protegeu o computador", clique em *Mais informações → Executar assim mesmo*
@@ -25,7 +27,7 @@ atrapalhar: os cliques passam por ela.
 
 | | |
 |---|---|
-| **Mascotes** — o **Bit** (gatinho de capuz, o mascote da ilha), o **Coco** (coquinho), a **Pipoca** (gatinha) ou o **Bu** (fantasminha). Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. | <img src="docs/img/25-bit-moods.png" width="380"> |
+| **Mascotes** — o **Bit** (gatinho de capuz, o mascote da ilha), o **Coco** (coquinho), a **Pipoca** (gatinha), o **Bu** (fantasminha) ou **o seu**: importe um PNG (pixel art fica nítido) em *Configurações → Aparência*. Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. Tema, cor própria, Aurora e mascote cabem num arquivo `.ilha.json` para compartilhar. | <img src="docs/img/25-bit-moods.png" width="380"> |
 | **PatPat** — **Shift + clique** no mascote (na ilha ou na área de trabalho) e uma mãozinha em pixel art faz carinho na cabeça dele: 5 quadros em 300 ms, o mascote amassa, fecha os olhos feliz e solta coraçõezinhos. Segure para continuar o afago. Ideia do mod de Minecraft [PatPat](https://github.com/LopyMine/PatPat); o sprite é nosso. | <img src="docs/img/43-patpat.png" width="380"> |
 | **Permitir / Negar** — quando o Claude Code pede permissão (rodar um comando, editar um arquivo), a pergunta aparece na ilha como uma pílula discreta, sem abrir a ilha; passe o mouse ou clique nela para ver o comando e responder (dá para trocar por o painel aberto direto em *Configurações → Agentes*). Sem resposta em ~55 s, ele pergunta no terminal como sempre. | <img src="docs/img/28-approval.png" width="380"> |
 | **Roupinhas** — gorro, chapéu de festa, gorro de Natal, chapéu de palha, óculos escuros e coroa. No modo automático o mascote se veste sozinho no Natal, nas festas juninas e no Ano-Novo. O mascote também pode morar na **área de trabalho**: arraste para onde quiser; ele corre até a ilha quando um agente chama. | <img src="docs/img/34-outfits.png" width="380"> |
@@ -37,6 +39,8 @@ atrapalhar: os cliques passam por ela.
 | **Agentes de IA** — azul trabalhando, laranja precisa de você, verde concluído. | <img src="docs/img/09-agent-alert.png" width="380"> |
 | **Sistema** — CPU, memória, disco, bateria, **brilho da tela** (arraste a barra) e bateria dos fones/mouses **Bluetooth** (avisa quando está acabando). | <img src="docs/img/32-system-brightness-bt.png" width="380"> |
 | **Agenda** — calendário do mês e o clima de agora na sua cidade (wttr.in). | <img src="docs/img/33-calendar-weather.png" width="380"> |
+| **Reunião em 5 min** — com o link secreto iCal do Google Agenda ou do Outlook (ou o Outlook clássico aberto no PC), a ilha avisa 10, 5 e 1 minuto antes de cada reunião, com o botão **Entrar** (Teams, Meet, Zoom, Webex), e mostra as próximas na página Agenda. Reuniões que se repetem entram certinho. | |
+| **Tarefas, água e foco** — tarefas com prazo, copos de água com lembrete, nota rápida e textos de 1 clique (PIX, e-mail). No **modo foco**, enquanto o timer corre, as notificações esperam e no fim a ilha mostra quanto você focou no dia e na semana. | |
 | **Copiou, apareceu** — texto, imagem ou arquivos copiados aparecem por um instante; também Caps Lock e Num Lock. Gerenciadores de senha que pedem sigilo são ignorados. | <img src="docs/img/29-info-clipboard.png" width="380"> |
 | **Resumo da semana** — toda segunda-feira: quanto tempo os agentes trabalharam, edições, comandos, projeto mais ativo. Dá para salvar como imagem. Os números ficam só no seu PC. | <img src="docs/img/38-recap.png" width="190"> |
 | **Bandeja de arquivos** — arraste arquivos até a ilha, arraste de volta quando precisar. | <img src="docs/img/07-expanded-files.png" width="380"> |
@@ -50,7 +54,8 @@ atrapalhar: os cliques passam por ela.
 - **Abre** parando o mouse sobre ela; a roda do mouse troca de página.
 - **Vários monitores:** fica na tela principal, numa tela escolhida ou segue a janela ativa (respeita a escala de cada monitor).
 - Some sozinha com app em tela cheia e não rouba o foco.
-- **Atalhos:** `Ctrl+Alt+D` esconde/mostra a ilha, `Ctrl+Alt+M` mídia, `Ctrl+Alt+T` timer, `Ctrl+Alt+A` agentes, `Ctrl+Alt+C` agenda.
+- **Atalhos:** `Ctrl+Alt+D` esconde/mostra a ilha, `Ctrl+Alt+M` mídia, `Ctrl+Alt+T` timer, `Ctrl+Alt+A` agentes, `Ctrl+Alt+C` agenda,
+  `Ctrl+Alt+K` tarefas e foco.
   Dá para trocar as teclas em *Configurações → Geral*; se outro app já usa um atalho, a ilha avisa.
 - **Esconder:** `Ctrl+Alt+D`, clique no ícone da bandeja ou *Esconder por 1 hora* no menu. Escondida, nada aparece (nem avisos).
 - **Vídeos não incomodam:** YouTube, Netflix, Prime Video, Twitch… não abrem aviso nem deixam a pílula aberta (dá para ligar em *Mostrar na ilha → Vídeos*).
@@ -124,6 +129,14 @@ Redes de visitante/corporativas costumam isolar os aparelhos, e o Windows pode p
 Desenho do protocolo inspirado no [Coucou](https://github.com/Louis-CFM/coucou) (MIT); código e mascote são nossos.
 
 Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e reconecta sozinho, sem parear de novo.
+
+**Celular e PC juntos** (aba **PC** do app):
+- **Área de transferência:** copiou no PC, já está no celular. Do celular para o PC vai quando você abre o app, pelo botão
+  *Enviar copiado* ou pelo bloco rápido **Copiado → PC** (o Android só deixa ler o copiado com o app na frente).
+- **Controle remoto:** tocar/pausar, próxima, anterior, volume e mudo; **bloquear o PC** e **desligar daqui a 15 min, 30 min,
+  1 h ou 2 h** (esses dois pedem a digital; dá para cancelar o desligamento pelo celular ou pela ilha); abrir os apps e arquivos fixados.
+- **Ligações na ilha:** quem está ligando aparece na ilha do PC, com o nome do contato (ligue no app; pede acesso ao
+  telefone e aos contatos).
 
 **Fora de casa (repasse):** com o celular em outra rede (4G, trabalho), PC e celular se falam por um *repasse* na
 Cloudflare que só vê bytes cifrados. A ilha já vem com um repasse público. Se ele falhar ("chave do relay inválida" no

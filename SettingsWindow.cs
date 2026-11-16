@@ -259,10 +259,10 @@ public sealed partial class SettingsWindow : DarkWindow
                 BorderThickness = new Thickness(selected ? 2.5 : 1), BorderBrush = selected ? Accent : Line, Cursor = Cursors.Hand,
                 Background = id == IslandThemes.Glass
                     ? new LinearGradientBrush(Color.FromRgb(0x5B, 0x6E, 0x8C), Color.FromRgb(0x2A, 0x2F, 0x3A), 45)
-                    : new SolidColorBrush(color),
+                    : new SolidColorBrush(IslandThemes.Of(id)),
                 ToolTip = name,
             };
-            var light = id == IslandThemes.Light;
+            var light = IslandThemes.IsLight(id);
             var inner = new Grid();
             inner.Children.Add(new Border
             {
@@ -301,16 +301,127 @@ public sealed partial class SettingsWindow : DarkWindow
                 stack.Children.Add(new Viewbox { Width = 62, Height = 62, Child = new PetView { FixedSpecies = species, BaseMood = selected ? PetView.Mood.Happy : PetView.Mood.Idle } });
             stack.Children.Add(new TextBlock { Text = label, FontSize = 12, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(6, 6, 6, 0) });
             tile.Child = stack;
-            tile.MouseLeftButtonUp += (_, _) => { _app.SetMascot(species); Render(); };
+            tile.MouseLeftButtonUp += (_, _) =>
+            {
+                if (species == PetSpecies.Custom && PetView.CustomImage == null && !ImportMascot()) return;
+                _app.SetMascot(species);
+                Render();
+            };
             mascots.Children.Add(tile);
         }
+        var importMascot = new Button { Content = "Importar PNG…", Style = (Style)Resources["Action"] };
+        importMascot.Click += (_, _) => { if (ImportMascot()) { _app.SetMascot(PetSpecies.Custom); Render(); } };
         page.Children.Add(Card("Mascote", Note("Ele segue o mouse com os olhos, dança com a música e muda de cor com os agentes."), mascots,
             Choice("Roupinha", "No modo automático ele se veste sozinho no Natal, nas festas juninas e no Ano-Novo.",
                 App.Outfits.Select(o => (o.Outfit, o.Label)).ToArray(), S.Outfit, o => { _app.SetOutfit(o); Render(); }),
             Toggle("Animações ociosas (mosquinha e bolinha)", "Quando parado, o mascote persegue uma mosquinha brilhante ou brinca com uma bolinha. Shift + clique faz carinho (PatPat).",
                 S.PlayfulPet, v => { S.PlayfulPet = v; S.Save(); _app.Island.ApplyLook(); }),
             Toggle("Mascote na área de trabalho", "Um mascote solto na tela: arraste para onde quiser; ele corre até a ilha quando um agente chama.",
-                S.DesktopPet, _ => _app.ToggleDesktopPet())));
+                S.DesktopPet, _ => _app.ToggleDesktopPet()),
+            Row("Meu mascote", "Um PNG seu (pixel art fica nítido; fundo transparente, até 512 × 512). Ele pula, dança, dorme e ganha carinho como os outros.",
+                importMascot)));
+
+        var colorBox = new TextBox
+        {
+            Text = S.CustomThemeColor, Width = 100, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 13,
+            Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = "Cor em hexadecimal, ex.: #1E2533",
+        };
+        var applyColor = new Button { Content = "Usar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        applyColor.Click += (_, _) =>
+        {
+            if (IslandThemes.ParseHex(colorBox.Text) is not { } c) { colorBox.BorderBrush = Brushes.Orange; return; }
+            IslandThemes.CustomColor = c;
+            S.CustomThemeColor = IslandThemes.Hex(c);
+            _app.SetTheme(IslandThemes.Custom);
+            Render();
+        };
+        var colorRow = new StackPanel { Orientation = Orientation.Horizontal };
+        colorRow.Children.Add(colorBox);
+        colorRow.Children.Add(applyColor);
+
+        var export = new Button { Content = "Exportar…", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
+        export.Click += (_, _) => ExportLook();
+        var import = new Button { Content = "Importar…", Style = (Style)Resources["Action"] };
+        import.Click += (_, _) => { if (ImportLook()) Render(); };
+        var shareRow = new StackPanel { Orientation = Orientation.Horizontal };
+        shareRow.Children.Add(export);
+        shareRow.Children.Add(import);
+
+        page.Children.Add(Card("Personalizar e compartilhar",
+            Row("Cor própria", "Vira o tema Personalizado. Cores claras ganham texto escuro.", colorRow),
+            Row("Visual da ilha em um arquivo", "Exporta tema, cor, Aurora, mascote (com o PNG) e roupinha num .ilha.json para mandar a quem quiser; " +
+                "Importar aplica o de outra pessoa.", shareRow)));
+    }
+
+    /// <summary>Copies a PNG chosen by the person into the settings folder as the custom mascot.</summary>
+    bool ImportMascot()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Escolha o PNG do seu mascote", Filter = "Imagem PNG|*.png" };
+        if (dialog.ShowDialog(this) != true) return false;
+        return UseMascotBytes(File.ReadAllBytes(dialog.FileName));
+    }
+
+    bool UseMascotBytes(byte[] png)
+    {
+        try
+        {
+            if (png.Length > 1024 * 1024) throw new InvalidDataException("PNG maior que 1 MB.");
+            var temp = Path.Combine(IslandSettings.Folder, "mascot.new.png");
+            Directory.CreateDirectory(IslandSettings.Folder);
+            File.WriteAllBytes(temp, png);
+            if (!PetView.LoadCustomImage(temp)) throw new InvalidDataException("Não é uma imagem válida (até 512 × 512).");
+            File.Move(temp, IslandSettings.CustomMascotFile, true);
+            PetView.LoadCustomImage(IslandSettings.CustomMascotFile);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            DarkDialog.Ask(this, "Meu mascote", "Não deu para usar esse arquivo: " + ex.Message, "OK");
+            return false;
+        }
+    }
+
+    const string LookFormat = "dynamic-island-look";
+
+    void ExportLook()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Exportar visual da ilha", FileName = "meu-visual.ilha.json", Filter = "Visual da ilha|*.ilha.json" };
+        if (dialog.ShowDialog(this) != true) return;
+        var o = new System.Text.Json.Nodes.JsonObject
+        {
+            ["format"] = LookFormat, ["v"] = 1, ["theme"] = S.Theme, ["color"] = S.CustomThemeColor, ["aurora"] = S.AuroraLook,
+            ["mascot"] = S.Mascot.ToString(), ["outfit"] = S.Outfit.ToString(),
+        };
+        if (S.Mascot == PetSpecies.Custom && File.Exists(IslandSettings.CustomMascotFile))
+            o["mascotPng"] = Convert.ToBase64String(File.ReadAllBytes(IslandSettings.CustomMascotFile));
+        File.WriteAllText(dialog.FileName, o.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    /// <summary>Applies a .ilha.json: only known fields, checked one by one (it may come from anyone).</summary>
+    bool ImportLook()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Importar visual da ilha", Filter = "Visual da ilha|*.ilha.json;*.json" };
+        if (dialog.ShowDialog(this) != true) return false;
+        try
+        {
+            if (new FileInfo(dialog.FileName).Length > 2 * 1024 * 1024) throw new InvalidDataException("Arquivo grande demais.");
+            var o = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(dialog.FileName))?.AsObject()
+                    ?? throw new InvalidDataException("Arquivo vazio.");
+            if ((string?)o["format"] != LookFormat) throw new InvalidDataException("Não é um visual da Dynamic Island.");
+            if (IslandThemes.ParseHex((string?)o["color"]) is { } c) { IslandThemes.CustomColor = c; S.CustomThemeColor = IslandThemes.Hex(c); }
+            if (o["aurora"] is System.Text.Json.Nodes.JsonValue aurora && aurora.TryGetValue<bool>(out var on)) S.AuroraLook = on;
+            if ((string?)o["mascotPng"] is { Length: > 0 and < 1_500_000 } png && !UseMascotBytes(Convert.FromBase64String(png))) return false;
+            if (Enum.TryParse<PetOutfit>((string?)o["outfit"], out var outfit)) _app.SetOutfit(outfit);
+            if (Enum.TryParse<PetSpecies>((string?)o["mascot"], out var mascot)) _app.SetMascot(mascot);
+            _app.SetTheme(IslandThemes.Normalize((string?)o["theme"]));
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or System.Text.Json.JsonException or FormatException or IOException or InvalidOperationException)
+        {
+            DarkDialog.Ask(this, "Importar visual", "Não deu para importar: " + ex.Message, "OK");
+            return false;
+        }
     }
 
     void OnIsland(Panel page)
@@ -441,6 +552,69 @@ public sealed partial class SettingsWindow : DarkWindow
         page.Children.Add(Card("Nota rápida e Textos de 1 clique (PIX, links…)",
             Note("Sua nota fica visível na página Tarefas e foco da ilha. Os botões abaixo copiam seu PIX, e-mail ou links com 1 clique direto na ilha."),
             noteBox, saveNote, snipAddRow, snipList));
+
+        var (focusToday, focusWeek) = _app.Island.FocusTotals();
+        static string Min(int m) => m >= 60 ? $"{m / 60}h {m % 60:00}" : $"{m} min";
+        page.Children.Add(Card("Modo foco",
+            Toggle("Modo foco no timer", "Enquanto o timer (Pomodoro) corre, as notificações do Windows esperam e os minutos contam como foco. " +
+                   "No fim, a ilha mostra quanto você focou no dia e na semana.",
+                S.FocusMode, v => { S.FocusMode = v; S.Save(); }),
+            Row($"Hoje: {Min(focusToday)} · últimos 7 dias: {Min(focusWeek)}", "Conta o tempo dos timers que você termina ou para.", null)));
+
+        page.Children.Add(AgendaCard());
+    }
+
+    Border AgendaCard()
+    {
+        var feedBox = new TextBox
+        {
+            Width = 380, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White,
+            CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+            ToolTip = "O endereço secreto no formato iCal (termina em .ics)",
+        };
+        var add = new Button { Content = "Adicionar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        var problem = Note("");
+        problem.Foreground = Brushes.Orange;
+        problem.Visibility = Visibility.Collapsed;
+        add.Click += (_, _) =>
+        {
+            if (CalendarService.NormalizeFeed(feedBox.Text) is not { } feed)
+            {
+                problem.Text = "Link inválido: cole o endereço que começa com https:// ou webcal://.";
+                problem.Visibility = Visibility.Visible;
+                return;
+            }
+            if (!S.CalendarFeeds.Contains(feed)) S.CalendarFeeds.Add(feed);
+            S.Save();
+            _app.Island.ReloadAgenda();
+            Render();
+        };
+        var addRow = new StackPanel { Orientation = Orientation.Horizontal };
+        addRow.Children.Add(feedBox);
+        addRow.Children.Add(add);
+
+        var list = new StackPanel();
+        foreach (var feed in S.CalendarFeeds.ToList())
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4) };
+            var remove = new Button { Content = "Remover", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            remove.Click += (_, _) => { S.CalendarFeeds.Remove(feed); S.Save(); _app.Island.ReloadAgenda(); Render(); };
+            DockPanel.SetDock(remove, Dock.Right);
+            row.Children.Add(remove);
+            // the link is a secret: only where it points
+            row.Children.Add(new TextBlock { Text = $"{new Uri(feed).Host} · link secreto salvo", VerticalAlignment = VerticalAlignment.Center });
+            list.Children.Add(row);
+        }
+
+        return Card("Agenda (reunião em 5 min)",
+            Note("A ilha avisa 10, 5 e 1 minuto antes de cada reunião, com o botão Entrar (Teams, Meet, Zoom ou Webex), " +
+                 "e mostra as próximas na página Agenda. Funciona com o link secreto iCal:\n" +
+                 "• Google Agenda: calendar.google.com › Configurações › seu calendário › \"Endereço secreto no formato iCal\".\n" +
+                 "• Outlook na web: Configurações › Calendário › Calendários compartilhados › Publicar um calendário › link ICS.\n" +
+                 "O link fica só neste PC."),
+            Toggle("Outlook deste PC", "Lê a agenda do Outlook clássico enquanto ele está aberto (o Outlook novo não deixa; use o link ICS).",
+                S.OutlookCalendar, v => { S.OutlookCalendar = v; S.Save(); _app.Island.ReloadAgenda(); }),
+            Row("Adicionar link iCal", null, addRow), problem, list);
     }
 
     void Jarvis(Panel page)
@@ -794,6 +968,13 @@ public sealed partial class SettingsWindow : DarkWindow
                    "ou a aba Enviar e receber, aqui ao lado. Do celular, use Compartilhar → Mandar pro PC: a ilha pergunta antes, " +
                    "e tudo vai para Downloads\\Dynamic Island. Até 30 MB por arquivo (vídeo 60 MB), criptografado de ponta a ponta.",
                 S.PhoneFiles, _ => _app.TogglePhoneFiles()),
+            Toggle("Área de transferência junto com o celular", "Texto copiado no PC vai para o celular na hora; o que você copia no celular chega aqui " +
+                   "quando abre o app (ou pelo bloco rápido \"Copiado → PC\"). Gerenciadores de senha são ignorados.",
+                S.PhoneClipboard, v => { S.PhoneClipboard = v; S.Save(); }),
+            Toggle("Controle remoto pelo celular", "Música, volume, bloquear e desligar daqui a X minutos (bloquear e desligar pedem a digital no celular).",
+                S.PhoneRemote, v => { S.PhoneRemote = v; S.Save(); }),
+            Toggle("Ligações do celular na ilha", "Quem está ligando aparece na ilha. Ligue também no app do celular (aba PC).",
+                S.PhoneCalls, v => { S.PhoneCalls = v; S.Save(); }),
             Row("Enviar e receber", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
     }

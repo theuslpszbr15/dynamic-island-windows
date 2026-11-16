@@ -837,6 +837,7 @@ public partial class IslandWindow : Window
         HighlightSourceChips();
 
         if (_expanded && _page == PageMedia) RefreshPage();
+        PublishPhonePc();
         if (newTrack && MediaShown) ShowTransient(Transient.NowPlaying, 3.2);
         else Retarget();
     }
@@ -952,6 +953,8 @@ public partial class IslandWindow : Window
 
     void OnVolume(float level, bool muted)
     {
+        (_volumeLevel, _volumeMuted) = (level, muted);
+        PublishPhonePc();
         var pct = (int)Math.Round(level * 100);
         VolumeText.Text = muted ? "—" : pct.ToString(CultureInfo.CurrentCulture);
         VolumeIcon.Text = muted || pct == 0 ? "\uE74F" : pct < 34 ? "\uE993" : pct < 67 ? "\uE994" : "\uE995";
