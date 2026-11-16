@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dynamic Island para Windows — Nativa, Grátis e Open Source</title>
+  <meta name="description" content="Dynamic Island nativa em C# WPF para Windows 10 e 11. Controle mídia, agentes (Copilot e Claude Code), calls do Discord, aprovações no celular Android, tarefas, timer e o mascote Bit. 100% grátis." />
+  <link rel="icon" href="img/icon.png" />
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #121216;
+      --card: #18181d;
+      --card-hover: #202027;
+      --border: rgba(255,255,255,0.08);
+      --text: #f4f4f6;
+      --muted: #9a9aa2;
+      --blue: #0a84ff;
+      --green: #30d158;
+      --orange: #ff9f0a;
+      --pink: #ff375f;
+      --purple: #bf5af2;
+      --cyan: #5ac8fa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.55;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Top Announcement Banner */
+    .topbar {
+      background: linear-gradient(90deg, rgba(10,132,255,0.16), rgba(48,209,88,0.16));
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      padding: 9px 16px;
+      font-size: 13px;
+      color: #d4d4d8;
+    }
+    .topbar b { color: #fff; }
+    .topbar .pill-badge {
+      display: inline-block;
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-right: 8px;
+      text-transform: uppercase;
+    }
+
+    /* Navbar */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(18px);
+      background: rgba(9,9,11,0.78);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 17px;
+    }
+    .brand img { width: 30px; height: 30px; border-radius: 7px; }
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .nav-links a:hover { color: #fff; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: transform 0.15s, background 0.2s, border-color 0.2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(10,132,255,0.35);
+    }
+    .btn-primary:hover { background: #2692ff; }
+    .btn-ghost {
+      background: var(--card);
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn-ghost:hover { background: var(--card-hover); }
+
+    /* Hero + Interactive Island Simulator */
+    .hero {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 46px 24px 64px;
+      text-align: center;
+      position: relative;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 10px;
+      transform: translateX(-50%);
+      width: 680px;
+      height: 320px;
+      background: radial-gradient(ellipse at center, rgba(10,132,255,0.22), rgba(191,90,242,0.10) 48%, transparent 72%);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    /* Simulated Desktop Monitor Top */
+    .stage-wrap {
+      max-width: 780px;
+      margin: 0 auto 36px;
+      background: linear-gradient(180deg, #161822 0%, #0d0e13 100%);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 26px;
+      padding: 14px 18px 22px;
+      box-shadow: 0 28px 60px rgba(0,0,0,0.65);
+      position: relative;
+    }
+    .stage-top-hint {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      padding: 0 6px;
+    }
+    .aurora-toggle {
+      cursor: pointer;
+      user-select: none;
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: #e4e4e7;
+      font-size: 11.5px;
+    }
+    .aurora-toggle.on {
+      border-color: var(--purple);
+      background: rgba(191,90,242,0.18);
+      color: #fff;
+    }
+
+    /* Interactive Island Element */
+    .island-holder {
+      min-height: 224px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 6px;
+    }
+    .island {
+      background: #000;
+      color: #fff;
+      border-radius: 28px;
+      width: 480px;
+      min-height: 186px;
+      padding: 16px 20px;
+      position: relative;
+      box-shadow: 0 20px 44px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.09);
+      transition: all 0.35s cubic-bezier(0.22, 1.25, 0.36, 1);
+      text-align: left;
+      overflow: hidden;
+    }
+    .island.aurora {
+      box-shadow: 0 20px 44px rgba(0,0,0,0.75), 0 0 0 2px #0a84ff, 0 0 28px rgba(191,90,242,0.45);
+    }
+    .isl-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .isl-hdr-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: #d4d4d8;
+    }
+    .bit-avatar {
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.15s;
+    }
+    .bit-avatar:hover { transform: scale(1.12); }
+    .bit-avatar.pat { transform: scale(1.18, 0.82); }
+    .heart-pop {
+      position: absolute;
+      top: -10px;
+      left: 8px;
+      font-size: 12px;
+      color: #ff4d6d;
+      pointer-events: none;
+      animation: floatUp 0.65s ease-out forwards;
+    }
+    @keyframes floatUp {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(-16px); }
+    }
+
+    /* Mode Selector Pills */
+    .mode-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 14px;
+    }
+    .mode-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 13px;
+      border-radius: 99px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-btn:hover, .mode-btn.active {
+      background: rgba(10,132,255,0.18);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 54px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      max-width: 820px;
+      margin: 0 auto 16px;
+    }
+    .grad {
+      background: linear-gradient(90deg, #64d2ff, #0a84ff, #bf5af2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 18px;
+      max-width: 660px;
+      margin: 0 auto 28px;
+    }
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .meta-note {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* Sections */
+    .section {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 64px 24px;
+      border-top: 1px solid var(--border);
+    }
+    .sec-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .sec-sub {
+      color: var(--muted);
+      text-align: center;
+      max-width: 620px;
+      margin: 0 auto 42px;
+    }
+
+    /* Grid Cards */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .card:hover {
+      border-color: rgba(255,255,255,0.18);
+      transform: translateY(-2px);
+    }
+    .card h3 {
+      font-size: 17px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .card img {
+      width: 100%;
+      border-radius: 12px;
+      margin-top: 14px;
+      border: 1px solid var(--border);
+    }
+
+    /* Comparison Table */
+    .table-wrap {
+      overflow-x: auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14.5px;
+    }
+    th, td {
+      padding: 14px 18px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tr:last-child td { border-bottom: none; }
+    .yes { color: var(--green); font-weight: 700; }
+    .no { color: #ff453a; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 36px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="pill-badge">100% Grátis &amp; Open Source</span>
+    <b>Zero mensalidade, zero licença paga (R$ 0 vs R$ 89,90)</b> · App nativo em C# WPF (~15 MB) + App Android com ilha flutuante.
+  </div>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="brand">
+        <img src="img/icon.png" alt="Ícone" />
+        <span>Dynamic Island <small style="color:var(--muted);font-weight:500">Windows</small></span>
+      </a>
+      <div class="nav-links">
+        <a href="#simulador">Testar ao vivo</a>
+        <a href="#funcoes">Funções</a>
+        <a href="#comparativo">Comparativo</a>
+        <a href="https://github.com/theuslpszbr15/dynamic-island-windows">GitHub</a>
+      </div>
+      <a class="btn btn-primary" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe">
+        ⬇ Baixar Grátis (.exe)
+      </a>
+    </div>
+  </nav>
+
+  <section class="hero" id="simulador">
+    <div class="stage-wrap">
+      <div class="stage-top-hint">
+        <span>✨ Experimente a ilha ao vivo abaixo (Shift + clique no Bit faz carinho!)</span>
+        <span class="aurora-toggle" id="auroraBtn" onclick="toggleAurora()">🌈 Visual Aurora: Desligado</span>
+      </div>
+
+      <div class="island-holder">
+        <div class="island" id="liveIsland">
+          <div class="isl-hdr">
+            <div class="isl-hdr-left">
+              <div class="bit-avatar" id="bitPet" onclick="clickBit(event)" title="Clique ou Shift+Clique (PatPat)!">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path d="M3.6,10.4 L4.6,2.2 L10.4,6.4 Z M20.4,10.4 L19.4,2.2 L13.6,6.4 Z" fill="#3D444D" stroke="#3D444D" stroke-width="1.4" stroke-linejoin="round"/>
+                  <path d="M5.4,4.6 L6.1,8 L8.4,6.4 Z M18.6,4.6 L17.9,8 L15.6,6.4 Z" fill="#FF8FA3"/>
+                  <path d="M12,4.4 C18.5,4.4 21.6,8.5 21.6,13.2 C21.6,17.7 17.7,20.2 12,20.2 C6.3,20.2 2.4,17.7 2.4,13.2 C2.4,8.5 5.5,4.4 12,4.4 Z" fill="#3D444D" stroke="#5A636E" stroke-width="0.45"/>
+                  <path d="M12,7.3 C16.9,7.3 19.2,10.1 19.2,13.4 C19.2,16.7 16.3,18.6 12,18.6 C7.7,18.6 4.8,16.7 4.8,13.4 C4.8,10.1 7.1,7.3 12,7.3 Z" fill="#1F2328"/>
+                  <ellipse cx="8.25" cy="13.6" rx="2.1" ry="2.4" fill="#fff"/><ellipse cx="15.75" cy="13.6" rx="2.1" ry="2.4" fill="#fff"/>
+                  <ellipse cx="8.6" cy="13.85" rx="1.05" ry="1.35" fill="#1c1c1e"/><ellipse cx="15.4" cy="13.85" rx="1.05" ry="1.35" fill="#1c1c1e"/>
+                </svg>
+              </div>
+              <span id="islTitle">Agentes ao vivo</span>
+            </div>
+            <span id="islClock">seg, 16 nov · 14:30 · 94%</span>
+          </div>
+          <div id="islBody"></div>
+        </div>
+
+        <div class="mode-bar">
+          <button class="mode-btn active" onclick="setMode('agents', this)">🤖 Copilot &amp; Claude Code</button>
+          <button class="mode-btn" onclick="setMode('approval', this)">✅ Permitir / Negar</button>
+          <button class="mode-btn" onclick="setMode('media', this)">🎵 Mídia + Letras</button>
+          <button class="mode-btn" onclick="setMode('discord', this)">🎧 Call do Discord</button>
+          <button class="mode-btn" onclick="setMode('tasks', this)">💧 Tarefas, Água &amp; PIX</button>
+          <button class="mode-btn" onclick="setMode('phone', this)">📱 Enviar p/ Celular</button>
+        </div>
+      </div>
+    </div>
+
+    <h1>Mais rápida, nativa e <span class="grad">100% gratuita</span> no topo do seu Windows.</h1>
+    <p class="sub">
+      Feita em C# WPF nativo (~15 MB, sem Electron pesado). Controla música com letras, agentes de IA, calls do Discord, tarefas, hidratação e conecta com seu celular Android com ilha flutuante.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe">
+        ⬇ Baixar para Windows 10 e 11
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland-Android.apk">
+        📱 Baixar App Android (.apk)
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/theuslpszbr15/dynamic-island-windows">
+        ⭐ Código Aberto no GitHub
+      </a>
+    </div>
+    <div class="meta-note">Sem cadastro · Sem chave de ativação · Sem telemetria · Roda em qualquer PC</div>
+  </section>
+
+  <section class="section" id="funcoes">
+    <h2 class="sec-title">Tudo num lugar só, sem travar seu PC</h2>
+    <p class="sec-sub">Enquanto outros apps cobram R$ 89,90 e rodam em Electron consumindo centenas de MB de RAM, nossa Dynamic Island é nativa e aberta.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>🤖 Agentes de IA + Aprovação pelo Celular</h3>
+        <p>Veja o GitHub Copilot e o Claude Code trabalhando ao vivo com diff colorido. Aprove ou negue comandos na ilha ou com a digital no seu celular Android (mesmo fora de casa via Relay).</p>
+        <img src="img/28-approval.png" alt="Aprovação na ilha" />
+      </div>
+      <div class="card">
+        <h3>🐾 Bit: Mascote com PatPat e Vida Própria</h3>
+        <p>Olhos seguem o mouse, dança com a música, persegue mosquinha, brinca com bolinha e recebe carinho na cabeça com <b>Shift + Clique</b> (PatPat). Também pode morar solto na área de trabalho.</p>
+        <img src="img/43-patpat.png" alt="PatPat no mascote" />
+      </div>
+      <div class="card">
+        <h3>🎵 Mídia, Letras Sincronizadas e Liquid Glass</h3>
+        <p>Funciona com Spotify, YouTube, navegador e qualquer player do Windows sem configurar conta. Mostra a letra cantada ao vivo (LRCLIB) e tem temas Obsidiana, Vidro e Borda Aurora.</p>
+        <img src="img/26-glass-media.png" alt="Mídia Liquid Glass" />
+      </div>
+      <div class="card">
+        <h3>🎧 Calls do Discord na Ilha (PC e Celular)</h3>
+        <p>Detecta automaticamente quem entra e sai da sua call do Discord lendo a janela local (zero configuração) e espelha na ilha flutuante do celular Android.</p>
+        <img src="img/41-android-approval.png" alt="App Android" />
+      </div>
+      <div class="card">
+        <h3>💧 Tarefas, Água, Notas e Snippets (PIX)</h3>
+        <p>Checklist de tarefas na ilha, contador de copos de água com lembrete de hora em hora, nota rápida e botões de 1 clique para copiar seu PIX, e-mail ou links.</p>
+        <img src="img/33-calendar-weather.png" alt="Agenda e Clima" />
+      </div>
+      <div class="card">
+        <h3>⚡ Painel Escuro com Busca Instantânea (Ctrl+K)</h3>
+        <p>Encontre qualquer configuração digitando na hora, troque atalhos globais, envie e receba arquivos de até 30 MB com o celular (estilo LocalSend) e configure o conector do Jarvis.</p>
+        <img src="img/40-settings-general.png" alt="Configurações" />
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="comparativo">
+    <h2 class="sec-title">Por que escolher a nossa Dynamic Island?</h2>
+    <p class="sec-sub">Comparativo direto de recursos, leveza e transparência.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Recurso</th>
+            <th>Dynamic Island Windows (Nosso)</th>
+            <th>Alternativas Pagas (ex.: Kobi)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Preço e Licença</b></td>
+            <td class="yes">R$ 0 — 100% Grátis e Código Aberto (MIT)</td>
+            <td class="no">R$ 89,90 ou assinatura + chave de ativação</td>
+          </tr>
+          <tr>
+            <td><b>Tecnologia e Peso</b></td>
+            <td class="yes">Nativo C# WPF (~15 MB, mínimo uso de RAM/CPU)</td>
+            <td> ~110 MB (baseado em web/processos pesados)</td>
+          </tr>
+          <tr>
+            <td><b>GitHub Copilot &amp; Claude Code ao vivo</b></td>
+            <td class="yes">✓ Nativo com passos, diff e Permitir/Negar</td>
+            <td class="no">✕ Apenas envia prompt básico</td>
+          </tr>
+          <tr>
+            <td><b>App Android Nativo + Ilha no Celular</b></td>
+            <td class="yes">✓ APK nativo, biometria, envio de arquivos 30 MB e Relay fora de casa</td>
+            <td>Página web só no mesmo Wi-Fi</td>
+          </tr>
+          <tr>
+            <td><b>Calls do Discord na Ilha</b></td>
+            <td class="yes">✓ Mostra quem entra/sai no PC e no celular</td>
+            <td class="no">✕ Não possui</td>
+          </tr>
+          <tr>
+            <td><b>Visual Liquid Glass + Borda Aurora + 10 Temas</b></td>
+            <td class="yes">✓ Refração real + Aurora + 4 mascotes + PatPat</td>
+            <td>1 mascote + visual Aurora</td>
+          </tr>
+          <tr>
+            <td><b>Tarefas, Hidratação (💧), Snippets, Smart Auto-Hide e Busca Ctrl+K</b></td>
+            <td class="yes">✓ Incluído gratuitamente</td>
+            <td>✓ Incluído</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Feito com carinho por <a href="https://github.com/theuslpszbr15" style="color:#fff;font-weight:600">@theuslpszbr15</a> · Código aberto no GitHub.
+  </footer>
+
+  <script>
+    const modes = {
+      agents: {
+        title: "Agentes · 2 sessões",
+        html: `
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px">
+            <div>
+              <div style="font-weight:700;font-size:15px">dynamic-island-windows</div>
+              <div style="color:#9a9aa2;font-size:12.5px;margin-bottom:8px">GitHub Copilot · Trabalhando</div>
+              <div style="font-size:12px;color:#30d158">✓ Leitura · IslandWindow.xaml</div>
+              <div style="font-size:12px;color:#fff;font-weight:600">↻ Edição · SettingsWindow.cs</div>
+            </div>
+            <div style="background:#121216;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 12px;font-family:Consolas,monospace;font-size:11.5px;min-width:220px">
+              <div style="color:#5ac8fa;margin-bottom:4px">SettingsWindow.cs</div>
+              <div style="background:rgba(48,209,88,0.16);color:#c4f5d0;padding:2px 6px;border-radius:4px">+ Toggle("Visual Aurora", ...)</div>
+              <div style="background:rgba(48,209,88,0.16);color:#c4f5d0;padding:2px 6px;border-radius:4px;margin-top:2px">+ Search("Buscar Ctrl+K")</div>
+            </div>
+          </div>`
+      },
+      approval: {
+        title: "Permissão do agente",
+        html: `
+          <div>
+            <div style="font-size:14px;margin-bottom:4px"><b>Claude Code</b> <span style="color:#ff9f0a;font-weight:600">esperando seu OK</span> <span style="color:#9a9aa2;font-size:12px">48s</span></div>
+            <div style="font-family:Consolas,monospace;font-size:12.5px;color:#d4d4d8;background:#141418;padding:8px 10px;border-radius:8px;margin-bottom:12px">$ git push origin main --tags</div>
+            <div style="display:flex;gap:10px">
+              <button onclick="setMode('agents', document.querySelector('.mode-btn'))" style="flex:1;padding:8px;border-radius:99px;border:none;background:#5a1d1d;color:#fff;font-weight:600;cursor:pointer">✕ Negar</button>
+              <button onclick="setMode('agents', document.querySelector('.mode-btn'))" style="flex:1;padding:8px;border-radius:99px;border:none;background:#30d158;color:#000;font-weight:700;cursor:pointer">✓ Permitir (ou pelo celular)</button>
+            </div>
+          </div>`
+      },
+      media: {
+        title: "Tocando agora · Spotify",
+        html: `
+          <div style="display:flex;gap:14px;align-items:center">
+            <div style="width:74px;height:74px;border-radius:16px;background:linear-gradient(135deg,#ff375f,#5e17eb);display:flex;align-items:center;justify-content:center;font-size:26px">🎵</div>
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:16px">Blinding Lights</div>
+              <div style="color:#9a9aa2;font-size:13px">The Weeknd · <i>"I said, ooh, I'm blinded by the lights"</i></div>
+              <div style="height:5px;background:#2c2c30;border-radius:3px;margin:10px 0 6px;overflow:hidden">
+                <div style="width:62%;height:100%;background:#ff375f"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#9a9aa2"><span>1:58</span><span>-1:22</span></div>
+            </div>
+          </div>`
+      },
+      discord: {
+        title: "Call do Discord · Geral #1",
+        html: `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:44px;height:44px;border-radius:50%;background:#5865F2;display:flex;align-items:center;justify-content:center;font-weight:700;border:2px solid #30d158">M</div>
+              <div>
+                <div style="font-weight:700;font-size:15px">Matheus (@theuslpszbr15) entrou na call</div>
+                <div style="color:#9a9aa2;font-size:12.5px">Servidor Projeto · espelhado na ilha do Android</div>
+              </div>
+            </div>
+            <span style="color:#30d158;font-size:12px;font-weight:700">● Voz ativa</span>
+          </div>`
+      },
+      tasks: {
+        title: "Tarefas, Hidratação e Snippets",
+        html: `
+          <div style="display:flex;gap:14px">
+            <div style="flex:1;font-size:12.5px">
+              <label style="display:block;cursor:pointer;margin-bottom:5px"><input type="checkbox" checked /> <s>Atualizar Dynamic Island v1.5</s></label>
+              <label style="display:block;cursor:pointer;margin-bottom:5px"><input type="checkbox" /> Integrar repositório Jarvis · 19:00</label>
+              <div style="margin-top:8px;display:flex;gap:6px">
+                <span onclick="this.textContent='✓ PIX Copiado!'" style="background:#1c1c22;padding:3px 9px;border-radius:8px;font-size:11px;cursor:pointer">📋 Copiar PIX</span>
+                <span onclick="this.textContent='✓ GitHub Copiado!'" style="background:#1c1c22;padding:3px 9px;border-radius:8px;font-size:11px;cursor:pointer">📋 Meu GitHub</span>
+              </div>
+            </div>
+            <div style="width:155px;background:#141418;border-radius:12px;padding:10px">
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700">
+                <span style="color:#5ac8fa">💧 <span id="wCount">5</span>/8 copos</span>
+                <button onclick="addWater()" style="background:#0a84ff;color:#fff;border:none;border-radius:6px;padding:1px 7px;cursor:pointer;font-weight:700">+</button>
+              </div>
+              <div style="height:5px;background:#2c2c30;border-radius:3px;margin:8px 0"><div id="wBar" style="width:62.5%;height:100%;background:#5ac8fa;border-radius:3px;transition:width .2s"></div></div>
+              <div style="font-size:11px;color:#9a9aa2">Lembrete ativo a cada 1h</div>
+            </div>
+          </div>`
+      },
+      phone: {
+        title: "Enviar e receber · Celular Conectado",
+        html: `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div>
+              <div style="font-weight:700;font-size:14.5px;color:#30d158">✓ Galaxy S24 conectado (via Relay Público)</div>
+              <div style="color:#9a9aa2;font-size:12.5px;margin-top:3px">Arraste arquivos até 30 MB, fotos, vídeos ou textos para mandar pro celular com criptografia ponta-a-ponta.</div>
+            </div>
+            <div style="border:1.5px dashed rgba(255,255,255,0.25);border-radius:12px;padding:10px 14px;text-align:center;font-size:12px;min-width:130px">
+              📱 Soltar aqui
+            </div>
+          </div>`
+      }
+    };
+
+    let water = 5;
+    function setMode(key, btn) {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      document.getElementById('islTitle').textContent = modes[key].title;
+      document.getElementById('islBody').innerHTML = modes[key].html;
+    }
+    function addWater() {
+      water = Math.min(8, water + 1);
+      const c = document.getElementById('wCount');
+      const b = document.getElementById('wBar');
+      if (c) c.textContent = water;
+      if (b) b.style.width = (water / 8 * 100) + '%';
+    }
+    function toggleAurora() {
+      const isl = document.getElementById('liveIsland');
+      const btn = document.getElementById('auroraBtn');
+      const on = isl.classList.toggle('aurora');
+      btn.classList.toggle('on', on);
+      btn.textContent = on ? '🌈 Visual Aurora: Ligado' : '🌈 Visual Aurora: Desligado';
+    }
+    function clickBit(e) {
+      const pet = document.getElementById('bitPet');
+      pet.classList.add('pat');
+      setTimeout(() => pet.classList.remove('pat'), 220);
+      const h = document.createElement('span');
+      h.className = 'heart-pop';
+      h.textContent = e.shiftKey ? '💖 PatPat!' : '❤️';
+      pet.appendChild(h);
+      setTimeout(() => h.remove(), 650);
+    }
+    setMode('agents', document.querySelector('.mode-btn'));
+  </script>
+</body>
+</html>

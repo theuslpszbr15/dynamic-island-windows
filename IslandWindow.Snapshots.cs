@@ -326,7 +326,7 @@ public partial class IslandWindow
         ApplyPhoneLink();
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
-        foreach (var section in new[] { "general", "look", "island", "agents", "phone", "tray", "updates", "phone-download" })
+        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "agents", "phone", "tray", "updates", "phone-download" })
         {
             if (section == "phone-download") settingsWindow.ShowDownloadQr();
             else settingsWindow.Navigate(section);

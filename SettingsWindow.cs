@@ -20,9 +20,12 @@ public sealed partial class SettingsWindow : DarkWindow
 
     static readonly (string Id, string Glyph, string Title)[] Sections =
     [
+        ("home", "\uE80F", "Início"),
         ("general", "\uE713", "Geral"),
         ("look", "\uE790", "Aparência"),
         ("island", "\uE8A1", "Na ilha"),
+        ("productivity", "\uE73A", "Produtividade"),
+        ("jarvis", "\uE945", "Jarvis (IA)"),
         ("agents", "\uE99A", "Agentes"),
         ("phone", "\uE8EA", "Celular"),
         (TransferPage, "\uE724", "Enviar e receber"),
@@ -59,9 +62,12 @@ public sealed partial class SettingsWindow : DarkWindow
     {
         switch (section)
         {
+            case "home": Home(page); break;
             case "general": General(page); break;
             case "look": Look(page); break;
             case "island": OnIsland(page); break;
+            case "productivity": Productivity(page); break;
+            case "jarvis": Jarvis(page); break;
             case "agents": Agents(page); break;
             case "phone": Phone(page); break;
             case TransferPage: Transfers(page); break;
@@ -71,6 +77,55 @@ public sealed partial class SettingsWindow : DarkWindow
     }
 
     // ───────────────────────── pages ─────────────────────────
+
+    void Home(Panel page)
+    {
+        var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+        var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
+
+        var stats = new UniformGrid { Columns = 4, Margin = new Thickness(0, 4, 0, 4) };
+        var pendingTasks = S.Tasks.Count(t => !t.Done);
+        foreach (var (value, label, go) in new (string, string, string)[]
+                 {
+                     (App.CopilotConnected ? "Ativo" : "Desligado", "Copilot Hooks", "agents"),
+                     (S.PhoneLink && (_app.Island.Phone?.ConnectedPhones ?? 0) > 0 ? "Conectado" : S.PhoneLink ? "Esperando" : "Desligado", "Celular Android", "phone"),
+                     ($"{S.WaterGlasses}/{S.WaterGoal} copos", "Água hoje", "productivity"),
+                     ($"{pendingTasks} pendentes", "Tarefas", "productivity"),
+                 })
+        {
+            var card = new Border
+            {
+                Background = Hover, CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand, BorderBrush = Line, BorderThickness = new Thickness(1),
+            };
+            var col = new StackPanel();
+            col.Children.Add(new TextBlock { Text = value, FontSize = 16, FontWeight = FontWeights.Bold });
+            col.Children.Add(new TextBlock { Text = label, Foreground = Muted, FontSize = 12, Margin = new Thickness(0, 2, 0, 0) });
+            card.Child = col;
+            card.MouseLeftButtonUp += (_, _) => Navigate(go);
+            stats.Children.Add(card);
+        }
+        page.Children.Add(Card("Visão geral · Ctrl+K para buscar qualquer opção", stats));
+
+        Button QuickBtn(string text, Action click)
+        {
+            var b = new Button { Content = text, Style = (Style)Resources["Action"] };
+            b.Click += (_, _) => click();
+            return b;
+        }
+
+        page.Children.Add(Card("O que configurar agora",
+            Row("GitHub Copilot e Claude Code", App.CopilotConnected ? "✓ Copilot conectado na ilha." : "Conecte para ver passos, edições e aprovar comandos na ilha.",
+                QuickBtn(App.CopilotConnected ? "Ver agentes" : "Conectar Copilot", () => { if (!App.CopilotConnected) _app.ToggleCopilotHooks(); else Navigate("agents"); Render(); })),
+            Row("App Android e ilha no celular", S.PhoneLink ? "✓ Ligação ativa — escaneie o QR Code para parear." : "Aprove comandos com a digital, mande arquivos até 30 MB e veja calls do Discord.",
+                QuickBtn(S.PhoneLink ? "Abrir QR Code" : "Ligar celular", () => { if (!S.PhoneLink) _app.TogglePhoneLink(); else Navigate("phone"); Render(); })),
+            Row("Visual Aurora e Mascote vivo", S.AuroraLook ? "✓ Borda Aurora ligada." : "Experimente a borda iluminada Aurora ou faça carinho no Bit com Shift + clique.",
+                QuickBtn(S.AuroraLook ? "Personalizar" : "Ligar Aurora", () => { S.AuroraLook = true; S.Save(); _app.Island.ApplyLook(); Render(); })),
+            Row("Produtividade na ilha", "Tarefas rápidas, meta de água (💧) e textos rápidos (PIX, e-mail, links) com 1 clique.",
+                QuickBtn("Abrir tarefas", () => Navigate("productivity"))),
+            Row("Jarvis (sua IA pessoal)", "Conector pronto para quando você subir o seu Jarvis no GitHub.",
+                QuickBtn("Ver conector", () => Navigate("jarvis")))));
+    }
 
     void General(Panel page)
     {
@@ -83,6 +138,10 @@ public sealed partial class SettingsWindow : DarkWindow
                 [(IslandShape.Pill, "Pílula flutuante"), (IslandShape.Notch, "Notch no topo")], S.Shape, _app.SetShape),
             Toggle("Recolher quando ociosa", "Sem nada acontecendo, vira uma barrinha fina no topo e deixa as abas clicáveis.",
                 S.DiscreetIdle, _ => _app.ToggleDiscreet()),
+            Toggle("Esconder quando janela encostar no topo", "Se a janela focada estiver maximizada com abas no topo (ex.: Chrome/Edge), esconde a ilha até você passar o mouse ou sair dela.",
+                S.SmartHideUnderTopBar, v => { S.SmartHideUnderTopBar = v; S.Save(); }),
+            Toggle("Arrastar para outro monitor (Alt + arrastar)", "Segure Alt e arraste a ilha para levá-la para outro monitor; ela lembra onde você deixou.",
+                S.DragMonitor, v => { S.DragMonitor = v; S.Save(); }),
             Choice("Monitor", "Em qual tela a ilha fica.", App.MonitorChoices().Select(m => (m.Id, m.Label)).ToArray(),
                 S.Monitor, _app.SetMonitor)));
 
@@ -183,7 +242,9 @@ public sealed partial class SettingsWindow : DarkWindow
             swatch.MouseLeftButtonUp += (_, _) => { _app.SetTheme(id); Render(); };
             themes.Children.Add(swatch);
         }
-        page.Children.Add(Card("Tema", Note("A cor da ilha. Vidro desfoca o que está atrás dela (e some de prints e do compartilhamento de tela)."), themes));
+        page.Children.Add(Card("Tema", Note("A cor da ilha. Vidro desfoca o que está atrás dela (e some de prints e do compartilhamento de tela)."), themes,
+            Toggle("Visual Aurora (borda de luz animada)", "Adiciona uma borda iluminada com gradiente animado e brilho suave ao redor da ilha.",
+                S.AuroraLook, v => { S.AuroraLook = v; S.Save(); _app.Island.ApplyLook(); })));
 
         var mascots = new WrapPanel();
         foreach (var (species, label) in App.Mascots)
@@ -208,6 +269,8 @@ public sealed partial class SettingsWindow : DarkWindow
         page.Children.Add(Card("Mascote", Note("Ele segue o mouse com os olhos, dança com a música e muda de cor com os agentes."), mascots,
             Choice("Roupinha", "No modo automático ele se veste sozinho no Natal, nas festas juninas e no Ano-Novo.",
                 App.Outfits.Select(o => (o.Outfit, o.Label)).ToArray(), S.Outfit, o => { _app.SetOutfit(o); Render(); }),
+            Toggle("Animações ociosas (mosquinha e bolinha)", "Quando parado, o mascote persegue uma mosquinha brilhante ou brinca com uma bolinha. Shift + clique faz carinho (PatPat).",
+                S.PlayfulPet, v => { S.PlayfulPet = v; S.Save(); _app.Island.ApplyLook(); }),
             Toggle("Mascote na área de trabalho", "Um mascote solto na tela: arraste para onde quiser; ele corre até a ilha quando um agente chama.",
                 S.DesktopPet, _ => _app.ToggleDesktopPet())));
     }
@@ -225,6 +288,150 @@ public sealed partial class SettingsWindow : DarkWindow
             Toggle("Vídeos", "YouTube, Netflix, Prime Video, Twitch… Desligado: vídeo não abre aviso nem deixa a pílula aberta.",
                 !S.QuietVideos, _ => _app.ToggleQuietVideos())));
         page.Children.Add(DiscordCard());
+    }
+
+    void Productivity(Panel page)
+    {
+        var taskInput = new TextBox
+        {
+            Width = 260, FontSize = 13, Padding = new Thickness(8, 5, 8, 5),
+            Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+            ToolTip = "Ex.: Enviar proposta às 15h",
+        };
+        var dueInput = new TextBox
+        {
+            Width = 86, FontSize = 13, Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(8, 0, 8, 0),
+            Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+            ToolTip = "Horário/prazo opcional (ex.: 15:00)",
+        };
+        var addTask = new Button { Content = "Adicionar", Style = (Style)Resources["Action"] };
+        void AddCurrentTask()
+        {
+            var text = taskInput.Text.Trim();
+            if (text.Length == 0) return;
+            S.Tasks.Add(new TaskItem(Guid.NewGuid().ToString("N")[..8], text, false, string.IsNullOrWhiteSpace(dueInput.Text) ? null : dueInput.Text.Trim()));
+            S.Save();
+            _app.Island.UpdateTasksUi();
+            Render();
+        }
+        addTask.Click += (_, _) => AddCurrentTask();
+        taskInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; AddCurrentTask(); } };
+        var addRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+        addRow.Children.Add(taskInput);
+        addRow.Children.Add(dueInput);
+        addRow.Children.Add(addTask);
+
+        var taskStack = new StackPanel();
+        foreach (var task in S.Tasks.ToList())
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+            var del = new Button { Content = "Remover", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            del.Click += (_, _) => { S.Tasks.RemoveAll(t => t.Id == task.Id); S.Save(); _app.Island.UpdateTasksUi(); Render(); };
+            DockPanel.SetDock(del, Dock.Right);
+            row.Children.Add(del);
+            var chk = new CheckBox
+            {
+                IsChecked = task.Done, Content = string.IsNullOrEmpty(task.Due) ? task.Text : $"{task.Text}  ·  {task.Due}",
+                Foreground = task.Done ? Muted : Brushes.White, FontSize = 13.5, VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand,
+            };
+            chk.Click += (_, _) =>
+            {
+                var idx = S.Tasks.FindIndex(t => t.Id == task.Id);
+                if (idx >= 0) { S.Tasks[idx] = task with { Done = chk.IsChecked == true }; S.Save(); _app.Island.UpdateTasksUi(); Render(); }
+            };
+            row.Children.Add(chk);
+            taskStack.Children.Add(row);
+        }
+        if (S.Tasks.Count == 0) taskStack.Children.Add(Note("Nenhuma tarefa ainda. Elas aparecem na página \"Tarefas e foco\" da ilha (" + Hotkeys.Keys(S, "tasks") + ")."));
+        page.Children.Add(Card("Tarefas e lembretes na ilha", Note("Marque como concluída direto no entalho ou aqui. Atalho rápido: " + Hotkeys.Keys(S, "tasks")), addRow, taskStack));
+
+        var plusWater = new Button { Content = "+1 copo agora", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
+        plusWater.Click += (_, _) => { _app.Island.AddWater(1); Render(); };
+        var resetWater = new Button { Content = "Zerar hoje", Style = (Style)Resources["Action"] };
+        resetWater.Click += (_, _) => { S.WaterGlasses = 0; S.Save(); _app.Island.UpdateTasksUi(); Render(); };
+        var waterBtns = new StackPanel { Orientation = Orientation.Horizontal };
+        waterBtns.Children.Add(plusWater);
+        waterBtns.Children.Add(resetWater);
+        page.Children.Add(Card("Hidratação e bem-estar (💧)",
+            Row($"Hoje: {S.WaterGlasses} de {S.WaterGoal} copos", "Acompanhe e some copos de água direto pela ilha.", waterBtns),
+            Choice("Meta diária de água", "Quantos copos por dia você quer beber.",
+                [(6, "6 copos"), (8, "8 copos (recomendado)"), (10, "10 copos"), (12, "12 copos")],
+                S.WaterGoal, g => { S.WaterGoal = g; S.Save(); _app.Island.UpdateTasksUi(); Render(); }),
+            Toggle("Lembrar de beber água a cada 1 hora", "Mostra uma pílula discreta na ilha com botão +1 copo.",
+                S.WaterReminder, v => { S.WaterReminder = v; S.Save(); })));
+
+        var noteBox = new TextBox
+        {
+            Text = S.QuickNote, AcceptsReturn = true, Height = 64, TextWrapping = TextWrapping.Wrap, FontSize = 13,
+            Padding = new Thickness(8, 6, 8, 6), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(1), BorderBrush = Line, Margin = new Thickness(0, 0, 0, 8),
+        };
+        var saveNote = new Button { Content = "Salvar nota", Style = (Style)Resources["Action"], HorizontalAlignment = HorizontalAlignment.Left };
+        saveNote.Click += (_, _) => { S.QuickNote = noteBox.Text.Trim(); S.Save(); _app.Island.UpdateTasksUi(); Render(); };
+
+        var snipLabel = new TextBox { Width = 120, FontSize = 13, Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = "Nome curto (ex.: PIX, Email, GitHub)" };
+        var snipVal = new TextBox { Width = 240, FontSize = 13, Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(8, 0, 8, 0), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = "Valor que será copiado com 1 clique" };
+        var addSnip = new Button { Content = "Adicionar atalho", Style = (Style)Resources["Action"] };
+        addSnip.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(snipLabel.Text) || string.IsNullOrWhiteSpace(snipVal.Text)) return;
+            S.Snippets.Add(new QuickSnippet(snipLabel.Text.Trim(), snipVal.Text.Trim()));
+            S.Save();
+            _app.Island.UpdateTasksUi();
+            Render();
+        };
+        var snipAddRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 8) };
+        snipAddRow.Children.Add(snipLabel);
+        snipAddRow.Children.Add(snipVal);
+        snipAddRow.Children.Add(addSnip);
+
+        var snipList = new StackPanel();
+        foreach (var snip in S.Snippets.ToList())
+        {
+            var r = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+            var rm = new Button { Content = "Remover", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            rm.Click += (_, _) => { S.Snippets.Remove(snip); S.Save(); _app.Island.UpdateTasksUi(); Render(); };
+            var cp = new Button { Content = "Copiar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            cp.Click += (_, _) => { try { Clipboard.SetText(snip.Value); } catch { } };
+            DockPanel.SetDock(rm, Dock.Right);
+            DockPanel.SetDock(cp, Dock.Right);
+            r.Children.Add(rm);
+            r.Children.Add(cp);
+            r.Children.Add(new TextBlock { Text = $"{snip.Label}  →  {snip.Value}", FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            snipList.Children.Add(r);
+        }
+        page.Children.Add(Card("Nota rápida e Textos de 1 clique (PIX, links…)",
+            Note("Sua nota fica visível na página Tarefas e foco da ilha. Os botões abaixo copiam seu PIX, e-mail ou links com 1 clique direto na ilha."),
+            noteBox, saveNote, snipAddRow, snipList));
+    }
+
+    void Jarvis(Panel page)
+    {
+        var endpoint = new TextBox
+        {
+            Text = S.JarvisEndpoint, Width = 280, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5,
+            Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(1), BorderBrush = Line,
+        };
+        var save = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        save.Click += (_, _) => { S.JarvisEndpoint = endpoint.Text.Trim(); S.Save(); Render(); };
+        var epRow = new StackPanel { Orientation = Orientation.Horizontal };
+        epRow.Children.Add(endpoint);
+        epRow.Children.Add(save);
+
+        var test = new Button { Content = "Testar no entalho", Style = (Style)Resources["Action"] };
+        test.Click += (_, _) => _app.Island.TriggerJarvis();
+
+        page.Children.Add(Card("Jarvis — Conector de IA e Voz no Entalho",
+            Note("Estrutura pronta para integrar o seu repositório do Jarvis assim que você publicar no GitHub. " +
+                 "O atalho global (" + Hotkeys.Keys(S, "jarvis") + "), o estado visual na ilha e o canal de comandos locais já estão preparados."),
+            Toggle("Habilitar integração com o Jarvis", "Ativa o atalho " + Hotkeys.Keys(S, "jarvis") + " e o conector local para comandos de voz/texto na ilha.",
+                S.JarvisEnabled, v => { S.JarvisEnabled = v; S.Save(); }),
+            Choice("Modo de ativação", "Como você vai chamar o Jarvis pelo entalho.",
+                [("hold", "Segurar atalho para falar (Push-to-Talk)"), ("wake", "Palavra de ativação + atalho"), ("text", "Apenas texto / silencioso")],
+                S.JarvisVoiceMode, m => { S.JarvisVoiceMode = m; S.Save(); }),
+            Row("Endpoint / Repositório local", "URL ou porta local onde o Jarvis responde.", epRow),
+            Row("Testar chamada na ilha", "Mostra o aviso do Jarvis na Dynamic Island agora.", test)));
     }
 
     /// <summary>Who joins the Discord call. By default the island's own Discord app (nothing to set up: "Conectar" and

@@ -160,11 +160,17 @@ public partial class IslandWindow
             return;
         }
         if (_userHidden) SetUserHidden(false);
+        if (action == "jarvis")
+        {
+            TriggerJarvis();
+            return;
+        }
         var page = action switch
         {
             "media" => PageMedia,
             "timer" => PageTimer,
             "agents" => PageAgents,
+            "tasks" => PageTasks,
             _ => PageCalendar,
         };
         if (_expanded && _page == page)
@@ -564,6 +570,7 @@ public partial class IslandWindow
     {
         try { ShowBluetooth(await BluetoothBattery.ListAsync()); }
         catch { }
+        CheckWaterReminder();
         OfferRecap();
         TrimWhenIdle();
     }
@@ -730,5 +737,153 @@ public partial class IslandWindow
         _settings.Save();
         ShowInfo("\uE9D2", "Seu resumo da semana está pronto", "Abrir", glyphColor: AgentSession.Working,
             action: () => ((App)Application.Current).ShowRecap(), seconds: 10);
+    }
+
+    // ───────────────────────── tasks, hydration & snippets ─────────────────────────
+
+    DateTime _lastWaterReminder = DateTime.Now;
+
+    void EnsureTodayWater()
+    {
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        if (_settings.WaterDate == today) return;
+        _settings.WaterDate = today;
+        _settings.WaterGlasses = 0;
+        _settings.Save();
+    }
+
+    void CheckWaterReminder()
+    {
+        EnsureTodayWater();
+        if (!_settings.WaterReminder || _settings.WaterGlasses >= _settings.WaterGoal) return;
+        if (DateTime.Now - _lastWaterReminder < TimeSpan.FromMinutes(60)) return;
+        _lastWaterReminder = DateTime.Now;
+        ShowInfo("\uEB42", $"Hora de beber água ({_settings.WaterGlasses}/{_settings.WaterGoal} copos)", "+1 copo",
+            glyphColor: Color.FromRgb(0x5A, 0xC8, 0xFA), action: () => AddWater(1), seconds: 6);
+    }
+
+    public void AddWater(int delta)
+    {
+        EnsureTodayWater();
+        _settings.WaterGlasses = Math.Clamp(_settings.WaterGlasses + delta, 0, 30);
+        _settings.Save();
+        _lastWaterReminder = DateTime.Now;
+        if (_expanded && _page == PageTasks) UpdateTasksUi();
+        else if (delta > 0)
+            ShowInfo("\uEB42", $"Água hoje: {_settings.WaterGlasses}/{_settings.WaterGoal} copos",
+                _settings.WaterGlasses >= _settings.WaterGoal ? "Meta batida!" : "Hidratação",
+                glyphColor: Color.FromRgb(0x5A, 0xC8, 0xFA));
+        if (delta > 0 && _settings.WaterGlasses == _settings.WaterGoal) PetsCelebrate();
+    }
+
+    void WaterPlus_Click(object sender, RoutedEventArgs e) { e.Handled = true; AddWater(1); }
+    void WaterMinus_Click(object sender, RoutedEventArgs e) { e.Handled = true; AddWater(-1); }
+
+    void QuickNote_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (!string.IsNullOrWhiteSpace(_settings.QuickNote))
+        {
+            try { Clipboard.SetText(_settings.QuickNote); } catch { }
+            ShowInfo("\uE8C8", _settings.QuickNote, "Nota copiada");
+        }
+        else
+        {
+            ((App)Application.Current).ShowSettings("productivity");
+        }
+    }
+
+    public void UpdateTasksUi()
+    {
+        EnsureTodayWater();
+        TasksList.Children.Clear();
+        var ordered = _settings.Tasks.OrderBy(t => t.Done).ToList();
+        TasksEmpty.Visibility = Vis(ordered.Count == 0);
+        foreach (var task in ordered.Take(5))
+        {
+            var row = new Grid { Height = 24, Margin = new Thickness(0, 0, 0, 3), Cursor = Cursors.Hand, Background = Brushes.Transparent };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var dot = new Border
+            {
+                Width = 14, Height = 14, CornerRadius = new CornerRadius(7), HorizontalAlignment = HorizontalAlignment.Left,
+                Background = task.Done ? new SolidColorBrush(AgentSession.Done) : Brushes.Transparent,
+                BorderBrush = new SolidColorBrush(task.Done ? AgentSession.Done : Color.FromRgb(0x8E, 0x8E, 0x93)),
+                BorderThickness = new Thickness(1.5),
+                Child = task.Done ? new TextBlock
+                {
+                    Text = "\uE73E", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 8,
+                    Foreground = Brushes.Black, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                } : null,
+            };
+            var text = new TextBlock
+            {
+                Text = task.Text, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextDecorations = task.Done ? TextDecorations.Strikethrough : null,
+            };
+            text.SetResourceReference(TextBlock.ForegroundProperty, task.Done ? "Muted" : "Ink");
+            Grid.SetColumn(text, 1);
+            row.Children.Add(dot);
+            row.Children.Add(text);
+            if (!string.IsNullOrWhiteSpace(task.Due))
+            {
+                var due = new TextBlock { Text = task.Due, FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+                due.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+                Grid.SetColumn(due, 2);
+                row.Children.Add(due);
+            }
+            row.MouseLeftButtonUp += (_, ev) =>
+            {
+                ev.Handled = true;
+                var idx = _settings.Tasks.FindIndex(x => x.Id == task.Id);
+                if (idx < 0) return;
+                var next = !task.Done;
+                _settings.Tasks[idx] = task with { Done = next };
+                _settings.Save();
+                if (next) PetsCelebrate();
+                UpdateTasksUi();
+            };
+            TasksList.Children.Add(row);
+        }
+
+        SnippetsBar.Children.Clear();
+        foreach (var snip in _settings.Snippets.Take(3))
+        {
+            var btn = new Border
+            {
+                CornerRadius = new CornerRadius(10), Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 0),
+                Cursor = Cursors.Hand, ToolTip = "Clique para copiar: " + snip.Value,
+            };
+            btn.SetResourceReference(Border.BackgroundProperty, "Card");
+            var lbl = new TextBlock { Text = "\uE8C8 " + snip.Label, FontSize = 11, FontWeight = FontWeights.SemiBold };
+            lbl.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
+            btn.Child = lbl;
+            btn.MouseLeftButtonUp += (_, ev) =>
+            {
+                ev.Handled = true;
+                try { Clipboard.SetText(snip.Value); } catch { }
+                ShowInfo("\uE8C8", $"{snip.Label} copiado", "Pronto", glyphColor: AgentSession.Done);
+            };
+            SnippetsBar.Children.Add(btn);
+        }
+
+        int glasses = _settings.WaterGlasses, goal = Math.Max(1, _settings.WaterGoal);
+        WaterLabel.Text = $"{glasses}/{goal} copos";
+        WaterBarScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(Math.Clamp((double)glasses / goal, 0, 1), Quick));
+        QuickNotePreview.Text = string.IsNullOrWhiteSpace(_settings.QuickNote)
+            ? "Sem nota rápida — clique para abrir Produtividade e anotar"
+            : _settings.QuickNote;
+    }
+
+    // ───────────────────────── Jarvis AI hook ─────────────────────────
+
+    public void TriggerJarvis()
+    {
+        ShowInfo("\uE99A", _settings.JarvisEnabled ? $"Jarvis ({_settings.JarvisEndpoint}) pronto para vincular" : "Jarvis — integração pronta nas Configurações",
+            "Configurar", glyphColor: Color.FromRgb(0xBF, 0x5A, 0xF2),
+            action: () => ((App)Application.Current).ShowSettings("jarvis"), seconds: 4);
     }
 }

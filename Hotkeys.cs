@@ -20,6 +20,8 @@ public static class Hotkeys
         new(3, "timer", "Ctrl+Alt+T", "abrir o timer"),
         new(4, "agents", "Ctrl+Alt+A", "abrir agentes"),
         new(5, "calendar", "Ctrl+Alt+C", "abrir a agenda"),
+        new(6, "tasks", "Ctrl+Alt+K", "abrir tarefas, água e notas"),
+        new(7, "jarvis", "Ctrl+Alt+J", "chamar Jarvis (em breve)"),
     ];
 
     public static Shortcut? ById(int id) => All.FirstOrDefault(a => a.Id == id);

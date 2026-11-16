@@ -738,6 +738,10 @@ public sealed partial class PhoneLink : IDisposable
         var ws = new ClientWebSocket();
         ws.Options.KeepAliveInterval = RelayKeepAlive;
         ws.Options.KeepAliveTimeout = RelayKeepAliveTimeout;
+        // corporate proxies (407) accept the signed-in Windows user, as browsers do
+        var proxy = System.Net.WebRequest.GetSystemWebProxy();
+        proxy.Credentials = System.Net.CredentialCache.DefaultNetworkCredentials;
+        ws.Options.Proxy = proxy;
         if (RelayKeyInUse.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + RelayKeyInUse);
         return ws;
     }

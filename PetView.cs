@@ -85,6 +85,9 @@ public sealed class PetView : Canvas
     /// <summary>No random blinks (deterministic snapshots).</summary>
     public static bool Still { get; set; }
 
+    /// <summary>Playful idle animations (chasing a fly, playing with a ball) when sitting idle.</summary>
+    public static bool PlayfulIdle { get; set; } = true;
+
     /// <summary>Raised when three quick pokes make it dizzy.</summary>
     public event Action? Dizzied;
 
@@ -138,7 +141,9 @@ public sealed class PetView : Canvas
     readonly Canvas _eyes;
     readonly Path _happyEyes, _closedEyes, _annoyedEyes, _dizzyEyes;
     readonly TextBlock _z;
-    readonly DispatcherTimer _blinkTimer, _reactionTimer, _patTimer;
+    readonly Ellipse _fly, _ball;
+    readonly TranslateTransform _flyMove = new(), _ballMove = new();
+    readonly DispatcherTimer _blinkTimer, _reactionTimer, _patTimer, _playTimer;
     readonly Image _hand;
     readonly ScaleTransform _handSquash = new(1, 1);
     readonly TranslateTransform _handMove = new();
@@ -185,6 +190,14 @@ public sealed class PetView : Canvas
 
         _z = new TextBlock { Text = "z", FontSize = 7, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Opacity = 0, RenderTransform = new TranslateTransform() };
         Children.Add(Place(_z, 19, -1));
+
+        _fly = new Ellipse { Width = 2.4, Height = 2.4, Fill = Frozen(Color.FromRgb(0x64, 0xD2, 0xFF)), Opacity = 0, IsHitTestVisible = false, RenderTransform = _flyMove };
+        Children.Add(Place(_fly, 12, 4));
+        _ball = new Ellipse { Width = 4.2, Height = 4.2, Fill = Frozen(Color.FromRgb(0xFF, 0x37, 0x5F)), Opacity = 0, IsHitTestVisible = false, RenderTransform = _ballMove };
+        Children.Add(Place(_ball, 19.5, 19.2));
+
+        _playTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(18) };
+        _playTimer.Tick += (_, _) => PlayIdleAntic();
 
         _hand = new Image
         {
@@ -620,7 +633,11 @@ public sealed class PetView : Canvas
         switch (mood)
         {
             case Mood.Idle:
-                if (!Still) _blinkTimer.Start();
+                if (!Still)
+                {
+                    _blinkTimer.Start();
+                    if (PlayfulIdle) _playTimer.Start();
+                }
                 // the ghost never quite touches the ground
                 if (_species == PetSpecies.Bu) Loop(_hop, TranslateTransform.YProperty, 0, -1.4, 1.1);
                 break;
@@ -659,16 +676,72 @@ public sealed class PetView : Canvas
     void StopLoops()
     {
         _blinkTimer.Stop();
+        _playTimer.Stop();
         _hop.BeginAnimation(TranslateTransform.YProperty, null);
         _tilt.BeginAnimation(RotateTransform.AngleProperty, null);
         _squash.BeginAnimation(ScaleTransform.ScaleXProperty, null);
         _squash.BeginAnimation(ScaleTransform.ScaleYProperty, null);
         _z.BeginAnimation(OpacityProperty, null);
         ((TranslateTransform)_z.RenderTransform).BeginAnimation(TranslateTransform.YProperty, null);
+        _fly.BeginAnimation(OpacityProperty, null);
+        _flyMove.BeginAnimation(TranslateTransform.XProperty, null);
+        _flyMove.BeginAnimation(TranslateTransform.YProperty, null);
+        _ball.BeginAnimation(OpacityProperty, null);
+        _ballMove.BeginAnimation(TranslateTransform.YProperty, null);
         _hop.Y = 0;
         _tilt.Angle = 0;
         _squash.ScaleX = _squash.ScaleY = 1;
         _z.Opacity = 0;
+        _fly.Opacity = 0;
+        _ball.Opacity = 0;
+    }
+
+    void PlayIdleAntic()
+    {
+        _playTimer.Interval = TimeSpan.FromSeconds(16 + Rng.NextDouble() * 14);
+        if (!PlayfulIdle || Still || !_active || _shown != Mood.Idle) return;
+        if (Rng.Next(2) == 0)
+        {
+            // Chases a tiny glowing fly buzzing past its head
+            var fade = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2.2) };
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.15)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.85)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+            var fx = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2.2) };
+            fx.KeyFrames.Add(new EasingDoubleKeyFrame(-8, KeyTime.FromPercent(0)));
+            fx.KeyFrames.Add(new EasingDoubleKeyFrame(7, KeyTime.FromPercent(0.45), new SineEase()));
+            fx.KeyFrames.Add(new EasingDoubleKeyFrame(-6, KeyTime.FromPercent(0.8), new SineEase()));
+            fx.KeyFrames.Add(new EasingDoubleKeyFrame(9, KeyTime.FromPercent(1)));
+            var fy = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2.2) };
+            fy.KeyFrames.Add(new EasingDoubleKeyFrame(2, KeyTime.FromPercent(0)));
+            fy.KeyFrames.Add(new EasingDoubleKeyFrame(-3, KeyTime.FromPercent(0.35), new SineEase()));
+            fy.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromPercent(0.7), new SineEase()));
+            fy.KeyFrames.Add(new EasingDoubleKeyFrame(-4, KeyTime.FromPercent(1)));
+            Timeline.SetDesiredFrameRate(fx, 20);
+            Timeline.SetDesiredFrameRate(fy, 20);
+            _fly.BeginAnimation(OpacityProperty, fade);
+            _flyMove.BeginAnimation(TranslateTransform.XProperty, fx);
+            _flyMove.BeginAnimation(TranslateTransform.YProperty, fy);
+            Hop(-2.5, 0.35, new BounceEase { Bounces = 1, Bounciness = 2 });
+        }
+        else
+        {
+            // Bounces a little ball next to its paw
+            var fade = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1.8) };
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.12)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.85)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+            var by = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1.8) };
+            by.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            by.KeyFrames.Add(new EasingDoubleKeyFrame(-8, KeyTime.FromPercent(0.28), new QuadraticEase { EasingMode = EasingMode.EaseOut }));
+            by.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0.85), new BounceEase { Bounces = 2, Bounciness = 2.2 }));
+            Timeline.SetDesiredFrameRate(by, 20);
+            _ball.BeginAnimation(OpacityProperty, fade);
+            _ballMove.BeginAnimation(TranslateTransform.YProperty, by);
+            Hop(-2.0, 0.3, new QuadraticEase());
+        }
     }
 
     void Blink()

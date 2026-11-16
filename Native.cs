@@ -154,6 +154,19 @@ static class Native
     public struct RECT { public int Left, Top, Right, Bottom; }
 
     [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder name, int max);
+
+    public static string WindowClass(IntPtr hWnd)
+    {
+        var sb = new System.Text.StringBuilder(128);
+        GetClassName(hWnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    [DllImport("user32.dll")]
     static extern IntPtr MonitorFromPoint(POINT point, uint flags);
 
     [DllImport("shcore.dll")]

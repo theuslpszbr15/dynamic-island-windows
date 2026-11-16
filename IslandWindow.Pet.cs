@@ -23,11 +23,13 @@ public partial class IslandWindow
         IslandBg.Background = ground;
         EarLeft.Fill = EarRight.Fill = ground;
         ApplyGlass();
+        ApplyAurora();
         ApplyInk(_settings.Theme == IslandThemes.Light);
         MenuPalette.For(_settings.Theme).ApplyToResources();
 
         var pet = PetOn;
         PetView.SetDefaultSpecies(_settings.Mascot);
+        PetView.PlayfulIdle = _settings.PlayfulPet;
         CompactPet.Visibility = HeaderPetBox.Visibility = AlertPetBox.Visibility = ApprovalPetBox.Visibility = Vis(pet);
         AlertOrb.Visibility = AlertGlyph.Visibility = Vis(!pet);
         // The mascot takes the slot of the album art, the agent orb and the timer ring's left edge.
@@ -73,6 +75,23 @@ public partial class IslandWindow
         _glassTimer ??= MakeTimer(0.2, () => CaptureGlass(true));
         _glassTimer.Start();
         CaptureGlass(true);
+    }
+
+    void ApplyAurora()
+    {
+        var on = _settings.AuroraLook && !_hiddenFullscreen;
+        AuroraRim.Visibility = Vis(on);
+        if (!on)
+        {
+            AuroraRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+            return;
+        }
+        var spin = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(6))
+        {
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+        };
+        System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(spin, 15);
+        AuroraRotate.BeginAnimation(RotateTransform.AngleProperty, spin);
     }
 
     async void CaptureGlass(bool force = false)

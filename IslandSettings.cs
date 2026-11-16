@@ -13,6 +13,9 @@ public enum PhoneRelayMode { Public, Own, Off }
 /// island's app (testers only) or the user's own app.</summary>
 public enum DiscordSource { Window, IslandApp, OwnApp }
 
+public sealed record TaskItem(string Id, string Text, bool Done, string? Due = null);
+public sealed record QuickSnippet(string Label, string Value);
+
 public sealed class IslandSettings
 {
     public IslandShape Shape { get; set; } = IslandShape.Pill;
@@ -33,6 +36,25 @@ public sealed class IslandSettings
     public bool QuietApprovals { get; set; } = true;
     /// <summary>Videos (YouTube, Netflix…) don't pop up or keep the pill open; still on the media page.</summary>
     public bool QuietVideos { get; set; } = true;
+    /// <summary>Animated aurora light rim and glow around the island.</summary>
+    public bool AuroraLook { get; set; }
+    /// <summary>Hides the island when the focused window's top bar sits right under it (e.g. maximized browser tabs).</summary>
+    public bool SmartHideUnderTopBar { get; set; }
+    /// <summary>Drag the island with Ctrl+LeftClick (or Alt+LeftClick) to another monitor and remember it.</summary>
+    public bool DragMonitor { get; set; } = true;
+    /// <summary>Playful idle animations on the mascot (chasing a fly, bouncing a ball, looking around).</summary>
+    public bool PlayfulPet { get; set; } = true;
+    public List<TaskItem> Tasks { get; set; } = [];
+    public int WaterGoal { get; set; } = 8;
+    public int WaterGlasses { get; set; }
+    public string? WaterDate { get; set; }
+    public bool WaterReminder { get; set; }
+    public List<QuickSnippet> Snippets { get; set; } = [];
+    public string QuickNote { get; set; } = "";
+    /// <summary>Jarvis AI integration endpoint (prepared for user's own Jarvis repository).</summary>
+    public bool JarvisEnabled { get; set; }
+    public string JarvisEndpoint { get; set; } = "http://localhost:11434";
+    public string JarvisVoiceMode { get; set; } = "hold";
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay
