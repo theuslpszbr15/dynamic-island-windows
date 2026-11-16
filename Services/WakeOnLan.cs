@@ -117,13 +117,21 @@ public static class WakeOnLan
     static (string, string) ReadBiosHint()
     {
         var maker = "";
+        var product = "";
         try
         {
-            using var boards = new System.Management.ManagementObjectSearcher("SELECT Manufacturer FROM Win32_BaseBoard");
-            maker = boards.Get().Cast<System.Management.ManagementObject>().Select(b => b["Manufacturer"]?.ToString()).FirstOrDefault(m => !string.IsNullOrWhiteSpace(m))?.Trim() ?? "";
+            using var boards = new System.Management.ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard");
+            foreach (var board in boards.Get().Cast<System.Management.ManagementObject>())
+            {
+                maker = board["Manufacturer"]?.ToString()?.Trim() ?? "";
+                product = board["Product"]?.ToString()?.Trim() ?? "";
+                if (maker.Length > 0) break;
+            }
         }
         catch { }
         bool Is(string s) => maker.Contains(s, StringComparison.OrdinalIgnoreCase);
+        // PCWare boards (IPMH310G, IPMH110G…) are AMI Aptio, as in most store-brand PCs (Positivo, Multilaser…)
+        var aptio = Is("PCWare") || Is("Positivo") || product.StartsWith("IPM", StringComparison.OrdinalIgnoreCase);
         var where =
             Is("ASUS") ? "Advanced › APM Configuration: \"Power On By PCI-E\" = Enabled e \"ErP Ready\" = Disabled" :
             Is("Gigabyte") ? "Settings › Platform Power: \"Wake on LAN\" = Enabled e \"ErP\" = Disabled" :
@@ -132,7 +140,10 @@ public static class WakeOnLan
             Is("Dell") ? "Power Management › Wake on LAN: \"LAN Only\"" :
             Is("HP") || Is("Hewlett") ? "Advanced › Built-In Device Options: marque \"S5 Wake On LAN\"" :
             Is("Lenovo") ? "Power › Automatic Power On: \"Wake on LAN\" = Primary (ou Enabled)" :
-            "procure \"Wake on LAN\", \"Power On By PCI-E\" ou \"Resume by LAN\" e deixe Enabled; se tiver \"ErP\", deixe Disabled";
+            aptio ? "aba Chipset › PCH-IO Configuration: \"Wake on LAN\" (ou \"LAN Wake\"/\"PME Wake\") = Enabled; " +
+                    "se não estiver ali, veja Advanced › ACPI/Power. Se tiver \"Deep Sx\" ou \"ErP\", deixe Disabled" :
+            "procure \"Wake on LAN\", \"Power On By PCI-E\" ou \"Resume by LAN\" e deixe Enabled; se tiver \"ErP\" ou \"Deep Sx\", deixe Disabled";
+        if (product.Length > 0 && !maker.Contains(product, StringComparison.OrdinalIgnoreCase)) maker = $"{maker} {product}".Trim();
         return (maker, where);
     }
 
