@@ -72,16 +72,8 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- reads only the Discord call notification, once the person turns on notification access -->
-        <service
-            android:name=".DiscordListener"
-            android:exported="false"
-            android:label="Call do Discord na ilha"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
+        <!-- No NotificationListenerService (DiscordListener): Play Protect's fraud protection blocks sideloaded APKs that
+             declare one, with no "install anyway". The PC's island already sends who joins the Discord call. -->
 
         <receiver
             android:name=".DenyReceiver"

@@ -63,6 +63,7 @@ fun IslandSettingsCard() {
             TextButton(onClick = { context.startActivity(IslandOverlay.permissionIntent(context)) }) { Text("Permitir") }
         }
 
+        if (DiscordListener.available(context)) {
         Text("Call do Discord deste celular", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 14.dp))
         Text(
@@ -93,6 +94,7 @@ fun IslandSettingsCard() {
                     (if (it.actions.isNotEmpty()) " · botões: ${it.actions.joinToString()}" else ""),
                     color = Color(0xFF8E8E93), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
             }
+        }
         }
     }
 }

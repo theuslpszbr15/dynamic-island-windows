@@ -435,7 +435,7 @@ private fun DiscordTab(context: Context, events: List<DiscordEvent>, call: Phone
             }
         }
     }
-    if (!DiscordListener.enabled(context))
+    if (DiscordListener.available(context) && !DiscordListener.enabled(context))
         Row2("Call deste celular", "Para ver aqui a call que você faz pelo Discord do celular, ligue o acesso a notificações " +
             "(o app só lê a notificação de call do Discord).") {
             Buttons("Ligar" to {
