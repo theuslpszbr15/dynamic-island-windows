@@ -11,6 +11,13 @@ public partial class IslandWindow
     DateTime _lastActivity = DateTime.Now, _lastGlass;
     System.Windows.Threading.DispatcherTimer? _glassTimer;
     bool _glassBusy;
+    // False when Glass is chosen but the window can't hide itself from capture (see ApplyGlass).
+    bool _glassLive;
+    // Windows 10: no exclusion from capture, so the glass is a snapshot taken with the island cloaked.
+    bool _glassSnap;
+    (int, int, int, int) _snapRect;
+    int[]? _snapRing;
+    bool GlassBlur => _glassLive || _glassSnap;
 
     PetView[] Pets => [CompactPet, HeaderPet, AlertPet, AgentPet, ApprovalPet];
     bool PetOn => _settings.Mascot != PetSpecies.None;
@@ -18,11 +25,14 @@ public partial class IslandWindow
 
     public void ApplyLook()
     {
-        var ground = new SolidColorBrush(IslandThemes.Of(_settings.Theme));
+        ApplyGlass();
+        var tint = IslandThemes.Of(_settings.Theme);
+        // Without the live blur the glass is plain smoked glass: darker, so text stays readable over any window.
+        if (Glass && !GlassBlur) tint.A = 0xE4;
+        var ground = new SolidColorBrush(tint);
         ground.Freeze();
         IslandBg.Background = ground;
         EarLeft.Fill = EarRight.Fill = ground;
-        ApplyGlass();
         ApplyAurora();
         ApplyInk(IslandThemes.IsLight(_settings.Theme));
         MenuPalette.For(_settings.Theme).ApplyToResources();
@@ -60,20 +70,30 @@ public partial class IslandWindow
     }
 
     // DWM's own blur only covers whole window rectangles, so the glass is made here from a capture of the
-    // screen behind the island (see LiquidGlass). The island is excluded from screen capture while glass
-    // is on, otherwise it would capture itself.
+    // screen behind the island (see LiquidGlass). The island must not be in that capture, otherwise it
+    // blurs itself into a ghost copy of its own text and icons.
+    // Live: the island is excluded from capture (WDA_EXCLUDEFROMCAPTURE) and the glass follows the screen.
+    // Windows 10 refuses that for WPF's transparent (layered) windows (SetWindowDisplayAffinity fails with
+    // ERROR_NOT_ENOUGH_MEMORY). There the island is cloaked for about two frames per capture instead, so the
+    // glass is a snapshot taken only when the island settles in a new size or the background next to it changes.
     void ApplyGlass()
     {
-        if (_hwnd != IntPtr.Zero) Native.SetWindowDisplayAffinity(_hwnd, Glass ? Native.WDA_EXCLUDEFROMCAPTURE : 0);
-        GlassFill.Visibility = GlassRim.Visibility = Vis(Glass);
-        if (!Glass)
+        var excluded = _hwnd != IntPtr.Zero && Native.SetWindowDisplayAffinity(_hwnd, Glass ? Native.WDA_EXCLUDEFROMCAPTURE : 0);
+        _glassLive = Glass && excluded;
+        _glassSnap = Glass && !excluded && _hwnd != IntPtr.Zero && Native.SetCloaked(_hwnd, true) & Native.SetCloaked(_hwnd, false);
+        GlassFill.Visibility = GlassRim.Visibility = Vis(GlassBlur);
+        // Smoked glass without any blur (cloak refused too) would show the stacked shadow outlines as a halo.
+        ShadowLayers.Visibility = Vis(!Glass || GlassBlur);
+        if (!GlassBlur)
         {
             _glassTimer?.Stop();
             GlassFill.Background = null;
             return;
         }
-        _glassTimer ??= MakeTimer(0.2, () => CaptureGlass(true));
+        _glassTimer ??= MakeTimer(0.2, GlassTick);
+        _glassTimer.Interval = TimeSpan.FromSeconds(_glassSnap ? 1 : 0.2);
         _glassTimer.Start();
+        _snapRect = default;
         CaptureGlass(true);
     }
 
@@ -94,24 +114,67 @@ public partial class IslandWindow
         AuroraRotate.BeginAnimation(RotateTransform.AngleProperty, spin);
     }
 
+    void GlassTick()
+    {
+        if (!_glassSnap) { CaptureGlass(true); return; }
+        if (_glassBusy || _animating || _userHidden || _hiddenFullscreen || PresentationSource.FromVisual(Island) == null) return;
+        var (x, y, w, h, _, _, _) = GlassGeometry();
+        if (_snapRect != (x, y, w, h)) { CaptureGlass(true); return; }
+        if (DateTime.Now - _lastGlass < TimeSpan.FromSeconds(2.5)) return;
+        if (SampleRing(x, y, w, h) is not { } ring) return;
+        if (_snapRing == null || RingChanged(_snapRing, ring)) CaptureGlass(true);
+    }
+
+    (int X, int Y, int W, int H, double Radius, bool FlatTop, double Dpi) GlassGeometry()
+    {
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var origin = Island.PointToScreen(new Point(0, 0));
+        return ((int)Math.Round(origin.X), (int)Math.Round(origin.Y),
+            (int)Math.Round(Island.Width * dpi.DpiScaleX), (int)Math.Round(Island.Height * dpi.DpiScaleY),
+            IslandBg.CornerRadius.BottomLeft * dpi.DpiScaleX, IslandBg.CornerRadius.TopLeft < IslandBg.CornerRadius.BottomLeft, dpi.DpiScaleX);
+    }
+
+    // What is just beside and below the island (never the island itself), to notice the background changing.
+    static int[]? SampleRing(int x, int y, int w, int h)
+    {
+        const int gap = 6, thick = 40;
+        var all = new List<int>();
+        foreach (var (rx, ry, rw, rh) in new[] { (x - thick - gap, y, thick, h), (x + w + gap, y, thick, h), (x, y + h + gap, w, thick) })
+            if (Native.CapturePixels(rx, ry, rw, rh, 8) is { } part) all.AddRange(part.Pixels);
+        return all.Count > 0 ? all.ToArray() : null;
+    }
+
+    static bool RingChanged(int[] before, int[] after)
+    {
+        if (before.Length != after.Length) return true;
+        long diff = 0;
+        for (var i = 0; i < before.Length; i++)
+            diff += Math.Abs(((before[i] >> 16) & 0xFF) - ((after[i] >> 16) & 0xFF))
+                  + Math.Abs(((before[i] >> 8) & 0xFF) - ((after[i] >> 8) & 0xFF))
+                  + Math.Abs((before[i] & 0xFF) - (after[i] & 0xFF));
+        return diff / (before.Length * 3.0) > 3;
+    }
+
     async void CaptureGlass(bool force = false)
     {
-        if (!Glass || _glassBusy || _hiddenFullscreen || PresentationSource.FromVisual(Island) == null) return;
+        // A snapshot hides the island for a moment, so it is never taken on every animation frame.
+        if (!GlassBlur || _glassBusy || _hiddenFullscreen || PresentationSource.FromVisual(Island) == null || (_glassSnap && !force)) return;
         var now = DateTime.Now;
         if (!force && now - _lastGlass < TimeSpan.FromMilliseconds(_animating ? 120 : 50)) return;
         _lastGlass = now;
-        var dpi = VisualTreeHelper.GetDpi(this);
-        var origin = Island.PointToScreen(new Point(0, 0));
-        int x = (int)Math.Round(origin.X), y = (int)Math.Round(origin.Y);
-        int w = (int)Math.Round(Island.Width * dpi.DpiScaleX), h = (int)Math.Round(Island.Height * dpi.DpiScaleY);
-        var radius = IslandBg.CornerRadius.BottomLeft * dpi.DpiScaleX;
-        var flatTop = IslandBg.CornerRadius.TopLeft < IslandBg.CornerRadius.BottomLeft;
+        var (x, y, w, h, radius, flatTop, dpiScale) = GlassGeometry();
+        var hide = _glassSnap ? _hwnd : IntPtr.Zero;
+        if (_glassSnap)
+        {
+            _snapRect = (x, y, w, h);
+            _snapRing = SampleRing(x, y, w, h);
+        }
 
         _glassBusy = true;
         try
         {
-            var shot = await Task.Run(() => LiquidGlass.Render(x, y, w, h, radius, flatTop, dpi.DpiScaleX));
-            if (shot == null || !Glass) return;
+            var shot = await Task.Run(() => LiquidGlass.Render(x, y, w, h, radius, flatTop, dpiScale, hide));
+            if (shot == null || !GlassBlur) return;
             var brush = new ImageBrush(shot) { Stretch = Stretch.Fill };
             RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.Linear);
             brush.Freeze();

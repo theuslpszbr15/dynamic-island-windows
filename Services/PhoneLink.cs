@@ -267,8 +267,15 @@ public sealed partial class PhoneLink : IDisposable
         PhonesChanged?.Invoke();
     }
 
-    public string PairingLink() =>
-        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay, RelayKeyInUse);
+    /// <param name="usb">Also offer 127.0.0.1, which the phone reaches through adb (USB cable or adb over Wi-Fi).</param>
+    public string PairingLink(bool usb = false)
+    {
+        var addresses = LocalAddresses();
+        var host = addresses.FirstOrDefault() ?? "127.0.0.1";
+        var others = addresses.Skip(1).Append(usb ? "127.0.0.1" : "").Where(a => a.Length > 0 && a != host).Distinct().ToList();
+        var link = BuildPairingLink(host, Port, Fingerprint, _token, Environment.MachineName, Relay, RelayKeyInUse);
+        return others.Count > 0 ? link + "&alt=" + string.Join(",", others) : link;
+    }
 
     /// <summary>The QR code's link. <paramref name="relay"/> and <paramref name="relayKey"/> ("" = none) are
     /// optional parameters; the key only goes along with a relay (an own relay with a key: the public one has none).</summary>
@@ -619,8 +626,13 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     /// <summary>The PC's private IPv4 on the network that has the default gateway (Wi-Fi or cable).</summary>
-    public static string? LocalAddress()
+    public static string? LocalAddress() => LocalAddresses().FirstOrDefault();
+
+    /// <summary>Every private IPv4 of the PC on a network with a default gateway (Wi-Fi first, then cable), so the phone
+    /// has a way in whichever one it shares.</summary>
+    public static IReadOnlyList<string> LocalAddresses()
     {
+        var list = new List<string>();
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()
                      .Where(n => n.OperationalStatus == OperationalStatus.Up
                                  && n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
@@ -630,9 +642,9 @@ public sealed partial class PhoneLink : IDisposable
             if (!props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork)) continue;
             var address = props.UnicastAddresses.Select(u => u.Address)
                 .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork && IsLocal(a) && !IPAddress.IsLoopback(a));
-            if (address != null) return address.ToString();
+            if (address != null && !list.Contains(address.ToString())) list.Add(address.ToString());
         }
-        return null;
+        return list;
     }
 
     // ───────────────────────── certificate and token ─────────────────────────

@@ -16,7 +16,8 @@ static class LiquidGlass
     /// <param name="x">Island bounds on screen, physical pixels.</param>
     /// <param name="radius">Corner radius in physical pixels.</param>
     /// <param name="flatTop">The top edge touches the screen edge (notch), so it doesn't refract.</param>
-    public static BitmapSource? Render(int x, int y, int width, int height, double radius, bool flatTop, double dpiScale)
+    /// <param name="hide">A window of ours to cloak while capturing, when it can't exclude itself from capture.</param>
+    public static BitmapSource? Render(int x, int y, int width, int height, double radius, bool flatTop, double dpiScale, IntPtr hide = default)
     {
         int ow = width / Scale, oh = height / Scale;
         if (ow < 4 || oh < 4) return null;
@@ -25,8 +26,9 @@ static class LiquidGlass
         var band = (float)Math.Min(Math.Min(ow, oh) * 0.42, 15 * dpiScale / Scale);
         var reach = band * 1.15f;
         var pad = (int)Math.Ceiling(reach + 3);
-        if (Native.CapturePixels(x - pad * Scale, y - pad * Scale, (ow + 2 * pad) * Scale, (oh + 2 * pad) * Scale, Scale) is not { } shot)
-            return null;
+        int cx0 = x - pad * Scale, cy0 = y - pad * Scale, cw = (ow + 2 * pad) * Scale, ch = (oh + 2 * pad) * Scale;
+        var captured = hide == IntPtr.Zero ? Native.CapturePixels(cx0, cy0, cw, ch, Scale) : Native.CapturePixelsHiding(hide, cx0, cy0, cw, ch, Scale);
+        if (captured is not { } shot) return null;
         var (src, sw, sh) = shot;
         // The rim shows the background sharp and bent; the middle is frosted so the island's text stays readable.
         var frost = (int[])src.Clone();

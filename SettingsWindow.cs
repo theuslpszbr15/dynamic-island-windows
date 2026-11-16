@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -35,6 +35,9 @@ public sealed partial class SettingsWindow : DarkWindow
 
     readonly App _app;
     bool _downloadQr;
+    bool? _firewallOpen;
+    bool _firewallBusy, _firewallChecked;
+    string _usbShown = "";
 
     IslandSettings S => _app.Settings;
 
@@ -45,6 +48,17 @@ public sealed partial class SettingsWindow : DarkWindow
         _app.Island.Discord.StatusChanged += OnDiscordStatus;
         Closed += (_, _) => _app.Island.Discord.StatusChanged -= OnDiscordStatus;
         Activated += (_, _) => AdoptOwnRelay();
+        // the USB bridge works in the background; show what it finds without waiting for a click
+        var usbWatch = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        usbWatch.Tick += (_, _) =>
+        {
+            var now = _app.Island.Usb?.Status ?? "";
+            if (now == _usbShown) return;
+            _usbShown = now;
+            if (_page == "phone") Render();
+        };
+        usbWatch.Start();
+        Closed += (_, _) => usbWatch.Stop();
         Render();
     }
 
@@ -891,7 +905,7 @@ public sealed partial class SettingsWindow : DarkWindow
 
         if (S.PhoneLink && island.Phone is { Running: true } link)
         {
-            var url = link.PairingLink();
+            var url = link.PairingLink(S.PhoneUsb);
             var phones = link.ConnectedPhones;
             var qr = new Border
             {
@@ -915,9 +929,9 @@ public sealed partial class SettingsWindow : DarkWindow
                     Foreground = phone.ViaRelay ? new SolidColorBrush(Color.FromRgb(0x64, 0xD2, 0xFF)) : Brushes.White,
                     Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap,
                 });
-            side.Children.Add(Note(PhoneLink.LocalAddress() is { } ip
-                ? $"Este PC: {ip}, porta {link.Port}"
-                : "Sem rede local: conecte o PC ao Wi-Fi."));
+            side.Children.Add(Note(PhoneLink.LocalAddresses() is { Count: > 0 } ips
+                ? $"Este PC: {string.Join(" / ", ips)}, porta {link.Port}"
+                : "Sem rede local: conecte o PC ao Wi-Fi ou ao cabo de rede."));
             if (link.Relay.Length > 0)
             {
                 var via = Note($"Fora de casa: {link.Relay[6..]} " + (link.RelayConnected ? "(conectado ✓, já está neste código)" : "(conectando…)"));
@@ -926,7 +940,7 @@ public sealed partial class SettingsWindow : DarkWindow
             }
             side.Children.Add(Note("1. Instale o app no celular (Baixar no celular, acima).\n" +
                                    (link.Relay.Length > 0 ? "2. Qualquer rede serve: com o repasse ligado o celular alcança o PC pela internet.\n"
-                                                          : "2. Celular e PC na mesma rede Wi-Fi.\n") +
+                                                          : "2. Celular e PC no mesmo roteador (Wi-Fi ou cabo) — ou use \"Ligar pelo adb\" em Conexão, abaixo.\n") +
                                    "3. No app, toque em Escanear e aponte para este código."));
             var buttons = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
             var copy = new Button { Content = "Copiar link", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
@@ -949,8 +963,10 @@ public sealed partial class SettingsWindow : DarkWindow
             pair.Children.Add(qr);
             pair.Children.Add(side);
             page.Children.Add(Card("Parear", pair,
-                Note("Se o celular não conectar: o Windows pode pedir para liberar a ilha no firewall (redes privadas), " +
-                     "e redes de visitante/corporativas costumam isolar os aparelhos.")));
+                Note("Se o celular não conectar: veja o Firewall e o cabo USB logo abaixo. " +
+                     "Redes de visitante/corporativas costumam isolar os aparelhos, e o PC no cabo e o celular no Wi-Fi " +
+                     "só se enxergam se estiverem no mesmo roteador.")));
+            page.Children.Add(ConnectionCard(link));
         }
         else if (S.PhoneLink)
         {
@@ -1043,6 +1059,53 @@ public sealed partial class SettingsWindow : DarkWindow
             bios,
             Step(phoneReady, phoneReady ? "3. Celular conectado: já sabe o endereço desta placa" : "3. Celular: abra o app uma vez com o PC ligado"),
             Note("Pronto: desligue o PC e toque em \"Ligar o PC\" no celular (aba PC)."));
+    }
+
+    // What stands between the phone and this PC: the Windows firewall, and the USB cable as a way around the network.
+    Border ConnectionCard(PhoneLink link)
+    {
+        if (!_firewallChecked && !_firewallBusy)
+        {
+            _firewallBusy = true;
+            var port = link.Port;
+            _ = Task.Run(() => FirewallRule.IsOpen(port)).ContinueWith(t =>
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _firewallBusy = false;
+                    _firewallOpen = t.IsCompletedSuccessfully ? t.Result : null;
+                    _firewallChecked = true;
+                    if (_page == "phone") Render();
+                }));
+        }
+
+        var open = new Button { Content = "Liberar no firewall", Style = (Style)Resources["Action"] };
+        open.Click += (_, _) =>
+        {
+            var error = FirewallRule.Open();
+            if (error != null) MessageBox.Show(this, error, "Firewall do Windows", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _firewallOpen = null;
+            _firewallChecked = false;
+            Render();
+        };
+        var firewall = _firewallOpen switch
+        {
+            true => Row("Firewall do Windows", "\u2713 A ilha pode receber a conex\u00e3o do celular.", null),
+            false => Row("Firewall do Windows",
+                "Nenhuma regra libera a ilha, ent\u00e3o o Windows barra o celular (comum quando o PC est\u00e1 no cabo). " +
+                "Pede permiss\u00e3o de administrador e vale s\u00f3 para redes privadas.", open),
+            _ when _firewallBusy || !_firewallChecked => Row("Firewall do Windows", "Verificando\u2026", null),
+            _ => Row("Firewall do Windows", "N\u00e3o consegui verificar as regras. Se o celular n\u00e3o conecta, tente liberar.", open),
+        };
+
+        var usb = _app.Island.Usb;
+        var usbRow = Toggle("Ligar pelo adb (cabo ou Wi-Fi)",
+            "Para quando o firewall do PC barra o celular. Ligue o cabo USB uma vez com a depura\u00e7\u00e3o USB ativa: depois o celular " +
+            "continua ligado pelo Wi-Fi (at\u00e9 reiniciar). Precisa do adb (vem com o scrcpy). Depois de ligar, escaneie o QR de novo.",
+            S.PhoneUsb, _ => _app.TogglePhoneUsb());
+        UIElement[] rows = S.PhoneUsb && usb is { Status.Length: > 0 }
+            ? [firewall, usbRow, Note(usb.Status)]
+            : [firewall, usbRow];
+        return Card("Conex\u00e3o", rows);
     }
 
     // Step one: get the APK onto the phone by scanning a QR code with its camera.

@@ -101,6 +101,8 @@ public sealed class IslandSettings
     /// <summary>Who joins and leaves also goes to the paired phone's floating island (over the same pinned link).</summary>
     public bool DiscordToPhone { get; set; } = true;
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
+    /// <summary>Also reach the phone through the USB cable (adb reverse), for PCs whose network the phone can't see.</summary>
+    public bool PhoneUsb { get; set; }
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];
