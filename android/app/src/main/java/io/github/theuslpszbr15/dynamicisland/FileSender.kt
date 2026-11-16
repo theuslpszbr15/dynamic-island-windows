@@ -1,6 +1,7 @@
 package io.github.theuslpszbr15.dynamicisland
 
 import android.app.Activity
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -10,6 +11,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -56,6 +60,66 @@ class ShareActivity : Activity() {
             (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)) ?: emptyList()
         else -> emptyList()
+    }
+}
+
+/**
+ * The floating island's "Mandar pro PC" buttons: an overlay can't open a picker or read the clipboard, so this
+ * invisible activity does it, offers what was picked like the Enviar tab and closes. Not noHistory: the picker covers it.
+ */
+class SendPickActivity : ComponentActivity() {
+    private val files = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { send(it) }
+    private val media = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FileOffer.MAX_ITEMS)) { send(it) }
+    private val what get() = intent.getStringExtra(EXTRA_WHAT)
+    private var pasted = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.setDimAmount(0f)
+        if (savedInstanceState != null) return
+        when (what) {
+            FILE -> files.launch(arrayOf("*/*"))
+            MEDIA -> media.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            PASTE -> Unit
+            else -> finish()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus || pasted || what != PASTE) return
+        pasted = true
+        val item = getSystemService(ClipboardManager::class.java)?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+        val uri = item?.uri
+        val text = item?.text?.toString()
+        when {
+            uri != null -> offer { FileSender.offerFiles(this, listOf(uri)) }
+            !text.isNullOrBlank() -> offer { FileSender.offerText(this, text) }
+            else -> done("Nada copiado para mandar.")
+        }
+    }
+
+    private fun send(uris: List<Uri>) = if (uris.isEmpty()) finish() else offer { FileSender.offerFiles(this, uris) }
+
+    // Copies before finishing: the picker's read permission lasts only while this activity does.
+    private fun offer(work: () -> String) = Thread {
+        val message = try { work() } catch (e: Exception) { e.message ?: "Não deu para mandar." }
+        runOnUiThread { done(message) }
+    }.start()
+
+    private fun done(message: String) {
+        Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+        finish()
+    }
+
+    companion object {
+        private const val EXTRA_WHAT = "what"
+        const val FILE = "file"
+        const val MEDIA = "media"
+        const val PASTE = "paste"
+
+        fun open(context: Context, what: String) = context.startActivity(
+            Intent(context, SendPickActivity::class.java).putExtra(EXTRA_WHAT, what).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
 

@@ -71,6 +71,14 @@
             </intent-filter>
         </activity>
 
+        <!-- the floating island's "Mandar pro PC" buttons open the picker / read the clipboard through this -->
+        <activity
+            android:name=".SendPickActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- the quick tile reads the clipboard through this (Android only lets an app in front read it) -->
         <activity
             android:name=".ClipActivity"

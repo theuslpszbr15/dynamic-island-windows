@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +54,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -244,7 +247,7 @@ private fun IslandUi(expanded: Boolean, onToggle: () -> Unit, onDrag: (Float, Fl
             .then(if (expanded) Modifier.width(minOf(screen - 24.dp, 380.dp)) else Modifier)
     ) {
         PillRow(pill, call, now, drag.clickable(onClick = onToggle))
-        if (expanded) Panel(context, pill, link, outgoing, transfers, discord, call, now)
+        if (expanded) Panel(context, pill, link, outgoing, transfers, discord, call, now, close = onToggle)
     }
 }
 
@@ -284,6 +287,7 @@ private fun Panel(
     discord: List<DiscordEvent>,
     call: PhoneCall?,
     now: Long,
+    close: () -> Unit,
 ) {
     val first = when (pill.kind) {
         Pill.Kind.Approval -> Tab.Aprovacoes
@@ -299,6 +303,7 @@ private fun Panel(
         Tab.Discord to if (call != null) 1 else 0,
     )
     Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        if (link.pairing != null) SendRow(context, close)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Tab.entries.forEach { t ->
                 val selected = tab == t.ordinal
@@ -321,6 +326,28 @@ private fun Panel(
                 Tab.Aprovacoes -> Approvals(context, link)
                 Tab.Transferencias -> TransfersList(transfers)
                 Tab.Discord -> DiscordTab(context, discord, call, now)
+            }
+        }
+    }
+}
+
+/** Arquivo, Foto/vídeo and Colar straight from the island; the PC asks first, as from the Enviar tab. */
+@Composable
+private fun SendRow(context: Context, close: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(
+            Triple(R.drawable.ic_send_file, "Arquivo", SendPickActivity.FILE),
+            Triple(R.drawable.ic_send_media, "Foto/vídeo", SendPickActivity.MEDIA),
+            Triple(R.drawable.ic_send_paste, "Colar", SendPickActivity.PASTE),
+        ).forEach { (icon, label, what) ->
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Card)
+                    .clickable { close(); SendPickActivity.open(context, what) }.padding(vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(painterResource(icon), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
