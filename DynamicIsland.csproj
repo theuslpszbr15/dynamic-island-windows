@@ -13,7 +13,7 @@
     <StartupObject>DynamicIsland.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\DynamicIsland.ico</ApplicationIcon>
-    <Version>1.5.1</Version>
+    <Version>1.5.2</Version>
     <Product>Dynamic Island</Product>
     <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
@@ -41,6 +41,10 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\DynamicIsland.ico" LogicalName="DynamicIsland.ico" />
+    <!-- "Criar meu repasse" publishes these from the exe (the repository may be private) -->
+    <EmbeddedResource Include="relay\package.json;relay\package-lock.json;relay\tsconfig.json;relay\wrangler.toml"
+                      LogicalName="relay/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="relay\src\index.ts" LogicalName="relay/src/index.ts" />
   </ItemGroup>
 
   <ItemGroup>

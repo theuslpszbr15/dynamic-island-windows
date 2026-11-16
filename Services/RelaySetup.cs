@@ -4,7 +4,7 @@ using System.Text;
 namespace DynamicIsland.Services;
 
 /// <summary>
-/// "Criar meu repasse": a PowerShell window that downloads relay/ from the repository, installs it, signs in to the
+/// "Criar meu repasse": writes relay/ (embedded in the exe) to disk and opens a PowerShell window that installs it, signs in to the
 /// person's Cloudflare account (in the browser) and publishes it. The address it gets is left in <see cref="ResultFile"/>,
 /// which the settings pick up and use as the island's own relay.
 /// </summary>
@@ -22,8 +22,8 @@ public static class RelaySetup
 
     public static void Start()
     {
+        WriteSource();
         var script = Script
-            .Replace("{{ZIP}}", Updater.RepositoryUrl + "/archive/refs/heads/main.zip")
             .Replace("{{DIR}}", Folder)
             .Replace("{{RESULT}}", ResultFile);
         var path = Path.Combine(Path.GetTempPath(), "dynamic-island-criar-repasse.ps1");
@@ -32,6 +32,20 @@ public static class RelaySetup
         {
             UseShellExecute = true,
         });
+    }
+
+    /// <summary>The relay's source, embedded in the exe (relay/…), written to <see cref="Folder"/>; node_modules is kept.</summary>
+    static void WriteSource()
+    {
+        var assembly = typeof(RelaySetup).Assembly;
+        foreach (var name in assembly.GetManifestResourceNames().Where(n => n.StartsWith("relay/", StringComparison.Ordinal)))
+        {
+            var target = Path.Combine(Folder, name["relay/".Length..].Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            using var input = assembly.GetManifestResourceStream(name)!;
+            using var output = File.Create(target);
+            input.CopyTo(output);
+        }
     }
 
     /// <summary>The wss:// address a finished setup left behind (and forgets it), or null.</summary>
@@ -65,18 +79,8 @@ public static class RelaySetup
                 return
             }
 
-            Write-Host '  1/4  Baixando o código do repasse...' -ForegroundColor Cyan
-            $zip = Join-Path $env:TEMP 'dynamic-island-src.zip'
-            $tmp = Join-Path $env:TEMP 'dynamic-island-src'
-            Invoke-WebRequest '{{ZIP}}' -OutFile $zip -UseBasicParsing
-            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-            Expand-Archive $zip $tmp -Force
-            $src = Get-ChildItem $tmp -Directory | Select-Object -First 1
-            $dir = '{{DIR}}'
-            if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
-            New-Item -ItemType Directory -Force (Split-Path $dir) | Out-Null
-            Copy-Item (Join-Path $src.FullName 'relay') $dir -Recurse
-            Set-Location $dir
+            Write-Host '  1/4  Preparando o código do repasse...' -ForegroundColor Cyan
+            Set-Location '{{DIR}}'
 
             Write-Host '  2/4  Instalando (pode levar um minuto)...' -ForegroundColor Cyan
             npm install --no-audit --no-fund
