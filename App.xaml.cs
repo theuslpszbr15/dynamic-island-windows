@@ -32,12 +32,15 @@ public partial class App : Application
         // the GPU driver's D3D9 stack (hundreds of MB on some Intel drivers) for a tiny overlay.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
+        if (SnapshotFolder != null || PerfFolder != null) PhoneLink.DemoMode = true;
+
         if (SnapshotFolder != null)
         {
             Settings = new IslandSettings { ReadOnly = true, DiscreetIdle = false };
             _window = new IslandWindow(Settings) { SnapshotMode = true };
             _window.Show();
             await _window.RunSnapshotsAsync(SnapshotFolder);
+            try { File.Delete(PhoneLink.SecretFile); } catch { }
             Shutdown();
             return;
         }
@@ -48,6 +51,7 @@ public partial class App : Application
             _window = new IslandWindow(Settings) { SnapshotMode = true };
             _window.Show();
             await _window.RunPerfAsync(PerfFolder);
+            try { File.Delete(PhoneLink.SecretFile); } catch { }
             Shutdown();
             return;
         }

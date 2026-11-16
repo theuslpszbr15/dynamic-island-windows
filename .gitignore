@@ -14,3 +14,13 @@ publish/
 phone-link.bin
 .env
 .env.*
+
+# relay setup leftovers and local data
+node_modules/
+.wrangler/
+.dev.vars
+*.log
+own-relay.txt
+*.jks
+*.keystore
+keystore.properties

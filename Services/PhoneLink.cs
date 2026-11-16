@@ -65,7 +65,13 @@ public sealed partial class PhoneLink : IDisposable
     public const string RelayLimitMessage = "Limite do repasse atingido. Tente mais tarde ou use seu próprio repasse.";
     public const string RelayWrongKeyMessage = "O repasse não reconheceu este PC. Use \"Parear de novo\" nas Configurações.";
 
-    static string SecretFile => Path.Combine(IslandSettings.Folder, "phone-link.bin");
+    internal static string SecretFile => DemoMode
+        ? Path.Combine(Path.GetTempPath(), $"dynamic-island-demo-{Environment.ProcessId}.bin")
+        : Path.Combine(IslandSettings.Folder, "phone-link.bin");
+
+    /// <summary>Screenshots and perf runs: a throwaway token and certificate and a made-up address, so a published
+    /// screenshot's QR code never pairs with the PC that took it.</summary>
+    internal static bool DemoMode;
 
     readonly Dispatcher _ui;
     readonly object _gate = new();
@@ -268,7 +274,7 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     public string PairingLink() =>
-        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay, RelayKeyInUse);
+        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, DemoMode ? "MEU-PC" : Environment.MachineName, Relay, RelayKeyInUse);
 
     /// <summary>The QR code's link. <paramref name="relay"/> and <paramref name="relayKey"/> ("" = none) are
     /// optional parameters; the key only goes along with a relay (an own relay with a key: the public one has none).</summary>
@@ -621,6 +627,7 @@ public sealed partial class PhoneLink : IDisposable
     /// <summary>The PC's private IPv4 on the network that has the default gateway (Wi-Fi or cable).</summary>
     public static string? LocalAddress()
     {
+        if (DemoMode) return "192.168.0.12";
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()
                      .Where(n => n.OperationalStatus == OperationalStatus.Up
                                  && n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
