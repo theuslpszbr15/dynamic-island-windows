@@ -744,6 +744,12 @@ public sealed partial class SettingsWindow : DarkWindow
             side.Children.Add(Note(PhoneLink.LocalAddress() is { } ip
                 ? $"Este PC: {ip}, porta {link.Port}"
                 : "Sem rede local: conecte o PC ao Wi-Fi."));
+            if (link.Relay.Length > 0)
+            {
+                var via = Note($"Fora de casa: {link.Relay[6..]} " + (link.RelayConnected ? "(conectado ✓, já está neste código)" : "(conectando…)"));
+                via.Foreground = new SolidColorBrush(link.RelayConnected ? Color.FromRgb(0x30, 0xD1, 0x58) : Color.FromRgb(0xFF, 0x9F, 0x0A));
+                side.Children.Add(via);
+            }
             side.Children.Add(Note("1. Instale o app no celular (Baixar no celular, acima).\n" +
                                    (link.Relay.Length > 0 ? "2. Qualquer rede serve: com o repasse ligado o celular alcança o PC pela internet.\n"
                                                           : "2. Celular e PC na mesma rede Wi-Fi.\n") +
