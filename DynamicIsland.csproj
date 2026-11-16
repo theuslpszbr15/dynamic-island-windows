@@ -13,13 +13,15 @@
     <StartupObject>DynamicIsland.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\DynamicIsland.ico</ApplicationIcon>
-    <Version>1.6.2</Version>
+    <Version>1.7.0</Version>
     <Product>Dynamic Island</Product>
     <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- A tiny, mostly idle heap: no background GC thread, and compact rather than grow. -->
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- measured: PGO instrumentation cost ~2% of a core for the first minutes and ~5 MB, for code that barely runs -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <ItemGroup>

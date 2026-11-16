@@ -11,7 +11,7 @@ namespace DynamicIsland.Services;
 public static class RelaySetup
 {
     public static string ResultFile => Path.Combine(IslandSettings.Folder, "own-relay.txt");
-    static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DynamicIsland", "relay");
+    internal static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DynamicIsland", "relay");
 
     public static bool HasNode()
     {
@@ -34,7 +34,7 @@ public static class RelaySetup
         });
     }
 
-    /// <summary>The relay's source, embedded in the exe (relay/…), written to <see cref="Folder"/>; node_modules is kept.</summary>
+    /// <summary>The relay's source, embedded in the exe (relay/…), written to <see cref="Folder"/>; node_modules is removed when the script ends.</summary>
     static void WriteSource()
     {
         var assembly = typeof(RelaySetup).Assembly;
@@ -115,6 +115,11 @@ public static class RelaySetup
             Write-Host ''
             Write-Host "  Não deu certo: $($_.Exception.Message)" -ForegroundColor Red
             Write-Host '  Pode fechar esta janela e tentar de novo pelo botão "Criar meu repasse".'
+        }
+        finally {
+            # ~200 MB of tools only needed while publishing
+            Set-Location $env:TEMP
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '{{DIR}}\node_modules', '{{DIR}}\.wrangler'
         }
         """;
 }

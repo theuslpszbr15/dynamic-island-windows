@@ -72,6 +72,8 @@ public partial class App : Application
             if (Settings.CheckUpdates) CheckForUpdates(false);
         };
         updates.Start();
+
+        _ = Task.Run(async () => { await Task.Delay(TimeSpan.FromMinutes(1)); DiskCleanup.Run(); });
     }
 
     // Lets a new version being installed close this one cleanly.

@@ -16,7 +16,9 @@ atrapalhar: os cliques passam por ela.
 Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.github.io/dynamic-island-windows/)** (dá para testar a ilha no navegador).
 
 1. Baixe **[DynamicIsland.exe](https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe)**
-   (não precisa instalar o .NET).
+   (80 MB, não precisa instalar o .NET) ou a **[versão leve](https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland-Leve.exe)**
+   (27 MB e uns 70 MB a menos de RAM; precisa do [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)).
+   Com o .NET instalado, as atualizações trazem a leve sozinhas.
 2. Abra. Se o Windows mostrar "O Windows protegeu o computador", clique em *Mais informações → Executar assim mesmo*
    (o executável não é assinado).
 3. No ícone da bandeja, clique em **Instalar no computador**: ela vai para
