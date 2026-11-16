@@ -86,6 +86,8 @@ class LinkClient(
         fun onSendPending(id: String) {}
         /** Someone joined or left the Discord call the PC's island is watching. */
         fun onDiscord(event: DiscordEvent) {}
+        /** The PC's wired card and LAN broadcast address, for waking it up later (Wake-on-LAN). */
+        fun onWake(mac: String, broadcast: String) {}
         /** Text copied on the PC (clipboard sync). */
         fun onClip(text: String) {}
         /** The PC's song, volume and shutdown timer, for the remote control. */
@@ -122,6 +124,7 @@ class LinkClient(
                         val relay = Pairing.relayOrigin(o.optString("relay"))
                         listener.onRelay(relay, if (relay == null) null else Pairing.relayKeyOrNull(o.optString("relayKey")))
                     }
+                    o.optJSONObject("wake")?.let { listener.onWake(it.optString("mac"), it.optString("broadcast")) }
                     listener.onWelcome(o.optString("desktop", pairing.name))
                 }
                 "error" -> if (o.optString("code") == "auth") throw AuthException(o.optString("message"))

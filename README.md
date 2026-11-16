@@ -137,6 +137,10 @@ Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e recone
   1 h ou 2 h** (esses dois pedem a digital; dá para cancelar o desligamento pelo celular ou pela ilha); abrir os apps e arquivos fixados.
 - **Ligações na ilha:** quem está ligando aparece na ilha do PC, com o nome do contato (ligue no app; pede acesso ao
   telefone e aos contatos).
+- **Ligar o PC:** com o PC desligado, o botão **Ligar o PC** (aba PC) manda o "pacote mágico" (Wake-on-LAN) para a
+  placa de rede com cabo. Funciona com o celular no Wi-Fi de casa; de fora, só se o roteador repassar o pacote (porta UDP
+  para o PC + DDNS). Precisa de Wake on LAN ligado na BIOS e na placa, e da inicialização rápida do Windows desligada:
+  *Configurações → Celular → Ligar o PC pelo celular* confere e mostra o caminho.
 
 **Fora de casa (repasse):** com o celular em outra rede (4G, trabalho), PC e celular se falam por um *repasse* na
 Cloudflare que só vê bytes cifrados. A ilha já vem com um repasse público. Se ele falhar ("chave do relay inválida" no

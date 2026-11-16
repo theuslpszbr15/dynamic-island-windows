@@ -223,6 +223,8 @@ class LinkService : Service() {
 
         override fun onClip(text: String) = ClipSync.fromPc(this@LinkService, text)
 
+        override fun onWake(mac: String, broadcast: String) = Wake.save(this@LinkService, mac, broadcast)
+
         override fun onPcState(state: PcState) = Link.update { it.copy(pc = state) }
 
         override fun onApproval(approval: Approval) {

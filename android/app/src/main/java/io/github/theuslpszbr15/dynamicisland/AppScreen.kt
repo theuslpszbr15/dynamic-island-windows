@@ -329,10 +329,7 @@ private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, 
     ) {
         val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
             { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
-        if (!connected) item(span = full) {
-            Text("Ligue-se ao PC para usar o controle remoto e a bandeja.", color = Muted, fontSize = 14.sp,
-                modifier = Modifier.padding(top = 4.dp))
-        }
+        if (!connected) item(span = full) { WakeCard() }
         if (connected) item(span = full) { RemoteCard(state.pc, onRemote) }
         item(span = full) {
             Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
@@ -376,6 +373,39 @@ private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, 
         }
         gridItems(state.tray, key = { it.id }) { TrayTile(it, onOpen) }
         item(span = full) { Spacer(Modifier.height(12.dp)) }
+    }
+}
+
+@Composable
+private fun WakeCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val mac = remember { Wake.mac(context) }
+    var external by remember { mutableStateOf(Wake.external(context)) }
+    Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
+        Text("O PC está desligado?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (mac == null) "Para ligar o PC pelo celular, conecte uma vez com ele ligado: o app guarda o endereço da placa de rede. " +
+                "No PC: Configurações › Celular › Ligar o PC pelo celular mostra o que configurar."
+            else "Com o celular no Wi-Fi de casa, o botão liga o PC (Wake-on-LAN, placa $mac). " +
+                "De fora de casa, só se o roteador repassar o pacote para o PC (endereço abaixo).",
+            color = Muted, fontSize = 13.sp)
+        Button(
+            onClick = {
+                Wake.send(context) { sent ->
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(context,
+                            if (sent > 0) "Pacote enviado: o PC deve ligar em até um minuto" else "Não consegui enviar (sem rede?)",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            enabled = mac != null, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp),
+        ) { Text("Ligar o PC", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        if (mac != null) OutlinedTextField(
+            value = external, onValueChange = { external = it; Wake.setExternal(context, it) }, singleLine = true,
+            label = { Text("Fora de casa: endereço do roteador (opcional)") },
+            placeholder = { Text("meupc.ddns.net:9") },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
     }
 }
 

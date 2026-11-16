@@ -470,6 +470,8 @@ public sealed partial class PhoneLink : IDisposable
                 ["type"] = "welcome", ["v"] = Version, ["desktop"] = Environment.MachineName, ["os"] = "windows",
                 ["relay"] = Relay, // phones paired before the relay learn it here, without a new QR code
                 ["relayKey"] = Relay.Length > 0 ? RelayKeyInUse : "", // only ever sent here, after the token checked out
+                // so the phone can switch this PC on later (Wake-on-LAN), when the link can't reach it
+                ["wake"] = WakeOnLan.Wired() is { } wake ? new JsonObject { ["mac"] = wake.Mac, ["broadcast"] = wake.Broadcast } : null,
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);

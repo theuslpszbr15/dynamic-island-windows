@@ -977,6 +977,44 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.PhoneCalls, v => { S.PhoneCalls = v; S.Save(); }),
             Row("Enviar e receber", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
+        page.Children.Add(WakeCard());
+    }
+
+    /// <summary>"Ligar o PC pelo celular" (Wake-on-LAN): what the PC has, and what usually stops it.</summary>
+    Border WakeCard()
+    {
+        var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+        var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
+        TextBlock Check(bool ok, string text)
+        {
+            var t = Note((ok ? "✓ " : "! ") + text);
+            t.Foreground = ok ? green : orange;
+            t.Margin = new Thickness(0, 0, 0, 4);
+            return t;
+        }
+        var wired = WakeOnLan.Wired();
+        var fast = WakeOnLan.FastStartupOn();
+        var turnOff = new Button { Content = "Desligar a inicialização rápida", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0), IsEnabled = fast };
+        turnOff.Click += (_, _) => { WakeOnLan.TurnOffFastStartup(); Render(); };
+        var devices = new Button { Content = "Abrir o Gerenciador de Dispositivos", Style = (Style)Resources["Action"] };
+        devices.Click += (_, _) => Open("devmgmt.msc");
+        var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(turnOff);
+        buttons.Children.Add(devices);
+        return Card("Ligar o PC pelo celular",
+            Note("Com o PC desligado, o botão \"Ligar o PC\" no app manda o \"pacote mágico\" (Wake-on-LAN) para a placa de rede. " +
+                 "Funciona com o celular no Wi-Fi de casa. De fora de casa, só se o roteador repassar o pacote (veja no app) " +
+                 "ou com uma tomada inteligente + \"ligar quando a energia voltar\" na BIOS."),
+            Check(wired != null, wired != null ? $"Placa com cabo: {wired.Name} ({wired.Mac})" + (wired.Connected ? "" : " — o cabo parece desconectado")
+                                               : "Nenhuma placa de rede com cabo: pelo Wi-Fi quase nenhum PC liga"),
+            Check(!fast, fast ? "Inicialização rápida do Windows ligada: com ela, muitas placas não acordam o PC desligado"
+                              : "Inicialização rápida desligada"),
+            Note("Falta conferir (uma vez):\n" +
+                 "1. BIOS/UEFI: ligue \"Wake on LAN\" (pode se chamar \"Power On By PCI-E\" ou \"Resume by LAN\"; em placas com \"ErP\", deixe ErP desligado).\n" +
+                 "2. Gerenciador de Dispositivos › Adaptadores de rede › sua placa com cabo › Avançado: \"Wake on Magic Packet\" Ativado; " +
+                 "Gerenciamento de energia: marque \"Permitir que este dispositivo ative o computador\".\n" +
+                 "3. Abra o app do celular uma vez com o PC ligado: ele guarda o endereço da placa."),
+            buttons);
     }
 
     // Step one: get the APK onto the phone by scanning a QR code with its camera.
