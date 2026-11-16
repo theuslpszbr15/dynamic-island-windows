@@ -47,6 +47,7 @@ public partial class IslandWindow
             _phone.History = History;
         }
         _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);
+        UpdatePhoneSend();
         if (_phone.Running) return;
         try { _phone.Start(); PhoneError = null; }
         catch (Exception ex)
@@ -169,8 +170,25 @@ public partial class IslandWindow
 
     public bool PhoneReady => CanSendToPhone;
 
-    public void UpdatePhoneSend() =>
+    public void UpdatePhoneSend()
+    {
         Resources["PhoneSendVisibility"] = CanSendToPhone ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        Resources["PhoneActionsVisibility"] = _settings.PhoneLink && _settings.PhoneFiles
+            ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+    }
+
+    void PhonePick_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        e.Handled = true;
+        var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "Mandar pro celular" };
+        if (dialog.ShowDialog(this) == true) SendToPhone(dialog.FileNames);
+    }
+
+    void PhoneClipboard_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        e.Handled = true;
+        SendClipboardToPhone();
+    }
 
     const string NoPhone = "Nenhum celular conectado";
 

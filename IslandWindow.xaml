@@ -153,6 +153,7 @@
         </Style>
 
         <Visibility x:Key="PhoneSendVisibility">Collapsed</Visibility>
+        <Visibility x:Key="PhoneActionsVisibility">Collapsed</Visibility>
 
         <DataTemplate x:Key="FileTemplate" DataType="{x:Type local:FileItem}">
             <Grid x:Name="Tile" Width="76" Margin="0,0,4,0" Background="Transparent" Cursor="Hand" ToolTip="{Binding Path}"
@@ -592,6 +593,26 @@
                                     <Grid.RenderTransform>
                                         <TranslateTransform />
                                     </Grid.RenderTransform>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- shown while the phone link is on (PhoneActionsVisibility); without a phone connected they say so -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="{DynamicResource PhoneActionsVisibility}">
+                                        <TextBlock Text="Pro celular" FontSize="11" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,6" />
+                                        <Button Style="{StaticResource Chip}" Margin="0,0,0,6" ToolTip="Escolher arquivos e mandar pro celular" Click="PhonePick_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8E5;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <TextBlock Text="Arquivo" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Chip}" Margin="0" ToolTip="Mandar o que está copiado (texto, imagem ou arquivos)" Click="PhoneClipboard_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8C8;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <TextBlock Text="Copiado" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
                                     <ScrollViewer x:Name="FilesScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                                         <ItemsControl x:Name="FilesList" ItemTemplate="{StaticResource FileTemplate}">
                                             <ItemsControl.ItemsPanel>
@@ -605,9 +626,9 @@
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8B7;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
                                         <TextBlock Text="Arraste arquivos até a ilha" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
                                         <TextBlock Text="Eles ficam guardados aqui para você arrastar de volta depois" FontSize="11.5"
-                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <Grid x:Name="DropHint" Visibility="Collapsed" Background="#CC000000">
+                                    <Grid x:Name="DropHint" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#CC000000">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <!-- The phone side: only while a phone is connected -->

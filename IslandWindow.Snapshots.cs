@@ -52,8 +52,13 @@ public partial class IslandWindow
         await Shot("06-expanded-system");
         foreach (var path in new[] { Environment.ProcessPath!, Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), @"C:\Windows\notepad.exe" })
             Files.Add(new FileItem(path));
+        var phoneLink = _settings.PhoneLink;
+        _settings.PhoneLink = true;
+        UpdatePhoneSend();
         ShowPage(PageFiles, 1);
         await Shot("07-expanded-files");
+        _settings.PhoneLink = phoneLink;
+        UpdatePhoneSend();
         SetExpanded(false);
 
         // Real end-to-end path: hook process -> named pipe -> island.
