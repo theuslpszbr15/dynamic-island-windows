@@ -335,12 +335,25 @@ public partial class IslandWindow
         ApplyPhoneLink();
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
-        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "agents", "phone", "tray", "updates", "phone-download" })
+        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "agents", "phone", "phone-end", "tray", "updates", "phone-download" })
         {
             if (section == "phone-download") settingsWindow.ShowDownloadQr();
-            else settingsWindow.Navigate(section);
+            else settingsWindow.Navigate(section == "phone-end" ? "phone" : section);
             await Task.Delay(700);
             var root = (FrameworkElement)settingsWindow.Content;
+            if (section == "phone-end")
+            {
+                // the page's scroller is the tallest one; the Wake-on-LAN card sits at its end
+                System.Windows.Controls.ScrollViewer? page = null;
+                void Find(DependencyObject node)
+                {
+                    if (node is System.Windows.Controls.ScrollViewer s && (page == null || s.ExtentHeight > page.ExtentHeight)) page = s;
+                    for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Find(VisualTreeHelper.GetChild(node, i));
+                }
+                Find(root);
+                page?.ScrollToEnd();
+                await Task.Delay(300);
+            }
             var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
             image.Render(root);
             var png = new PngBitmapEncoder();

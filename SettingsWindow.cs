@@ -980,40 +980,69 @@ public sealed partial class SettingsWindow : DarkWindow
         page.Children.Add(WakeCard());
     }
 
-    /// <summary>"Ligar o PC pelo celular" (Wake-on-LAN): what the PC has, and what usually stops it.</summary>
+    bool? _wakeArmed;
+    bool _wakeBusy;
+
+    /// <summary>"Ligar o PC pelo celular" (Wake-on-LAN) in three steps: Windows (one click), BIOS (restart into it, with
+    /// where the switch is on this board), phone (connect once).</summary>
     Border WakeCard()
     {
         var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
         var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
-        TextBlock Check(bool ok, string text)
+        TextBlock Step(bool ok, string text)
         {
-            var t = Note((ok ? "✓ " : "! ") + text);
+            var t = Note((ok ? "✓ " : "• ") + text);
             t.Foreground = ok ? green : orange;
-            t.Margin = new Thickness(0, 0, 0, 4);
+            t.FontWeight = FontWeights.SemiBold;
+            t.Margin = new Thickness(0, 10, 0, 2);
             return t;
         }
+        Button Action(string text, bool enabled = true) =>
+            new() { Content = text, Style = (Style)Resources["Action"], IsEnabled = enabled, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+
         var wired = WakeOnLan.Wired();
-        var fast = WakeOnLan.FastStartupOn();
-        var turnOff = new Button { Content = "Desligar a inicialização rápida", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0), IsEnabled = fast };
-        turnOff.Click += (_, _) => { WakeOnLan.TurnOffFastStartup(); Render(); };
-        var devices = new Button { Content = "Abrir o Gerenciador de Dispositivos", Style = (Style)Resources["Action"] };
-        devices.Click += (_, _) => Open("devmgmt.msc");
-        var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
-        buttons.Children.Add(turnOff);
-        buttons.Children.Add(devices);
+        if (wired == null)
+            return Card("Ligar o PC pelo celular",
+                Note("Este PC não tem placa de rede com cabo. Pelo Wi-Fi quase nenhum PC liga desligado: ligue um cabo de rede no roteador e volte aqui."));
+
+        _wakeArmed ??= WakeOnLan.CardArmed(wired);
+        var windowsReady = _wakeArmed == true && !WakeOnLan.FastStartupOn();
+        var prepare = Action(_wakeBusy ? "Preparando…" : windowsReady ? "Preparar de novo" : "Preparar o Windows", !_wakeBusy);
+        prepare.Click += async (_, _) =>
+        {
+            _wakeBusy = true;
+            Render();
+            var ok = await Task.Run(() => WakeOnLan.Prepare(wired));
+            _wakeBusy = false;
+            _wakeArmed = null;
+            Render();
+            if (!ok) DarkDialog.Ask(this, "Ligar o PC pelo celular", "O Windows precisa da sua permissão (clique em Sim na janela que aparece).", "OK", null);
+        };
+
+        var (maker, where) = WakeOnLan.BiosHint();
+        var bios = Action("Reiniciar na BIOS");
+        bios.Click += (_, _) =>
+        {
+            if (!DarkDialog.Ask(this, "Reiniciar na BIOS",
+                    $"Salve o que estiver aberto: o PC reinicia agora e abre a BIOS.\n\nLá: {where}.\nDepois salve e saia (geralmente F10).",
+                    "Reiniciar")) return;
+            if (!WakeOnLan.RestartToBios())
+                DarkDialog.Ask(this, "Reiniciar na BIOS",
+                    "Este PC não abre a BIOS pelo Windows. Reinicie e aperte Delete ou F2 assim que a tela acender.", "OK", null);
+        };
+
+        var phoneReady = Island.PhoneReady;
         return Card("Ligar o PC pelo celular",
-            Note("Com o PC desligado, o botão \"Ligar o PC\" no app manda o \"pacote mágico\" (Wake-on-LAN) para a placa de rede. " +
-                 "Funciona com o celular no Wi-Fi de casa. De fora de casa, só se o roteador repassar o pacote (veja no app)."),
-            Check(wired != null, wired != null ? $"Placa com cabo: {wired.Name} ({wired.Mac})" + (wired.Connected ? "" : " — o cabo parece desconectado")
-                                               : "Nenhuma placa de rede com cabo: pelo Wi-Fi quase nenhum PC liga"),
-            Check(!fast, fast ? "Inicialização rápida do Windows ligada: com ela, muitas placas não acordam o PC desligado"
-                              : "Inicialização rápida desligada"),
-            Note("Falta conferir (uma vez):\n" +
-                 "1. BIOS/UEFI: ligue \"Wake on LAN\" (pode se chamar \"Power On By PCI-E\" ou \"Resume by LAN\"; em placas com \"ErP\", deixe ErP desligado).\n" +
-                 "2. Gerenciador de Dispositivos › Adaptadores de rede › sua placa com cabo › Avançado: \"Wake on Magic Packet\" Ativado; " +
-                 "Gerenciamento de energia: marque \"Permitir que este dispositivo ative o computador\".\n" +
-                 "3. Abra o app do celular uma vez com o PC ligado: ele guarda o endereço da placa."),
-            buttons);
+            Note($"Com o PC desligado e o celular no Wi-Fi de casa, o botão \"Ligar o PC\" do app liga este PC pela placa {wired.Name}" +
+                 (wired.Connected ? "." : " (o cabo parece desconectado).") + " Faça os 3 passos uma vez:"),
+            Step(windowsReady, windowsReady ? "1. Windows pronto" : "1. Windows: um clique arruma tudo"),
+            Note("Desliga a inicialização rápida e deixa a placa de rede ligar o PC. O Windows pede permissão uma vez; a internet pisca por alguns segundos."),
+            prepare,
+            Step(false, "2. BIOS: uma opção, uma vez"),
+            Note((maker.Length > 0 ? $"Placa {maker}: " : "") + where + ". O botão reinicia direto nela."),
+            bios,
+            Step(phoneReady, phoneReady ? "3. Celular conectado: já sabe o endereço desta placa" : "3. Celular: abra o app uma vez com o PC ligado"),
+            Note("Pronto: desligue o PC e toque em \"Ligar o PC\" no celular (aba PC)."));
     }
 
     // Step one: get the APK onto the phone by scanning a QR code with its camera.

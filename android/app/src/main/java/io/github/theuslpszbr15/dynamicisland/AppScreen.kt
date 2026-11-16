@@ -384,7 +384,7 @@ private fun WakeCard() {
     Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
         Text("O PC está desligado?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         Text(if (mac == null) "Para ligar o PC pelo celular, conecte uma vez com ele ligado: o app guarda o endereço da placa de rede. " +
-                "No PC: Configurações › Celular › Ligar o PC pelo celular mostra o que configurar."
+                "No PC: Configurações › Celular › Ligar o PC pelo celular, 3 passos rápidos (uma vez só)."
             else "Com o celular no Wi-Fi de casa, o botão liga o PC (Wake-on-LAN, placa $mac). " +
                 "De fora de casa, só se o roteador repassar o pacote para o PC (endereço abaixo).",
             color = Muted, fontSize = 13.sp)
