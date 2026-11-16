@@ -13,7 +13,7 @@
     <StartupObject>DynamicIsland.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\DynamicIsland.ico</ApplicationIcon>
-    <Version>1.7.2</Version>
+    <Version>1.7.3</Version>
     <Product>Dynamic Island</Product>
     <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
@@ -52,6 +52,11 @@
   <ItemGroup>
     <!-- GitHub "owner/name" that updates, links and the lyrics User-Agent point to: change it here in a fork. -->
     <AssemblyMetadata Include="UpdateRepository" Value="theuslpszbr15/dynamic-island-windows" />
+    <!-- the Android app built alongside: phones with an older one are told to update -->
+    <AssemblyMetadata Include="AndroidVersionCode" Condition="Exists('android\app\build.gradle.kts')"
+                      Value="$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\android\app\build.gradle.kts')), 'versionCode\s*=\s*(\d+)').Result('$1'))" />
+    <AssemblyMetadata Include="AndroidVersionName" Condition="Exists('android\app\build.gradle.kts')"
+                      Value="$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\android\app\build.gradle.kts')), 'versionName\s*=\s*&quot;([^&quot;]+)&quot;').Result('$1'))" />
     <InternalsVisibleTo Include="DynamicIsland.Tests" />
   </ItemGroup>
 

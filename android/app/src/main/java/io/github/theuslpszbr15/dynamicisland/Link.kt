@@ -31,6 +31,8 @@ data class LinkUi(
     val initialTab: Int = 0,
     /** The PC's song, volume and shutdown timer (remote control); null until the PC says. */
     val pc: PcState? = null,
+    /** A newer app than this one exists (the PC said so); null when up to date. */
+    val update: AppUpdate.Available? = null,
 )
 
 /** What the UI and the notifications show; the service feeds it, the UI answers through it. */

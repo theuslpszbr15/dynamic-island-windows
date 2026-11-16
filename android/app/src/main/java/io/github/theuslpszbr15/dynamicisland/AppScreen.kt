@@ -268,6 +268,14 @@ private fun AgentsTab(
             Notice("As notificações estão desligadas: os pedidos de permissão chegam sem aviso e só aparecem com o app aberto.",
                 "Ativar notificações", onFixNotifications)
         }
+        state.update?.let { update ->
+            item {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Notice("Tem versão nova do app (${update.name}). Atualize para tudo funcionar igual à ilha do PC.", "Atualizar") {
+                    AppUpdate.open(context, update.url)
+                }
+            }
+        }
         when (state.status) {
             LinkStatus.AuthFailed -> item {
                 Notice("O PC trocou o código de pareamento. Escaneie o código novo.", "Escanear", onScan)

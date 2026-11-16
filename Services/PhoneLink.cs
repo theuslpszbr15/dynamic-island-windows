@@ -34,6 +34,18 @@ public sealed partial class PhoneLink : IDisposable
 {
     public const int Version = 1;
     public const int DefaultPort = 47900;
+
+    /// <summary>The Android app built with this PC version (android/app/build.gradle.kts, read at build time).</summary>
+    public static readonly int AndroidVersionCode = int.TryParse(Metadata("AndroidVersionCode"), out var code) ? code : 0;
+    public static readonly string AndroidVersionName = Metadata("AndroidVersionName") ?? "";
+    public static string AndroidApkUrl => $"https://github.com/{Updater.Repository}/releases/latest/download/DynamicIsland-Android.apk";
+
+    static string? Metadata(string key) => typeof(PhoneLink).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+        .Cast<System.Reflection.AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value;
+
+    /// <summary>Raised on the UI thread when a phone connects with an app older than <see cref="AndroidVersionCode"/>.</summary>
+    public event Action<string>? OldApp;
     // MaxPeers counts paired phones; connections still in the TLS/hello stage have their own small budget (and
     // per address), so someone on the network opening sockets can't lock the real phone out. Connections from the
     // relay have no address and a budget of their own.
@@ -457,6 +469,8 @@ public sealed partial class PhoneLink : IDisposable
                     return;
                 }
                 peer.Device = Cut(Str(root, "device") ?? "Android", 40);
+                // apps before 1.3.4 don't say: 0
+                peer.App = root.TryGetProperty("app", out var app) && app.TryGetInt32(out var appCode) ? appCode : 0;
             }
             peer.Since = DateTime.Now;
             peer.Authenticated = true;
@@ -464,6 +478,7 @@ public sealed partial class PhoneLink : IDisposable
             {
                 PhonesChanged?.Invoke();
                 PhoneJoined?.Invoke(peer.Device, peer.Relay);
+                if (peer.App < AndroidVersionCode) OldApp?.Invoke(peer.Device);
             });
             await peer.SendAsync(new JsonObject
             {
@@ -472,6 +487,9 @@ public sealed partial class PhoneLink : IDisposable
                 ["relayKey"] = Relay.Length > 0 ? RelayKeyInUse : "", // only ever sent here, after the token checked out
                 // so the phone can switch this PC on later (Wake-on-LAN), when the link can't reach it
                 ["wake"] = WakeOnLan.Wired() is { } wake ? new JsonObject { ["mac"] = wake.Mac, ["broadcast"] = wake.Broadcast } : null,
+                // so an older app can offer its own update
+                ["android"] = AndroidVersionCode > 0
+                    ? new JsonObject { ["code"] = AndroidVersionCode, ["name"] = AndroidVersionName, ["url"] = AndroidApkUrl } : null,
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
@@ -947,6 +965,8 @@ public sealed partial class PhoneLink : IDisposable
         public SslStream? Stream;
         public bool Authenticated;
         public string Device = "";
+        /// <summary>The app's versionCode from the hello (0: an app too old to say).</summary>
+        public int App;
         public DateTime Since;
         /// <summary>A connection that only carries a file (not a phone in the list, not a pending hello).</summary>
         public volatile bool Fetching;

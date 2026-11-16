@@ -33,6 +33,7 @@ public partial class IslandWindow
             _phone.Decision += OnPhoneDecision;
             _phone.Open += OnPhoneOpen;
             _phone.PhoneJoined += OnPhoneJoined;
+            _phone.OldApp += OnOldApp;
             _phone.PhonesChanged += UpdatePhoneSend;
             _phone.FileStatus += OnPhoneFile;
             _phone.IncomingOffer += OnPhoneIncoming;
@@ -62,6 +63,16 @@ public partial class IslandWindow
     }
 
     // Coming in over the internet is new, so it's worth a glance: if it wasn't you, "Parear de novo" cuts it off.
+    readonly HashSet<string> _oldAppWarned = [];
+
+    // Once per phone while the island runs: the QR code to download the new app is one click away.
+    void OnOldApp(string device)
+    {
+        if (SnapshotMode || !_oldAppWarned.Add(device)) return;
+        ShowInfo("\uE8EA", "App do celular desatualizado", $"Atualize para {PhoneLink.AndroidVersionName}",
+            glyphColor: System.Windows.Media.Color.FromRgb(0xFF, 0x9F, 0x0A), action: () => ((App)System.Windows.Application.Current).ShowAppDownload(), seconds: 8);
+    }
+
     void OnPhoneJoined(string device, bool viaRelay)
     {
         if (!viaRelay || SnapshotMode) return;

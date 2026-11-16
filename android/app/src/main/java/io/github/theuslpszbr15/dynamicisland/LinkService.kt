@@ -72,7 +72,7 @@ class LinkService : Service() {
             rerouting = false
             Link.update { it.copy(pairing = pairing, status = LinkStatus.Connecting, message = null, viaRelay = false) }
             val client = LinkClient(pairing, "${Build.MANUFACTURER} ${Build.MODEL}".take(40), route,
-                if (hasRelay) LinkClient.LAN_FIRST_TIMEOUT_MS else LinkClient.CONNECT_TIMEOUT_MS)
+                if (hasRelay) LinkClient.LAN_FIRST_TIMEOUT_MS else LinkClient.CONNECT_TIMEOUT_MS, AppUpdate.installed(this))
             Link.client = client
             try {
                 client.run(listener)
@@ -226,6 +226,8 @@ class LinkService : Service() {
         override fun onWake(mac: String, broadcast: String) = Wake.save(this@LinkService, mac, broadcast)
 
         override fun onPcState(state: PcState) = Link.update { it.copy(pc = state) }
+
+        override fun onAppVersion(code: Int, name: String, url: String) = AppUpdate.heard(this@LinkService, code, name, url)
 
         override fun onApproval(approval: Approval) {
             Link.update { s -> s.copy(approvals = s.approvals.filterNot { it.fingerprint == approval.fingerprint } + approval) }

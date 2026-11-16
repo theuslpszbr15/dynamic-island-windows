@@ -63,6 +63,8 @@ class LinkClient(
     private val device: String,
     val route: Route = Route.Lan,
     private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
+    /** This app's versionCode, so the PC can say when a newer one exists. */
+    private val appVersion: Int = 0,
 ) : Closeable {
 
     interface Listener {
@@ -92,6 +94,8 @@ class LinkClient(
         fun onClip(text: String) {}
         /** The PC's song, volume and shutdown timer, for the remote control. */
         fun onPcState(state: PcState) {}
+        /** The app version built with the PC's island, and where to download it. */
+        fun onAppVersion(code: Int, name: String, url: String) {}
     }
 
     private val writeLock = Any()
@@ -109,7 +113,7 @@ class LinkClient(
             if (closed) return else throw e
         }
         output = link.output
-        send(JSONObject().put("type", "hello").put("v", 1).put("token", pairing.token).put("device", device))
+        send(JSONObject().put("type", "hello").put("v", 1).put("token", pairing.token).put("device", device).put("app", appVersion))
 
         val input = link.input.buffered()
         while (!closed) {
@@ -125,6 +129,11 @@ class LinkClient(
                         listener.onRelay(relay, if (relay == null) null else Pairing.relayKeyOrNull(o.optString("relayKey")))
                     }
                     o.optJSONObject("wake")?.let { listener.onWake(it.optString("mac"), it.optString("broadcast")) }
+                    o.optJSONObject("android")?.let {
+                        val url = it.optString("url")
+                        if (it.optInt("code") > 0 && url.startsWith("https://github.com/"))
+                            listener.onAppVersion(it.optInt("code"), it.optString("name").take(20), url)
+                    }
                     listener.onWelcome(o.optString("desktop", pairing.name))
                 }
                 "error" -> if (o.optString("code") == "auth") throw AuthException(o.optString("message"))

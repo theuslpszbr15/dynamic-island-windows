@@ -150,6 +150,13 @@ public partial class App : Application
         _settingsWindow!.ShowTransfers(tab);
     }
 
+    /// <summary>Settings › Celular with the QR code that downloads the Android app.</summary>
+    public void ShowAppDownload()
+    {
+        ShowSettings();
+        _settingsWindow!.ShowDownloadQr();
+    }
+
     public void ShowSettings(string? page = null)
     {
         if (_settingsWindow == null)
