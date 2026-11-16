@@ -1003,8 +1003,7 @@ public sealed partial class SettingsWindow : DarkWindow
         buttons.Children.Add(devices);
         return Card("Ligar o PC pelo celular",
             Note("Com o PC desligado, o botão \"Ligar o PC\" no app manda o \"pacote mágico\" (Wake-on-LAN) para a placa de rede. " +
-                 "Funciona com o celular no Wi-Fi de casa. De fora de casa, só se o roteador repassar o pacote (veja no app) " +
-                 "ou com uma tomada inteligente + \"ligar quando a energia voltar\" na BIOS."),
+                 "Funciona com o celular no Wi-Fi de casa. De fora de casa, só se o roteador repassar o pacote (veja no app)."),
             Check(wired != null, wired != null ? $"Placa com cabo: {wired.Name} ({wired.Mac})" + (wired.Connected ? "" : " — o cabo parece desconectado")
                                                : "Nenhuma placa de rede com cabo: pelo Wi-Fi quase nenhum PC liga"),
             Check(!fast, fast ? "Inicialização rápida do Windows ligada: com ela, muitas placas não acordam o PC desligado"
