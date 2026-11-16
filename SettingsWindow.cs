@@ -44,7 +44,45 @@ public sealed partial class SettingsWindow : DarkWindow
         SetUpTransfers();
         _app.Island.Discord.StatusChanged += OnDiscordStatus;
         Closed += (_, _) => _app.Island.Discord.StatusChanged -= OnDiscordStatus;
+        Activated += (_, _) => AdoptOwnRelay();
         Render();
+    }
+
+    string? _relayAdopted;
+
+    // The "Criar meu repasse" window leaves its address behind; coming back here puts it to use.
+    void AdoptOwnRelay()
+    {
+        if (RelaySetup.TakeResult() is not { } relay) return;
+        _app.SetPhoneRelay(relay);
+        _app.SetPhoneRelayMode(PhoneRelayMode.Own);
+        if (!S.PhoneLink) _app.TogglePhoneLink();
+        _relayAdopted = relay;
+        Navigate("phone");
+    }
+
+    FrameworkElement RelaySetupRows()
+    {
+        var create = new Button { Content = "Criar meu repasse", Style = (Style)Resources["Action"] };
+        create.Click += (_, _) =>
+        {
+            try { RelaySetup.Start(); }
+            catch (Exception ex) { DarkDialog.Ask(this, "Criar meu repasse", "Não consegui abrir o assistente: " + ex.Message, "OK"); }
+        };
+        var panel = new StackPanel();
+        panel.Children.Add(Row("Criar meu repasse (grátis)",
+            "Se o repasse público falhar, ou para não ter limites: a ilha publica um repasse só seu na Cloudflare. " +
+            "Você só entra na sua conta pelo navegador." + (RelaySetup.HasNode() ? "" : " Precisa do Node.js: o assistente abre o download."),
+            create));
+        panel.Children.Add(Note(
+            "Passo a passo:\n" +
+            "1. Clique em Criar meu repasse. Abre uma janela azul do PowerShell que faz o resto.\n" +
+            "2. Se faltar o Node.js, ela abre nodejs.org: instale a versão LTS e clique no botão de novo.\n" +
+            "3. O navegador abre a Cloudflare: entre (ou crie uma conta grátis, só e-mail e senha) e clique em Allow.\n" +
+            "4. Se a janela perguntar sobre um subdomínio workers.dev, digite y e escolha um nome qualquer.\n" +
+            "5. Quando aparecer \"Pronto!\", volte aqui: a ilha passa a usar o seu repasse sozinha.\n" +
+            "6. No celular, escaneie o código de pareamento de novo."));
+        return panel;
     }
 
     void OnDiscordStatus()
@@ -576,6 +614,8 @@ public sealed partial class SettingsWindow : DarkWindow
         var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
         var orange = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
         if (S.PhoneRelayMode == PhoneRelayMode.Off) State("Desligado: o celular só conecta na mesma rede.", Muted);
+        else if (_relayAdopted != null && S.PhoneRelay == _relayAdopted && island.Phone is { RelayConnected: true })
+            State($"✓ Seu repasse está no ar ({_relayAdopted}). Escaneie o código de pareamento de novo no celular.", green);
         else if (!S.PhoneLink || island.Phone is not { Running: true } running) State("Ligue a ligação com o celular para usar o repasse.", Muted);
         else if (running.RelayProblem is { } problem) State(problem, orange);
         else if (running.RelayConnected) State("✓ Conectado ao repasse: o celular alcança este PC de qualquer rede.", green);
@@ -589,7 +629,7 @@ public sealed partial class SettingsWindow : DarkWindow
                 Note(about + (S.PhoneRelayMode == PhoneRelayMode.Public
                     ? " O público é grátis e tem limites (50 MB por dia, arquivos até 10 MB); para mais, use o seu próprio."
                     : "")),
-                mode, state);
+                mode, state, RelaySetupRows());
         return OwnRelayCard(island, mode, state, about);
     }
 
@@ -661,7 +701,7 @@ public sealed partial class SettingsWindow : DarkWindow
             Row("Endereço do repasse", "Ex.: wss://seu-repasse.workers.dev. O celular recebe o endereço sozinho.", edit),
             Row("Chave do repasse (opcional)", hasKey ? "Salva (protegida no Windows). O celular recebe junto com o endereço."
                                                       : "Só quem tem a chave usa o seu repasse. O celular recebe junto com o endereço.", keyEdit),
-            status);
+            status, RelaySetupRows());
     }
 
     void Phone(Panel page)

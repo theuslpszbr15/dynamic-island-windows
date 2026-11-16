@@ -153,6 +153,10 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     /// <summary>A relay close code in words for the island, or null when it isn't one the person can act on.</summary>
+    public const string RelayRefusedPublicMessage =
+        "O repasse público está recusando conexões agora. Crie o seu (grátis) em \"Criar meu repasse\", logo abaixo.";
+    public const string RelayRefusedOwnMessage = "Seu repasse recusou a chave: confira a chave do repasse abaixo.";
+
     public static string? RelayCloseMessage(int? code) => code switch
     {
         RelayLimit => RelayLimitMessage,
@@ -720,6 +724,8 @@ public sealed partial class PhoneLink : IDisposable
                 catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return; }
                 catch (Exception ex)
                 {
+                    if (ws.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized)
+                        SetRelayProblem(_relayOwn ? RelayRefusedOwnMessage : RelayRefusedPublicMessage);
                     // One line per outage, not one per retry.
                     if (failures++ == 0) Log.Error("PhoneLink.Relay", ex);
                 }
@@ -736,6 +742,7 @@ public sealed partial class PhoneLink : IDisposable
     ClientWebSocket NewRelaySocket()
     {
         var ws = new ClientWebSocket();
+        ws.Options.CollectHttpResponseDetails = true;
         ws.Options.KeepAliveInterval = RelayKeepAlive;
         ws.Options.KeepAliveTimeout = RelayKeepAliveTimeout;
         // corporate proxies (407) accept the signed-in Windows user, as browsers do

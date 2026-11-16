@@ -128,7 +128,7 @@ class RelayWire private constructor() : WebSocketListener(), Pipe {
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end(closeError(code, reason))
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = end(when {
-        response?.code == 401 -> RelayException("Chave do relay inválida: conecte uma vez na rede de casa para atualizar")
+        response?.code == 401 -> RelayException("O relay recusou a conexão. No PC: Configurações › Celular › Criar meu repasse, depois escaneie o código de novo")
         response != null -> RelayException("O relay recusou a conexão (HTTP ${response.code})")
         t is UnknownHostException -> RelayException("Sem internet para chegar ao relay")
         t is IOException -> t

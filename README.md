@@ -125,6 +125,18 @@ Desenho do protocolo inspirado no [Coucou](https://github.com/Louis-CFM/coucou) 
 
 Se o IP do PC mudar, o celular procura o PC pareado na rede (UDP 47900) e reconecta sozinho, sem parear de novo.
 
+**Fora de casa (repasse):** com o celular em outra rede (4G, trabalho), PC e celular se falam por um *repasse* na
+Cloudflare que só vê bytes cifrados. A ilha já vem com um repasse público. Se ele falhar ("chave do relay inválida" no
+celular) ou você quiser um sem limites, crie o seu em **Configurações → Celular → Fora de casa → Criar meu repasse**:
+1. Clique em **Criar meu repasse**. Abre uma janela do PowerShell que baixa, instala e publica tudo.
+2. Se faltar o [Node.js](https://nodejs.org/pt/download), ela abre a página: instale a versão LTS e clique de novo.
+3. No navegador, entre na sua conta [Cloudflare](https://dash.cloudflare.com/sign-up) (é grátis) e clique em **Allow**.
+4. Se perguntar sobre um subdomínio `workers.dev`, digite `y` e escolha um nome.
+5. Quando aparecer **Pronto!**, volte às Configurações: a ilha passa a usar o seu repasse sozinha.
+6. No celular, escaneie o código de pareamento de novo.
+
+Detalhes técnicos e o jeito manual: [relay/README.md](relay/README.md).
+
 **Arquivos, fotos, vídeos e textos entre o PC e o celular** (até 30 MB por arquivo, vídeo até 60 MB, até 20 de uma
 vez, texto até 100 mil caracteres):
 - PC → celular: a aba **Enviar e receber** das Configurações (ou menu da bandeja → **Enviar pro celular…**), no estilo do LocalSend, tem **Arquivo**,

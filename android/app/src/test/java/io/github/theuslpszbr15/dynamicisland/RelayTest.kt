@@ -263,7 +263,7 @@ class RelayLinkTest {
         relay.enqueue(MockResponse().setResponseCode(401))
         relay.start()
         val error = runCatching { LinkClient(pairing(), "teste", Route.Relay).run(Quiet()) }.exceptionOrNull()
-        assertTrue("$error", error is RelayException && error.message!!.contains("Chave do relay"))
+        assertTrue("$error", error is RelayException && error.message!!.contains("Criar meu repasse"))
     }
 
     @Test fun withoutAKeyNothingIsSentButTheRoom() {
