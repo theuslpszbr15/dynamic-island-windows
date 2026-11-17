@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -23,6 +23,7 @@ public sealed partial class SettingsWindow : DarkWindow
         ("general", "\uE713", "Geral"),
         ("look", "\uE790", "Aparência"),
         ("island", "\uE8A1", "Na ilha"),
+        ("media", "\uE767", "Mídia e áudio"),
         ("agents", "\uE99A", "Agentes"),
         ("phone", "\uE8EA", "Celular"),
         (TransferPage, "\uE724", "Enviar e receber"),
@@ -62,6 +63,7 @@ public sealed partial class SettingsWindow : DarkWindow
             case "general": General(page); break;
             case "look": Look(page); break;
             case "island": OnIsland(page); break;
+            case "media": Media(page); break;
             case "agents": Agents(page); break;
             case "phone": Phone(page); break;
             case TransferPage: Transfers(page); break;
@@ -216,9 +218,93 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.DesktopPet, _ => _app.ToggleDesktopPet())));
     }
 
+    void Media(Panel page)
+    {
+        var presetChoice = Choice("Modo de reprodução",
+            "Escolha quais fontes de áudio e vídeo podem assumir a ilha.",
+            [
+                (MediaFilterPreset.MusicOnly, "Apenas músicas (recomendado)"),
+                (MediaFilterPreset.MusicAndWeb, "Músicas e navegadores web"),
+                (MediaFilterPreset.All, "Todos os aplicativos"),
+                (MediaFilterPreset.Custom, "Personalizado (escolher na mão)")
+            ],
+            S.MediaFilterPreset,
+            p => { _app.SetMediaPreset(p); Render(); });
+
+        var presetDesc = S.MediaFilterPreset switch
+        {
+            MediaFilterPreset.MusicOnly => "Apenas tocadores de música dedicados (Spotify, Apple Music, Deezer, VLC...). Chamadas de voz (Discord, Teams) e vídeos rápidos em navegadores (TikTok, Reels, Shorts) são ignorados automaticamente.",
+            MediaFilterPreset.MusicAndWeb => "Tocadores de música e abas de navegadores web (YouTube, vídeos na web). Chamadas de voz (Discord, Teams) continuam bloqueadas.",
+            MediaFilterPreset.All => "Qualquer aplicativo do sistema que emitir som. Chamadas de voz continuam protegidas.",
+            MediaFilterPreset.Custom => "Configuração manual: você escolhe exatamente quais aplicativos têm permissão para aparecer na ilha.",
+            _ => ""
+        };
+
+        var restore = new Button { Content = "Restaurar padrões", Style = (Style)Resources["Action"] };
+        restore.Click += (_, _) => { _app.ResetMediaFilter(); Render(); };
+
+        page.Children.Add(Card("Fontes de mídia",
+            presetChoice,
+            Note(presetDesc)));
+
+        var apps = MediaFilter.GetAllKnownApps();
+        var appRows = new List<UIElement>();
+
+        foreach (var category in new[] { MediaAppCategory.Music, MediaAppCategory.Browser, MediaAppCategory.Call, MediaAppCategory.Other })
+        {
+            var categoryApps = apps.Where(a => a.Category == category).OrderBy(a => a.DisplayName).ToList();
+            if (categoryApps.Count == 0) continue;
+
+            var catTitle = category switch
+            {
+                MediaAppCategory.Music => "Tocadores de música",
+                MediaAppCategory.Browser => "Navegadores de internet",
+                MediaAppCategory.Call => "Comunicação e chamadas",
+                _ => "Outros aplicativos"
+            };
+
+            appRows.Add(new TextBlock
+            {
+                Text = catTitle,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 13,
+                Foreground = Accent,
+                Margin = new Thickness(0, 10, 0, 4)
+            });
+
+            foreach (var app in categoryApps)
+            {
+                var allowed = S.IsMediaAppAllowed(app.Key);
+                var row = Toggle(app.DisplayName, $"Processo: {app.Key}", allowed, state =>
+                {
+                    _app.SetMediaAppAllowed(app.Key, state);
+                    Render();
+                });
+                appRows.Add(row);
+            }
+        }
+
+        page.Children.Add(Card("Escolher aplicativos na mão",
+            [
+                Note("Marque os aplicativos autorizados a exibir mídia na ilha. Alterar uma opção ativa o modo Personalizado automaticamente."),
+                .. appRows,
+                Row("Padrões", "Voltar para o modo 'Apenas músicas' e redefinir a lista.", restore)
+            ]));
+
+        page.Children.Add(Card("Opções de mídia",
+            Toggle("Letra da música (LRCLIB)", "A linha que está sendo cantada (requer player compatível como Spotify).",
+                S.ShowLyrics, _ => _app.ToggleLyrics()),
+            Toggle("Vídeos (YouTube, Netflix…)", "Abre avisos ou mantém a pílula aberta durante a reprodução de vídeo.",
+                !S.QuietVideos, _ => _app.ToggleQuietVideos())));
+    }
+
     void OnIsland(Panel page)
     {
+        var openMedia = new Button { Content = "Configurar…", Style = (Style)Resources["Action"] };
+        openMedia.Click += (_, _) => Navigate("media");
+
         page.Children.Add(Card("O que aparece na ilha",
+            Row("Filtro de mídia e som", "Controle quais aplicativos (músicas, navegadores, chamadas) aparecem na ilha.", openMedia),
             Toggle("Notificações do Windows", "WhatsApp, Teams, e-mail… aparecem na ilha com o ícone do app.",
                 S.ShowNotifications, _ => _app.ToggleNotifications()),
             Toggle("Letra da música", "A linha que está sendo cantada, do LRCLIB (precisa de um player que informe a posição, como o app do Spotify).",

@@ -17,6 +17,9 @@ public enum DiscordSource { Window, IslandApp, OwnApp }
 /// for a shortcut, also for alerts that can't wait (the default), or never hide.</summary>
 public enum FullscreenMode { Shortcuts, Alerts, Always }
 
+/// <summary>Preset for filtering which applications can appear as playing media.</summary>
+public enum MediaFilterPreset { MusicOnly, MusicAndWeb, All, Custom }
+
 public sealed class IslandSettings
 {
     public IslandShape Shape { get; set; } = IslandShape.Pill;
@@ -37,6 +40,23 @@ public sealed class IslandSettings
     public bool QuietApprovals { get; set; } = true;
     /// <summary>Videos (YouTube, Netflix…) don't pop up or keep the pill open; still on the media page.</summary>
     public bool QuietVideos { get; set; } = true;
+    /// <summary>Preset controlling which apps can show on the media card.</summary>
+    public MediaFilterPreset MediaFilterPreset { get; set; } = MediaFilterPreset.MusicOnly;
+    /// <summary>Explicit allow/block overrides per application key.</summary>
+    public Dictionary<string, bool> MediaAppFilter { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool IsMediaAppAllowed(string key) =>
+        Services.MediaFilter.IsAllowed(key, this);
+
+    public void SetMediaAppAllowed(string key, bool allowed)
+    {
+        var norm = Services.MediaFilter.NormalizeKey(key);
+        if (!string.IsNullOrEmpty(norm))
+        {
+            MediaAppFilter[norm] = allowed;
+            Save();
+        }
+    }
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay
@@ -73,6 +93,8 @@ public sealed class IslandSettings
     public double? DesktopPetY { get; set; }
     /// <summary>Monday the weekly recap was last offered (yyyy-MM-dd).</summary>
     public string? RecapShown { get; set; }
+    /// <summary>Recently used Spotify playlists (name + optional URI id).</summary>
+    public List<PlaylistSetting>? SpotifyPlaylists { get; set; }
     public int Version { get; set; }
 
     [JsonIgnore] public bool ReadOnly { get; init; }
@@ -102,11 +124,12 @@ public sealed class IslandSettings
         // 2: Coco was only the old default, so files from before Bit move to Bit once.
         // 3: the theme is stored by id instead of its Portuguese name.
         // 4: the public relay is the default for new pairings (see MigrateRelay).
-        if (settings.Version < 4)
+        // 5: Spotify playlists list added.
+        if (settings.Version < 5)
         {
             if (settings.Version < 2 && settings.Mascot == PetSpecies.Coco) settings.Mascot = PetSpecies.Bit;
-            settings.MigrateRelay(existing: settings.Version > 0);
-            settings.Version = 4;
+            if (settings.Version < 4) settings.MigrateRelay(existing: settings.Version > 0);
+            settings.Version = 5;
             settings.Theme = IslandThemes.Normalize(settings.Theme);
             settings.Save();
         }

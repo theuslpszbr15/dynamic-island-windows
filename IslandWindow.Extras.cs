@@ -32,7 +32,7 @@ public partial class IslandWindow
             System.Text.Encoding.UTF8.GetBytes($"{Id}\u001f{SessionKey}\u001f{Command}"))).ToLowerInvariant();
     }
 
-    static readonly TimeSpan ApprovalWait = TimeSpan.FromSeconds(54);
+    static readonly TimeSpan ApprovalWait = ApprovalTiming.IslandWait;
     readonly List<Approval> _approvals = [];
     /// <summary>The quiet pill was opened into the full Allow / Deny panel.</summary>
     bool _approvalOpen;

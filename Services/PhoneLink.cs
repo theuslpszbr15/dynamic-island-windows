@@ -344,7 +344,7 @@ public sealed partial class PhoneLink : IDisposable
     {
         List<Peer> peers;
         lock (_gate) peers = _peers.Where(p => p.Authenticated).ToList();
-        foreach (var peer in peers) _ = peer.SendAsync(line);
+        foreach (var peer in peers) peer.Enqueue(line);
     }
 
     static string Cut(string text, int max) => text.Length <= max ? text : text[..max];
@@ -357,7 +357,15 @@ public sealed partial class PhoneLink : IDisposable
         {
             TcpClient client;
             try { client = await listener.AcceptTcpClientAsync(cancel); }
-            catch { return; }
+            catch (OperationCanceledException) { return; } // the island is closing: clean exit
+            catch (ObjectDisposedException) { return; }
+            catch (SocketException ex)
+            {
+                // A transient network error must not kill the listener (model: AgentHub.LoopAsync).
+                Log.Error("PhoneLink.Accept", ex);
+                try { await Task.Delay(500, cancel); } catch { return; }
+                continue;
+            }
             var remote = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
             bool full;
             // The "local network only" rule is for this listener: relay connections come in through RelayLoop.
@@ -449,38 +457,37 @@ public sealed partial class PhoneLink : IDisposable
                 var text = await peer.ReadLineAsync(idle.Token);
                 if (text == null) return;
                 using var doc = JsonDocument.Parse(text);
-                var root = doc.RootElement;
-                switch (Str(root, "type"))
+                var command = ParseCommand(doc.RootElement);
+                switch (command.Action)
                 {
-                    case "ping":
+                    case PhoneAction.Ping:
                         await peer.SendAsync("""{"type":"pong"}""");
                         break;
-                    case "decision" when Str(root, "fingerprint") is { } fp && Str(root, "decision") is "allow" or "deny":
-                        var decision = Str(root, "decision")!;
-                        _ = _ui.InvokeAsync(() => Decision?.Invoke(fp, decision));
+                    case PhoneAction.Decision:
+                        _ = _ui.InvokeAsync(() => Decision?.Invoke(command.Fingerprint!, command.Decision!));
                         break;
-                    case "open" when Str(root, "id") is { Length: > 0 and <= 64 } id:
-                        _ = _ui.InvokeAsync(() => Open?.Invoke(id));
+                    case PhoneAction.Open:
+                        _ = _ui.InvokeAsync(() => Open?.Invoke(command.Id!));
                         break;
-                    case "fileDecline" when Str(root, "id") is { } id:
-                        EndOffer(id, FileOutcome.Declined);
+                    case PhoneAction.FileDecline:
+                        EndOffer(command.Id!, FileOutcome.Declined);
                         break;
-                    case "fileDone" when Str(root, "id") is { } id:
-                        EndOffer(id, root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True
-                            ? FileOutcome.Received : FileOutcome.Failed);
+                    case PhoneAction.FileDone:
+                        EndOffer(command.Id!, command.Ok ? FileOutcome.Received : FileOutcome.Failed);
                         break;
-                    case "sendOffer":
-                        OnPhoneOffer(peer, root);
+                    case PhoneAction.SendOffer:
+                        OnPhoneOffer(peer, command.Offer);
                         break;
-                    case "sendCancel" when Str(root, "id") is { } id:
-                        CancelIncoming(id);
+                    case PhoneAction.SendCancel:
+                        CancelIncoming(command.Id!);
                         break;
-                    case "bye":
+                    case PhoneAction.Bye:
                         return;
                 }
             }
         }
-        catch { } // bad TLS, bad JSON, line too long, timeout: drop the connection
+        // Only the exception type is logged (never the payload): bad TLS, bad JSON, line too long, timeout: drop the connection.
+        catch (Exception ex) { Log.Warn("PhoneLink.Serve", ex.GetType().Name); }
         finally
         {
             peer.Close();
@@ -535,6 +542,43 @@ public sealed partial class PhoneLink : IDisposable
 
     static string? Str(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    // ───────────────────────── the phone's commands ─────────────────────────
+
+    /// <summary>What the PC does with one JSON line from a phone. Serve's state machine, extracted so tests can
+    /// drive it; <see cref="PhoneAction.None"/> means the line is fine but asks for nothing.</summary>
+    internal enum PhoneAction { None, Ping, Decision, Open, FileDecline, FileDone, SendOffer, SendCancel, Bye }
+
+    internal sealed record PhoneCommand(PhoneAction Action, string? Fingerprint = null, string? Decision = null,
+        string? Id = null, bool Ok = false, JsonElement Offer = default);
+
+    /// <summary>Lines that don't carry every field their action needs become <see cref="PhoneAction.None"/>
+    /// (nothing happens), exactly like the guards they replace.</summary>
+    internal static PhoneCommand ParseCommand(JsonElement root)
+    {
+        var id = Str(root, "id");
+        switch (Str(root, "type"))
+        {
+            case "ping": return new PhoneCommand(PhoneAction.Ping);
+            case "decision" when Str(root, "fingerprint") is { } fp && Str(root, "decision") is "allow" or "deny":
+                return new PhoneCommand(PhoneAction.Decision, Fingerprint: fp, Decision: Str(root, "decision"));
+            case "open" when id is { Length: > 0 and <= 64 }:
+                return new PhoneCommand(PhoneAction.Open, Id: id);
+            case "fileDecline" when id != null:
+                return new PhoneCommand(PhoneAction.FileDecline, Id: id);
+            case "fileDone" when id != null:
+                return new PhoneCommand(PhoneAction.FileDone, Id: id,
+                    Ok: root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True);
+            case "sendOffer":
+                return new PhoneCommand(PhoneAction.SendOffer, Offer: root);
+            case "sendCancel" when id != null:
+                return new PhoneCommand(PhoneAction.SendCancel, Id: id);
+            case "bye":
+                return new PhoneCommand(PhoneAction.Bye);
+            default:
+                return new PhoneCommand(PhoneAction.None);
+        }
+    }
 
     static bool SameSecret(string given, string expected) =>
         CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(given)), SHA256.HashData(Encoding.UTF8.GetBytes(expected)));
@@ -666,7 +710,7 @@ public sealed partial class PhoneLink : IDisposable
         var failures = 0;
         while (!cancel.IsCancellationRequested)
         {
-            using (var ws = NewRelaySocket())
+            using (var ws = NewRelaySocket(relay))
             {
                 try
                 {
@@ -732,15 +776,35 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     /// <summary>A socket for the relay: WebSocket pings every 30 s (dead links found in a minute, the room stays asleep),
-    /// and the relay key only for an own relay.</summary>
-    ClientWebSocket NewRelaySocket()
+    /// the relay key only for an own relay, and — for the public relay — the leaf certificate pinned by its
+    /// SHA-256, on top of the normal validation (an own relay gets just the normal validation).</summary>
+    ClientWebSocket NewRelaySocket(string relay)
     {
         var ws = new ClientWebSocket();
         ws.Options.KeepAliveInterval = RelayKeepAlive;
         ws.Options.KeepAliveTimeout = RelayKeepAliveTimeout;
+        if (relay == PublicRelay) ws.Options.RemoteCertificateValidationCallback = PublicRelayValidation;
         if (RelayKeyInUse.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + RelayKeyInUse);
         return ws;
     }
+
+    /// <summary>SHA-256 of the public relay's leaf certificate and of its issuer, as a fallback while the
+    /// Cloudflare rotation is in flight. Add the new one here when the relay presents a new certificate.</summary>
+    public static readonly string[] PublicRelayPins =
+    [
+        "89e7eb57de209bd003fa0ce56aab4c036bcabe015b3e199aeb36b1ce30072529", // leaf CN=brendoribeiron.workers.dev (YE1)
+        "a2372d06431e9716365eeed47ec020351497d182fcc038e457e58168a03cac07", // issuer CN=YE1, O=Let's Encrypt, C=US
+    ];
+
+    // Additive to the normal validation (never weaker): the chain must validate as usual and still carry a pin.
+    static bool PublicRelayValidation(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
+    {
+        if (certificate is not X509Certificate2 cert || chain == null || errors != SslPolicyErrors.None) return false;
+        return chain.ChainElements.Cast<X509ChainElement>().Any(e => PublicRelayPins.Contains(Sha256Hex(e.Certificate)));
+    }
+
+    static string Sha256Hex(X509Certificate2 certificate) =>
+        Convert.ToHexString(SHA256.HashData(certificate.RawData)).ToLowerInvariant();
 
     /// <summary>The answer to the relay's {"type":"challenge","nonce":…} for <paramref name="room"/>: the pairing's
     /// Ed25519 public key and its signature on "dynamicisland-relay-auth|room|nonce". Null if it isn't a challenge.</summary>
@@ -801,7 +865,7 @@ public sealed partial class PhoneLink : IDisposable
     async Task AcceptRelay(string relay, string room, string conn, CancellationToken cancel)
     {
         Peer peer;
-        var ws = NewRelaySocket();
+        var ws = NewRelaySocket(relay);
         lock (_gate)
         {
             if (_peers.Count(p => p.Authenticated) >= MaxPeers || _peers.Count(p => !p.Authenticated && p.Relay && !p.Fetching) >= MaxPendingRelay)
@@ -904,6 +968,51 @@ public sealed partial class PhoneLink : IDisposable
             finally { _write.Release(); }
         }
 
+        // Control lines from Broadcast: one bounded outbox per peer, so a long transfer on this connection
+        // (or the phone reusing it to fetch) can't pile up unbounded waiting writes — the drain writes the
+        // batch in one go, and SendRawAsync opens a window between chunks for it to flow.
+        const int OutboxLimit = 64;
+        readonly object _outboxGate = new();
+        readonly Queue<string> _outbox = new();
+        int _draining;
+
+        public void Enqueue(string line)
+        {
+            if (Stream == null) return;
+            lock (_outboxGate)
+            {
+                if (_outbox.Count >= OutboxLimit) _outbox.Dequeue(); // too far behind: the newest matters
+                _outbox.Enqueue(line);
+            }
+            if (Interlocked.CompareExchange(ref _draining, 1, 0) == 0) _ = DrainOutboxAsync();
+        }
+
+        async Task DrainOutboxAsync()
+        {
+            try
+            {
+                while (true)
+                {
+                    string[] batch;
+                    lock (_outboxGate)
+                    {
+                        if (_outbox.Count == 0) { _draining = 0; return; }
+                        batch = [.. _outbox];
+                        _outbox.Clear();
+                    }
+                    await _write.WaitAsync();
+                    try
+                    {
+                        foreach (var line in batch) await Stream!.WriteAsync(Encoding.UTF8.GetBytes(line + "\n"));
+                        await Stream!.FlushAsync();
+                    }
+                    catch { Close(); lock (_outboxGate) _outbox.Clear(); return; }
+                    finally { _write.Release(); }
+                }
+            }
+            catch { Close(); }
+        }
+
         /// <summary>Exactly <paramref name="size"/> bytes after the last line read (what is left in the buffer first),
         /// into <paramref name="sink"/> and <paramref name="hash"/>. Throws if the link ends early.</summary>
         public async Task ReadRawAsync(Stream sink, long size, IncrementalHash hash, CancellationToken cancel)
@@ -925,22 +1034,26 @@ public sealed partial class PhoneLink : IDisposable
         }
 
         /// <summary>Exactly <paramref name="size"/> bytes of <paramref name="source"/>, after the lines already sent.
-        /// Throws (and the connection is dropped) if the file ends early or the link breaks.</summary>
+        /// The write semaphore is held per chunk (not for the whole file), so queued control lines flow between
+        /// them instead of waiting for a transfer of minutes. Throws (and the connection is dropped) if the file
+        /// ends early or the link breaks.</summary>
         public async Task SendRawAsync(Stream source, long size, CancellationToken cancel)
         {
             var chunk = new byte[64 * 1024];
-            await _write.WaitAsync(cancel);
-            try
+            for (var left = size; left > 0;)
             {
-                for (var left = size; left > 0;)
+                var n = await source.ReadAsync(chunk.AsMemory(0, (int)Math.Min(chunk.Length, left)), cancel);
+                if (n == 0) throw new EndOfStreamException("file shorter than offered");
+                await _write.WaitAsync(cancel);
+                try
                 {
-                    var n = await source.ReadAsync(chunk.AsMemory(0, (int)Math.Min(chunk.Length, left)), cancel);
-                    if (n == 0) throw new EndOfStreamException("file shorter than offered");
                     await Stream!.WriteAsync(chunk.AsMemory(0, n), cancel);
                     left -= n;
                 }
-                await Stream!.FlushAsync(cancel);
+                finally { _write.Release(); }
             }
+            await _write.WaitAsync(cancel);
+            try { await Stream!.FlushAsync(cancel); }
             finally { _write.Release(); }
         }
 

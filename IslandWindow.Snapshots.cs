@@ -37,7 +37,7 @@ public partial class IslandWindow
         await Shot("01-compact-clock");
 
         OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
-            TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now));
+            TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now, "Spotify"));
         await Shot("02-now-playing");
         _transient = Transient.None; Retarget();
         await Shot("03-compact-media");

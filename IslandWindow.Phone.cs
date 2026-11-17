@@ -151,7 +151,8 @@ public partial class IslandWindow
     {
         var approval = _approvals.FirstOrDefault(a => a.Fingerprint == fingerprint);
         if (approval == null || DateTime.Now - approval.Since > ApprovalWait) return;
-        if (decision == "allow" && approval.Command.Length > PhoneCommandLimit) return;
+        // The phone can't Allow what the island itself would refuse (a second line could hide what would run).
+        if (decision == "allow" && !ApprovalRules.IslandCanAllow(approval.Command)) return;
         Answer(approval, decision);
         PublishPhoneSessions();
     }

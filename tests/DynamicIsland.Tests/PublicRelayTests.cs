@@ -99,6 +99,19 @@ public class PublicRelayTests
         Assert.Equal(PhoneLink.PublicRelay, fresh.EffectivePhoneRelay);
     }
 
+    // The pins are lowercase hex SHA-256 fingerprints; the real chain is validated live at connect time.
+    [Fact]
+    public void PublicRelayPinsAreSha256Fingerprints()
+    {
+        Assert.NotEmpty(PhoneLink.PublicRelayPins);
+        foreach (var pin in PhoneLink.PublicRelayPins)
+        {
+            Assert.Equal(64, pin.Length);
+            Assert.All(pin, c => Assert.True(char.IsAsciiHexDigit(c)));
+            Assert.Equal(pin, pin.ToLowerInvariant());
+        }
+    }
+
     [Fact]
     public void ExistingSettingsKeepWhatTheyHad()
     {

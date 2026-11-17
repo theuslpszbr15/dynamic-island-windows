@@ -14,8 +14,6 @@ namespace DynamicIsland.Services;
 /// </summary>
 public static class AgentCli
 {
-    static readonly TimeSpan DecisionWait = TimeSpan.FromSeconds(55);
-
     public static int Run(string[] args)
     {
         try
@@ -34,7 +32,7 @@ public static class AgentCli
     {
         using var server = AgentHub.CreateOwnPipe(AgentHub.ReplyPipe(message.RequestId!), 1);
         if (!Send(message)) return;
-        if (!server.WaitForConnectionAsync().Wait(DecisionWait)) return;
+        if (!server.WaitForConnectionAsync().Wait(ApprovalTiming.DecisionWait)) return;
         using var reader = new StreamReader(server, Encoding.UTF8);
         var decision = reader.ReadToEnd().Trim();
         if (decision is not ("allow" or "deny")) return;
@@ -70,8 +68,14 @@ public static class AgentCli
             return reader.ReadToEnd();
         });
         if (!read.Wait(TimeSpan.FromSeconds(2)) || string.IsNullOrWhiteSpace(read.Result)) return null;
+        return FromHookPayload(read.Result, agent);
+    }
 
-        using var doc = JsonDocument.Parse(read.Result);
+    /// <summary>The hook payload (the JSON a CLI prints on stdin) as an island message; null when it asks for
+    /// nothing the island shows. Throws JsonException on a broken payload (the caller stays silent).</summary>
+    internal static AgentMessage? FromHookPayload(string payload, string agent)
+    {
+        using var doc = JsonDocument.Parse(payload);
         var root = doc.RootElement;
         var hookEvent = Str(root, "hook_event_name");
         var notification = Str(root, "notification_type");

@@ -1,5 +1,6 @@
 package io.github.theuslpszbr15.dynamicisland
 
+import android.app.KeyguardManager
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,6 +15,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -412,6 +414,12 @@ private fun ApprovalCard(approval: Approval, onAllow: (Approval) -> Unit, onDeny
         while (true) { delay(1000); now = System.currentTimeMillis() }
     }
     val left = ((Link.APPROVAL_WINDOW_MS - (now - approval.receivedAt)) / 1000).coerceAtLeast(0)
+    // The app also shows over the lock screen (for the agents' requests), so the command is held back there:
+    // only who is asking and what for; the command itself waits for an unlock (same rule as the media viewer).
+    val context = LocalContext.current
+    val keyguard = remember { context.getSystemService(KeyguardManager::class.java) }
+    var unlocked by remember(approval.fingerprint) { mutableStateOf(false) }
+    val locked = keyguard?.isKeyguardLocked == true && !unlocked
     Column(
         Modifier.fillMaxWidth()
             .background(Card, RoundedCornerShape(22.dp))
@@ -424,26 +432,34 @@ private fun ApprovalCard(approval: Approval, onAllow: (Approval) -> Unit, onDeny
             Text("${left}s", color = Muted, fontSize = 13.sp)
         }
         if (approval.project.isNotBlank()) Text(approval.project, color = Muted, fontSize = 13.sp)
-        Text(
-            approval.command,
-            color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 13.sp,
-            modifier = Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(max = 220.dp)
-                .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp)).padding(12.dp)
-                .verticalScroll(rememberScrollState()),
-        )
-        if (approval.truncated) {
-            Text("Comando longo demais para mostrar inteiro: só dá para permitir no PC.", color = Orange,
-                fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-        }
-        Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = { onDeny(approval) }, modifier = Modifier.weight(1f).height(48.dp),
-                shape = RoundedCornerShape(14.dp)) {
-                Text("Negar", color = Red, fontWeight = FontWeight.SemiBold)
+        if (locked) {
+            Text(
+                "O celular está bloqueado: desbloqueie para ler o comando antes de permitir.",
+                color = Orange, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp)
+            )
+            TextButton(onClick = { whenUnlocked(context) { unlocked = true } }) { Text("Desbloquear") }
+        } else {
+            Text(
+                approval.command,
+                color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(max = 220.dp)
+                    .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp)).padding(12.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
+            if (approval.truncated) {
+                Text("Comando longo demais para mostrar inteiro: só dá para permitir no PC.", color = Orange,
+                    fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             }
-            Button(onClick = { onAllow(approval) }, enabled = !approval.truncated,
-                modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Green, contentColor = Color.Black)) {
-                Text("Permitir", fontWeight = FontWeight.SemiBold)
+            Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { onDeny(approval) }, modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(14.dp)) {
+                    Text("Negar", color = Red, fontWeight = FontWeight.SemiBold)
+                }
+                Button(onClick = { onAllow(approval) }, enabled = !approval.truncated,
+                    modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Green, contentColor = Color.Black)) {
+                    Text("Permitir", fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }

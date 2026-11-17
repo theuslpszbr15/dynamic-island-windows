@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
@@ -132,6 +132,28 @@ public partial class App : Application
         Settings.QuietVideos = !Settings.QuietVideos;
         Settings.Save();
         _window.ApplyShape();
+    }
+
+    public void SetMediaPreset(MediaFilterPreset preset)
+    {
+        Settings.MediaFilterPreset = preset;
+        Settings.Save();
+        _window.Media.FilterChanged();
+    }
+
+    public void SetMediaAppAllowed(string key, bool allowed)
+    {
+        Settings.MediaFilterPreset = MediaFilterPreset.Custom;
+        Settings.SetMediaAppAllowed(key, allowed);
+        _window.Media.FilterChanged();
+    }
+
+    public void ResetMediaFilter()
+    {
+        Settings.MediaFilterPreset = MediaFilterPreset.MusicOnly;
+        Settings.MediaAppFilter.Clear();
+        Settings.Save();
+        _window.Media.FilterChanged();
     }
 
     public bool IslandHidden => _window.UserHidden;
@@ -447,7 +469,7 @@ public partial class App : Application
             ["PostToolUse"] = Entry("*"),
             ["Notification"] = Entry(null),
             // waits up to 55 s for Allow/Deny on the island, then Claude asks in the terminal as usual
-            ["PermissionRequest"] = Entry("*", 60),
+            ["PermissionRequest"] = Entry("*", ApprovalTiming.HookTimeoutSeconds),
             ["Stop"] = Entry(null),
             ["SessionEnd"] = Entry(null),
         };

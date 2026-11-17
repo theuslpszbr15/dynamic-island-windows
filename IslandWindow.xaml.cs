@@ -25,10 +25,14 @@ public partial class IslandWindow : Window
     static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
+    // The two clips ApplySize mutates every frame; created once, so the animation allocates nothing.
+    readonly RectangleGeometry _clipFlat = new(new Rect(), 0, 0);
+    readonly RectangleGeometry _clipRound = new(new Rect(), 0, 0);
 
     readonly IslandSettings _settings;
     readonly MediaService _media;
     readonly VolumeService _volume;
+    readonly AppVolumeService _spotifyVolume;
     readonly BatteryService _battery;
     readonly AgentHub _hub;
     readonly NotificationService _notifications;
@@ -65,14 +69,16 @@ public partial class IslandWindow : Window
 
     public ObservableCollection<FileItem> Files { get; } = [];
     public ObservableCollection<AgentSession> Agents { get; } = [];
+    public MediaService Media => _media;
 
     public IslandWindow(IslandSettings settings)
     {
         _settings = settings;
         InitializeComponent();
 
-        _media = new MediaService(Dispatcher);
+        _media = new MediaService(Dispatcher, settings);
         _volume = new VolumeService(Dispatcher);
+        _spotifyVolume = new AppVolumeService(Dispatcher);
         _battery = new BatteryService(Dispatcher);
         _hub = new AgentHub(Dispatcher);
         _notifications = new NotificationService(Dispatcher);
@@ -104,6 +110,7 @@ public partial class IslandWindow : Window
 
         _media.Changed += OnMedia;
         _volume.Changed += OnVolume;
+        _spotifyVolume.Changed += OnSpotifyVolume;
         _battery.Changed += OnBattery;
         _hub.MessageReceived += OnAgent;
         _notifications.Received += OnNotification;
@@ -160,6 +167,7 @@ public partial class IslandWindow : Window
         }, _privacyWatch.Token);
 
         _volume.Start();
+        _spotifyVolume.Start();
         _battery.Start();
         _hub.Start();
         StartExtras();
@@ -230,7 +238,9 @@ public partial class IslandWindow : Window
         _discordWindow?.Dispose();
         _glassTimer?.Stop();
         _hub.Dispose();
+        _media.Dispose();
         _volume.Dispose();
+        _spotifyVolume.Dispose();
         Close();
     }
 
@@ -344,9 +354,10 @@ public partial class IslandWindow : Window
         var flatTop = IsNotch || _top.Value < 2;
         var r = flatTop ? Math.Min(h / 2, 24) : Math.Min(h / 2, 34);
         IslandBg.CornerRadius = flatTop ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
-        IslandContent.Clip = flatTop
-            ? new RectangleGeometry(new Rect(0, -r, w, h + r), r, r)
-            : new RectangleGeometry(new Rect(0, 0, w, h), r, r);
+        var clip = flatTop ? _clipFlat : _clipRound;
+        clip.Rect = flatTop ? new Rect(0, -r, w, h + r) : new Rect(0, 0, w, h);
+        clip.RadiusX = clip.RadiusY = r;
+        IslandContent.Clip = clip;
         GlassFill.CornerRadius = GlassRim.CornerRadius = IslandBg.CornerRadius;
         foreach (Border layer in ShadowLayers.Children)
         {
@@ -885,7 +896,168 @@ public partial class IslandWindow : Window
             RadiusX = 0.8,
             RadiusY = 1.2,
         };
+
+        // Spotify volume column (per-app, Volume Mixer style) - only while Spotify is the source
+        UpdateMediaVolume();
+
+        // Playlist selector - show when Spotify is the source and has playlist info
+        UpdateMediaPlaylist(m);
+
         UpdateMediaProgress();
+    }
+
+    // Spotify's own session volume (Volume Mixer per-app slider). The demo defaults keep the
+    // snapshot honest before the first 1 s poll reports the real session.
+    float _spotifyVolumeLevel = 0.62f;
+    bool _spotifyMuted, _spotifySession = true;
+
+    void UpdateMediaVolume()
+    {
+        var isSpotify = _mediaSnap?.Source?.Equals("Spotify", StringComparison.OrdinalIgnoreCase) == true;
+        MediaVolumeCol.Visibility = isSpotify ? Visibility.Visible : Visibility.Collapsed;
+        if (isSpotify) ApplySpotifyVolumeUi();
+    }
+
+    void ApplySpotifyVolumeUi()
+    {
+        MediaVolumeFill.Opacity = _spotifySession ? 1 : 0.35; // dimmed while Spotify has no active audio session
+        MediaVolumeScale.ScaleY = _spotifyMuted || !_spotifySession ? 0 : _spotifyVolumeLevel;
+        MediaVolumeText.Text = !_spotifySession ? "—" : _spotifyMuted ? "0%" : $"{(int)Math.Round(_spotifyVolumeLevel * 100)}%";
+    }
+
+    void OnSpotifyVolume(float level, bool muted, bool exists)
+    {
+        _spotifyVolumeLevel = level;
+        _spotifyMuted = muted;
+        _spotifySession = exists;
+        if (MediaVolumeCol.Visibility == Visibility.Visible) ApplySpotifyVolumeUi();
+    }
+
+    void UpdateMediaPlaylist(MediaSnapshot m)
+    {
+        var isSpotify = m.Source?.Equals("Spotify", StringComparison.OrdinalIgnoreCase) == true;
+        var hasPlaylist = !string.IsNullOrWhiteSpace(m.PlaylistName);
+
+        MediaPlaylistBox.Visibility = (isSpotify && hasPlaylist) ? Visibility.Visible : Visibility.Collapsed;
+
+        if (isSpotify && hasPlaylist && MediaPlaylistBox.Items.Count == 0)
+        {
+            LoadSpotifyPlaylists(m.PlaylistName!);
+        }
+    }
+
+    void LoadSpotifyPlaylists(string currentPlaylist)
+    {
+        // Load saved playlists from settings + current one
+        var playlists = new List<PlaylistItem>
+        {
+            new PlaylistItem(currentPlaylist, null, true) // current playing playlist
+        };
+
+        // Add saved playlists from settings
+        if (_settings.SpotifyPlaylists != null)
+        {
+            foreach (var p in _settings.SpotifyPlaylists)
+            {
+                if (!p.Name.Equals(currentPlaylist, StringComparison.OrdinalIgnoreCase))
+                    playlists.Add(new PlaylistItem(p.Name, p.Id, false));
+            }
+        }
+
+        MediaPlaylistBox.ItemsSource = playlists;
+        MediaPlaylistBox.SelectedIndex = 0;
+    }
+
+    void MediaPlaylist_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (MediaPlaylistBox.SelectedItem is not PlaylistItem item) return;
+        if (item.IsCurrent) return; // already playing this one
+
+        // Launch Spotify with the playlist URI
+        var uri = $"spotify:playlist:{item.Id ?? item.Name}";
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Fallback: copy to clipboard
+            Clipboard.SetText(uri);
+            ShowInfo("\uE8C8", "Link da playlist copiado", "Abrir no Spotify", action: () => Process.Start(new ProcessStartInfo("https://open.spotify.com") { UseShellExecute = true }));
+        }
+
+        // Save to recent playlists
+        SaveSpotifyPlaylist(item.Name, item.Id);
+    }
+
+    void SaveSpotifyPlaylist(string name, string? id)
+    {
+        var list = _settings.SpotifyPlaylists ?? new List<PlaylistSetting>();
+        // Remove duplicates
+        list.RemoveAll(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        // Add to front
+        list.Insert(0, new PlaylistSetting(name, id));
+        // Keep only last 10
+        if (list.Count > 10) list.RemoveRange(10, list.Count - 10);
+        _settings.SpotifyPlaylists = list;
+        _settings.Save();
+    }
+
+    // Media volume slider events
+    bool _mediaVolumeDragging;
+
+    void MediaVolume_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _mediaVolumeDragging = true;
+        MediaVolumeTrack.CaptureMouse();
+        SetMediaVolumeFrom(e);
+    }
+
+    void MediaVolume_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_mediaVolumeDragging) SetMediaVolumeFrom(e);
+    }
+
+    void MediaVolume_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_mediaVolumeDragging) return;
+        e.Handled = true;
+        _mediaVolumeDragging = false;
+        MediaVolumeTrack.ReleaseMouseCapture();
+        SetMediaVolumeFrom(e);
+    }
+
+    void SetMediaVolumeFrom(MouseEventArgs e)
+    {
+        // Vertical slider: top = max, bottom = mute. Writes Spotify's own session volume.
+        var fraction = 1 - e.GetPosition(MediaVolumeTrack).Y / Math.Max(1, MediaVolumeTrack.ActualHeight);
+        var level = (float)Math.Clamp(fraction, 0, 1);
+        _spotifyVolumeLevel = level;
+        _spotifyMuted = false;
+        _spotifySession = true;
+        ApplySpotifyVolumeUi();
+        _spotifyVolume.Set((float)level);
+    }
+
+    void MediaVolume_MouseRightUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _spotifyVolume.ToggleMute(); // right-click toggles Spotify's mute, like the Volume Mixer
+    }
+
+    // Track current system volume for the media volume slider
+    float _currentSystemVolume = 0.5f;
+
+    void OnVolume(float level, bool muted)
+    {
+        _currentSystemVolume = level;
+        var pct = (int)Math.Round(level * 100);
+        VolumeText.Text = muted ? "—" : pct.ToString(CultureInfo.CurrentCulture);
+        VolumeIcon.Text = muted || pct == 0 ? "\uE74F" : pct < 34 ? "\uE993" : pct < 67 ? "\uE994" : "\uE995";
+        VolumeFill.Background = muted ? new SolidColorBrush(Color.FromRgb(0x63, 0x63, 0x66)) : (Brush)FindResource("Ink");
+        VolumeScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(muted ? 0 : level, Quick));
+        ShowTransient(Transient.Volume, 1.6);
     }
 
     void UpdateMediaProgress()
@@ -968,16 +1140,6 @@ public partial class IslandWindow : Window
     }
 
     // ───────────────────────── volume & battery ─────────────────────────
-
-    void OnVolume(float level, bool muted)
-    {
-        var pct = (int)Math.Round(level * 100);
-        VolumeText.Text = muted ? "—" : pct.ToString(CultureInfo.CurrentCulture);
-        VolumeIcon.Text = muted || pct == 0 ? "\uE74F" : pct < 34 ? "\uE993" : pct < 67 ? "\uE994" : "\uE995";
-        VolumeFill.Background = muted ? new SolidColorBrush(Color.FromRgb(0x63, 0x63, 0x66)) : (Brush)FindResource("Ink");
-        VolumeScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(muted ? 0 : level, Quick));
-        ShowTransient(Transient.Volume, 1.6);
-    }
 
     void OnBattery(BatteryEvent ev)
     {

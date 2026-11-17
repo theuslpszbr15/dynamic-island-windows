@@ -152,6 +152,52 @@
             </Setter>
         </Style>
 
+        <Style x:Key="FlatComboBox" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+            <Setter Property="Background" Value="{DynamicResource Card}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter x:Name="ContentSite" Margin="10,0,30,0" VerticalAlignment="Center"
+                                                      Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" />
+                                    <Path Grid.Column="1" Width="12" Height="12" Margin="0,0,10,0" VerticalAlignment="Center"
+                                          Fill="{DynamicResource Muted}" Data="M0,0 L6,6 L12,0" Stretch="Fill" />
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="PART_Popup" AllowsTransparency="True" PopupAnimation="Slide">
+                                <Border Background="{DynamicResource Card}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        CornerRadius="6" MaxHeight="200" Effect="{DynamicResource DropShadow}">
+                                    <ScrollViewer>
+                                        <ItemsPresenter Margin="2" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource CardHover}" />
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource CardHover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Visibility x:Key="PhoneSendVisibility">Collapsed</Visibility>
 
         <DataTemplate x:Key="FileTemplate" DataType="{x:Type local:FileItem}">
@@ -466,18 +512,43 @@
                                     <Grid x:Name="MediaContent">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <Border x:Name="MediaArt" Width="104" Height="104" CornerRadius="18" Background="#FF1C1C1E" VerticalAlignment="Center"
+
+                                        <!-- Volume vertical na esquerda (estilo iOS) -->
+                                        <Grid x:Name="MediaVolumeCol" Width="22" Margin="0,0,12,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid x:Name="MediaVolumeTrack" Width="22" Cursor="Hand" Background="Transparent"
+                                                  MouseLeftButtonDown="MediaVolume_MouseDown" MouseMove="MediaVolume_MouseMove" MouseLeftButtonUp="MediaVolume_MouseUp"
+                                                  MouseRightButtonUp="MediaVolume_MouseRightUp">
+                                                <Border Width="4" CornerRadius="2" Background="{DynamicResource Track}" ClipToBounds="True" VerticalAlignment="Center" Height="96">
+                                                    <Border x:Name="MediaVolumeFill" Width="4" CornerRadius="2" Background="{DynamicResource Ink}"
+                                                            RenderTransformOrigin="0.5,1">
+                                                        <Border.RenderTransform>
+                                                            <ScaleTransform x:Name="MediaVolumeScale" ScaleY="0" />
+                                                        </Border.RenderTransform>
+                                                    </Border>
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock x:Name="MediaVolumeText" Grid.Row="1" FontSize="10" FontWeight="SemiBold" MinWidth="22"
+                                                       TextAlignment="Center" Margin="0,4,0,0" Foreground="{DynamicResource Muted}" />
+                                        </Grid>
+
+                                        <Border x:Name="MediaArt" Grid.Column="1" Width="104" Height="104" CornerRadius="18" Background="#FF1C1C1E" VerticalAlignment="Center"
                                                 RenderOptions.BitmapScalingMode="HighQuality">
                                             <TextBlock x:Name="MediaArtGlyph" FontFamily="{StaticResource Icons}" Text="&#xE8D6;" FontSize="32"
                                                        Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
-                                        <Grid Grid.Column="1" Margin="18,6,0,0">
+                                        <Grid Grid.Column="2" Margin="18,6,0,0">
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="*" />
+                                                <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
                                             <Grid>
@@ -516,7 +587,20 @@
                                                 </Grid>
                                                 <TextBlock x:Name="MediaDur" Grid.Column="2" FontSize="10.5" Foreground="{DynamicResource Muted}" MinWidth="30" TextAlignment="Right" VerticalAlignment="Center" />
                                             </Grid>
-                                            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
+
+                                            <!-- Playlist selector (shows when Spotify is playing) -->
+                                            <ComboBox x:Name="MediaPlaylistBox" Grid.Row="3" Margin="0,8,0,0" Height="30" Visibility="Collapsed"
+                                                      FontSize="12" VerticalContentAlignment="Center"
+                                                      SelectionChanged="MediaPlaylist_SelectionChanged"
+                                                      Style="{StaticResource FlatComboBox}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+
+                                            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center">
                                                 <Button Style="{StaticResource RoundButton}" Content="&#xE892;" Click="Prev_Click" />
                                                 <Button x:Name="PlayButton" Style="{StaticResource RoundButton}" Content="&#xE768;" FontSize="18"
                                                         Width="42" Height="42" Margin="14,0" Click="Play_Click" />

@@ -172,6 +172,20 @@ public static class ApprovalRules
         command.Length <= IslandCommandLimit && command.IndexOfAny(['\r', '\n']) < 0;
 }
 
+/// <summary>The shared approval clocks, in one place: the hook waits for Allow/Deny, the island keeps the card a
+/// little less, and Claude Code's hook timeout covers both. Change one number here, not four files.</summary>
+public static class ApprovalTiming
+{
+    /// <summary>How long a hook process waits for Allow/Deny on the island or the phone before giving up.</summary>
+    public static readonly TimeSpan DecisionWait = TimeSpan.FromSeconds(55);
+    /// <summary>How long the island keeps an approval card: below <see cref="DecisionWait"/>, so the card can't
+    /// still be up after the hook already fell back to the terminal.</summary>
+    public static readonly TimeSpan IslandWait = TimeSpan.FromSeconds(54);
+    /// <summary>The "timeout" written into Claude Code's settings.json: above <see cref="DecisionWait"/> so the
+    /// island's answer always lands before the hook is killed.</summary>
+    public const int HookTimeoutSeconds = 60;
+}
+
 /// <summary>Damped spring used to animate the island's size.</summary>
 sealed class Spring(double value)
 {
@@ -259,5 +273,27 @@ static class ColorUtil
             _ => (c, 0d, x),
         };
         return Color.FromRgb((byte)((r + m) * 255), (byte)((g + m) * 255), (byte)((b + m) * 255));
+    }
+}
+
+/// <summary>Playlist item for the media page selector.</summary>
+public sealed class PlaylistItem(string name, string? id, bool isCurrent)
+{
+    public string Name { get; } = name;
+    public string? Id { get; } = id;
+    public bool IsCurrent { get; } = isCurrent;
+}
+
+/// <summary>Saved playlist setting for persistence.</summary>
+public sealed class PlaylistSetting
+{
+    public string Name { get; set; } = "";
+    public string? Id { get; set; }
+
+    public PlaylistSetting() { }
+    public PlaylistSetting(string name, string? id)
+    {
+        Name = name;
+        Id = id;
     }
 }

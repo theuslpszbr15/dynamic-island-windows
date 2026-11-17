@@ -333,7 +333,11 @@ object IslandOverlay {
             params.width = context.resources.displayMetrics.widthPixels
             params.height = (STAGE_HEIGHT_DP * density).toInt()
             setPosition()
-            manager.addView(view, params)
+            // If either add fails, nothing must stay in the WindowManager: undo the first view, then rethrow.
+            try { manager.addView(view, params) } catch (e: Throwable) {
+                try { manager.removeView(view) } catch (_: Throwable) {}
+                throw e
+            }
             touch?.let { t ->
                 t.setOnTouchListener { _, e ->
                     if (e.action == MotionEvent.ACTION_OUTSIDE) open.value = null
@@ -346,7 +350,10 @@ object IslandOverlay {
                     }
                     true
                 }
-                manager.addView(t, touchParams)
+                try { manager.addView(t, touchParams) } catch (e: Throwable) {
+                    try { manager.removeView(view) } catch (_: Throwable) {}
+                    throw e
+                }
             }
             if (!fixed) { staged = true; main.postDelayed(settle, STAGE_MS) }
             registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
@@ -437,7 +444,20 @@ private fun IslandUi(
     val art by MediaWatcher.art.collectAsState()
     val look by IslandLook.state.collectAsState()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(500); now = System.currentTimeMillis() } }
+    // The clock only ticks while something on screen moves on its own: an open card (elapsed times, player position),
+    // the Discord call timer, or a pill entry inside its flash window. At rest, it stops, so an idle island costs
+    // nothing. The gate reads the wall clock once per recomposition — it must not read `now`, or it would keep
+    // the ticker alive through itself.
+    val wall = System.currentTimeMillis()
+    val needsClock = open != null ||
+        call != null ||
+        (claude != null && wall - claude.at in 0..Island.CLAUDE_MS) ||
+        discord.any { wall - it.at in 0..Island.FLASH_MS } ||
+        transfers.any { it.state == LiveTransfer.State.Running || wall - it.at in 0..Island.FLASH_MS }
+    LaunchedEffect(needsClock) {
+        if (!needsClock) return@LaunchedEffect
+        while (true) { delay(500); now = System.currentTimeMillis() }
+    }
 
     val media = if (look.media) mediaState else null
     val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude)

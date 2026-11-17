@@ -16,7 +16,9 @@ public sealed record MediaSnapshot(
     TimeSpan Duration,
     DateTimeOffset LastUpdated,
     string? Source = null,
-    bool IsVideo = false)
+    bool IsVideo = false,
+    string? PlaylistName = null,
+    string? PlaylistId = null)
 {
     public TimeSpan PositionNow()
     {
@@ -35,15 +37,12 @@ public sealed record MediaSource(string Id, string Name, bool Playing);
 /// <summary> (Spotify, browsers, etc.) via GSMTC. Apps that never publish
 /// one (Photos, some players, browsers with media keys disabled) are picked up from their audio output.
 /// </summary>
-public sealed class MediaService(Dispatcher ui)
+public sealed class MediaService(Dispatcher ui, IslandSettings? settings = null) : IDisposable
 {
     public static readonly Color DefaultAccent = Color.FromRgb(0x0A, 0x84, 0xFF);
-
-    // Calls, not music.
-    static readonly HashSet<string> Ignored = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "ms-teams", "Teams", "Zoom", "slack", "CiscoCollabHost", "webexhost", "msedgewebview2",
-    };
+    readonly IslandSettings? _settings = settings;
+    // Calls (Teams, Zoom, Slack, Discord, WhatsApp, Telegram…) are never music: MediaFilter.GetCategory
+    // classifies them as Call and IsAllowed blocks them in every preset, here and in the audio fallback.
 
     GlobalSystemMediaTransportControlsSessionManager? _manager;
     GlobalSystemMediaTransportControlsSession? _session;
@@ -69,6 +68,19 @@ public sealed class MediaService(Dispatcher ui)
     public string? CurrentId => UsingFallback ? null : _session?.SourceAppUserModelId;
 
     /// <summary>Sticks to one app's session (while it exists) instead of following whatever plays.</summary>
+    /// <summary>Re-evaluates active and fallback sessions after filter settings change.</summary>
+    public void FilterChanged()
+    {
+        ui.InvokeAsync(() =>
+        {
+            if (_fallback != null && !MediaFilter.IsAllowed(_fallback.Source, _settings))
+            {
+                _fallback = null;
+            }
+            Attach();
+        });
+    }
+
     public void Pin(string id)
     {
         _pinned = id;
@@ -81,9 +93,40 @@ public sealed class MediaService(Dispatcher ui)
         _audioTimer.Start();
         try { _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); }
         catch { return; }
-        _manager.CurrentSessionChanged += (_, _) => ui.InvokeAsync(Attach);
-        _manager.SessionsChanged += (_, _) => ui.InvokeAsync(Attach);
+        _onCurrentSession = (_, _) => ui.InvokeAsync(Attach);
+        _onSessionsChanged = (_, _) => ui.InvokeAsync(Attach);
+        _manager.CurrentSessionChanged += _onCurrentSession;
+        _manager.SessionsChanged += _onSessionsChanged;
         Attach();
+    }
+
+    Windows.Foundation.TypedEventHandler<GlobalSystemMediaTransportControlsSessionManager,
+        CurrentSessionChangedEventArgs>? _onCurrentSession;
+    Windows.Foundation.TypedEventHandler<GlobalSystemMediaTransportControlsSessionManager,
+        SessionsChangedEventArgs>? _onSessionsChanged;
+
+    /// <summary>Stops the audio sampler and detaches every event so the island's closing leaves no live timers or handlers.</summary>
+    public void Dispose()
+    {
+        if (_audioTimer != null)
+        {
+            _audioTimer.Stop();
+            _audioTimer = null;
+        }
+        if (_manager != null)
+        {
+            if (_onCurrentSession != null) _manager.CurrentSessionChanged -= _onCurrentSession;
+            if (_onSessionsChanged != null) _manager.SessionsChanged -= _onSessionsChanged;
+        }
+        _onCurrentSession = null;
+        _onSessionsChanged = null;
+        if (_session != null)
+        {
+            _session.MediaPropertiesChanged -= OnMediaProperties;
+            _session.PlaybackInfoChanged -= OnPlaybackInfo;
+            _session.TimelinePropertiesChanged -= OnTimeline;
+            _session = null;
+        }
     }
 
     void Attach()
@@ -113,7 +156,7 @@ public sealed class MediaService(Dispatcher ui)
             foreach (var s in _manager?.GetSessions() ?? [])
             {
                 var id = s.SourceAppUserModelId;
-                if (string.IsNullOrEmpty(id) || sources.Any(x => x.Id == id) || Ignored.Contains(SourceName(id))) continue;
+                if (string.IsNullOrEmpty(id) || sources.Any(x => x.Id == id) || !MediaFilter.IsAllowed(id, _settings)) continue;
                 var playing = s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
                 sources.Add(new MediaSource(id, SourceName(id), playing));
             }
@@ -129,7 +172,9 @@ public sealed class MediaService(Dispatcher ui)
     {
         try
         {
-            var sessions = _manager?.GetSessions().ToList() ?? [];
+            var sessions = (_manager?.GetSessions().ToList() ?? [])
+                .Where(s => MediaFilter.IsAllowed(s.SourceAppUserModelId, _settings))
+                .ToList();
             if (_pinned != null)
             {
                 var pinned = sessions.FirstOrDefault(s => s.SourceAppUserModelId == _pinned);
@@ -138,7 +183,7 @@ public sealed class MediaService(Dispatcher ui)
             }
             var playing = sessions.FirstOrDefault(s =>
                 s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
-            return playing ?? _manager?.GetCurrentSession();
+            return playing ?? sessions.FirstOrDefault();
         }
         catch { return null; }
     }
@@ -182,7 +227,7 @@ public sealed class MediaService(Dispatcher ui)
         try { sources = await Task.Run(() => AudioActivity.Sample()); }
         finally { _sampling = false; }
 
-        var source = sources.FirstOrDefault(s => !Ignored.Contains(s.ProcessName));
+        var source = sources.FirstOrDefault(s => MediaFilter.IsAllowed(s.ProcessName, _settings));
         var now = DateTime.Now;
         if (source != null)
         {
@@ -324,6 +369,15 @@ public sealed class MediaService(Dispatcher ui)
 
         var playback = session.GetPlaybackInfo();
         var timeline = session.GetTimelineProperties();
+
+        // Try to get playlist info from Spotify (via window title parsing)
+        string? playlistName = null;
+        string? playlistId = null;
+        if (session.SourceAppUserModelId.Contains("spotify", StringComparison.OrdinalIgnoreCase))
+        {
+            (playlistName, playlistId) = await TryGetSpotifyPlaylistAsync(session);
+        }
+
         return new MediaSnapshot(
             props.Title,
             props.Artist ?? "",
@@ -335,7 +389,46 @@ public sealed class MediaService(Dispatcher ui)
             timeline.LastUpdatedTime,
             SourceName(session.SourceAppUserModelId),
             playback?.PlaybackType == Windows.Media.MediaPlaybackType.Video
-                || IsVideoTitle(props.Title) || IsVideoTitle(props.Artist ?? ""));
+                || IsVideoTitle(props.Title) || IsVideoTitle(props.Artist ?? ""),
+            playlistName,
+            playlistId);
+    }
+
+    static async Task<(string? Name, string? Id)> TryGetSpotifyPlaylistAsync(GlobalSystemMediaTransportControlsSession session)
+    {
+        // Spotify doesn't expose playlist via GSMTC directly.
+        // Fallback: parse from window title (Spotify puts "Playlist Name - Spotify" in title)
+        try
+        {
+            var pid = GetProcessIdFromAppUserModelId(session.SourceAppUserModelId);
+            if (pid > 0)
+            {
+                var title = Native.WindowTitle(pid);
+                // Format: "Track Name - Artist - Playlist Name - Spotify" or "Playlist Name - Spotify"
+                var parts = title.Split(" - ", StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 3 && parts[^1].Equals("Spotify", StringComparison.OrdinalIgnoreCase))
+                {
+                    var candidate = parts[^2];
+                    // Heuristic: if it looks like a playlist name (not a track)
+                    if (!candidate.Contains("•") && candidate.Length > 1)
+                        return (candidate.Trim(), null);
+                }
+            }
+        }
+        catch { }
+
+        return (null, null);
+    }
+
+    static int GetProcessIdFromAppUserModelId(string appId)
+    {
+        try
+        {
+            var name = appId.Split('!')[0].Split('_')[0];
+            var processes = System.Diagnostics.Process.GetProcessesByName(name);
+            return processes.Length > 0 ? processes[0].Id : 0;
+        }
+        catch { return 0; }
     }
 
     static async Task<BitmapSource?> LoadArtAsync(IRandomAccessStreamReference? thumbnail)

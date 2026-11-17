@@ -89,6 +89,18 @@ public sealed class VolumeService : IDisposable
         catch { }
     }
 
+    /// <summary>Sets the master volume to an absolute level (0..1).</summary>
+    public void SetVolume(float level)
+    {
+        if (_volume == null) return;
+        try
+        {
+            var context = Guid.Empty;
+            _volume.SetMasterVolumeLevelScalar(Math.Clamp(level, 0f, 1f), ref context);
+        }
+        catch { }
+    }
+
     void OnNotify(IntPtr data)
     {
         // AUDIO_VOLUME_NOTIFICATION_DATA: GUID (16) | BOOL bMuted | float fMasterVolume
