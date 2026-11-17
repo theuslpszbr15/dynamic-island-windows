@@ -173,6 +173,14 @@ class DiscordListener : NotificationListenerService() {
             false
         }
 
+        /** Whether this build declares the listener at all (the sideloaded APK doesn't, see AndroidManifest). */
+        fun available(context: Context): Boolean = try {
+            context.packageManager.getServiceInfo(ComponentName(context, DiscordListener::class.java), 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
         fun enabled(context: Context): Boolean {
             val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
             val me = ComponentName(context, DiscordListener::class.java)

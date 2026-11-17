@@ -451,7 +451,7 @@ private fun IslandUi(
     val wall = System.currentTimeMillis()
     val needsClock = open != null ||
         call != null ||
-        (claude != null && wall - claude.at in 0..Island.CLAUDE_MS) ||
+        claude?.let { wall - it.at in 0..Island.CLAUDE_MS } == true ||
         discord.any { wall - it.at in 0..Island.FLASH_MS } ||
         transfers.any { it.state == LiveTransfer.State.Running || wall - it.at in 0..Island.FLASH_MS }
     LaunchedEffect(needsClock) {

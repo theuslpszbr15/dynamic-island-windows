@@ -16,7 +16,15 @@ public sealed record UpdateInfo(Version Version, string Url, string Sha256, stri
 /// </summary>
 public static class Updater
 {
-    const string AssetName = "DynamicIsland.exe";
+    // Full: carries .NET (~80 MB). Light: runs on the installed .NET Desktop Runtime (~27 MB, ~70 MB less RAM).
+    const string FullAsset = "DynamicIsland.exe", LightAsset = "DynamicIsland-Leve.exe";
+
+    /// <summary>The .NET Desktop Runtime this build needs is installed, so the light exe can run here.</summary>
+    internal static bool DesktopRuntimeInstalled()
+    {
+        var shared = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.WindowsDesktop.App");
+        return Directory.Exists(shared) && Directory.GetDirectories(shared, $"{Environment.Version.Major}.*").Length > 0;
+    }
 
     /// <summary>"owner/name" of the GitHub repository releases come from: the UpdateRepository item in
     /// DynamicIsland.csproj, so a fork changes it in one place.</summary>
@@ -60,16 +68,18 @@ public static class Updater
         latest = new Version(latest.Major, latest.Minor, Math.Max(latest.Build, 0));
         if (latest <= Current) return null;
 
-        foreach (var asset in root.GetProperty("assets").EnumerateArray())
+        var assets = root.GetProperty("assets").EnumerateArray().ToList();
+        var assetName = DesktopRuntimeInstalled() && assets.Any(a => a.GetProperty("name").GetString() == LightAsset) ? LightAsset : FullAsset;
+        foreach (var asset in assets)
         {
-            if (asset.GetProperty("name").GetString() != AssetName) continue;
+            if (asset.GetProperty("name").GetString() != assetName) continue;
             var url = asset.GetProperty("browser_download_url").GetString();
             if (url == null || !url.StartsWith("https://github.com/", StringComparison.Ordinal)) return null;
             var digest = asset.TryGetProperty("digest", out var d) ? d.GetString() : null;
             // No digest, no update: an unchecked exe is never installed.
             if (digest?.StartsWith("sha256:", StringComparison.Ordinal) != true)
             {
-                Log.Warn("Updater", $"release {tag} has no sha256 digest for {AssetName}; ignored");
+                Log.Warn("Updater", $"release {tag} has no sha256 digest for {assetName}; ignored");
                 return null;
             }
             var notes = root.TryGetProperty("body", out var body) ? body.GetString() ?? "" : "";

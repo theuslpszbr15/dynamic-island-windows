@@ -32,12 +32,15 @@ public partial class App : Application
         // the GPU driver's D3D9 stack (hundreds of MB on some Intel drivers) for a tiny overlay.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
+        if (SnapshotFolder != null || PerfFolder != null) PhoneLink.DemoMode = true;
+
         if (SnapshotFolder != null)
         {
             Settings = new IslandSettings { ReadOnly = true, DiscreetIdle = false };
             _window = new IslandWindow(Settings) { SnapshotMode = true };
             _window.Show();
             await _window.RunSnapshotsAsync(SnapshotFolder);
+            try { File.Delete(PhoneLink.SecretFile); } catch { }
             Shutdown();
             return;
         }
@@ -48,11 +51,14 @@ public partial class App : Application
             _window = new IslandWindow(Settings) { SnapshotMode = true };
             _window.Show();
             await _window.RunPerfAsync(PerfFolder);
+            try { File.Delete(PhoneLink.SecretFile); } catch { }
             Shutdown();
             return;
         }
 
         Settings = IslandSettings.Load();
+        IslandThemes.CustomColor = IslandThemes.ParseHex(Settings.CustomThemeColor) ?? IslandThemes.CustomColor;
+        PetView.LoadCustomImage(IslandSettings.CustomMascotFile);
         PetView.SetDefaultSpecies(Settings.Mascot);
         PetView.SetDefaultOutfit(Settings.Outfit);
         ListenForQuit();
@@ -70,6 +76,8 @@ public partial class App : Application
             if (Settings.CheckUpdates) CheckForUpdates(false);
         };
         updates.Start();
+
+        _ = Task.Run(async () => { await Task.Delay(TimeSpan.FromMinutes(1)); DiskCleanup.Run(); });
     }
 
     // Lets a new version being installed close this one cleanly.
@@ -166,6 +174,13 @@ public partial class App : Application
     {
         ShowSettings();
         _settingsWindow!.ShowTransfers(tab);
+    }
+
+    /// <summary>Settings › Celular with the QR code that downloads the Android app.</summary>
+    public void ShowAppDownload()
+    {
+        ShowSettings();
+        _settingsWindow!.ShowDownloadQr();
     }
 
     public void ShowSettings(string? page = null)
@@ -425,6 +440,7 @@ public partial class App : Application
         (PetSpecies.Coco, "Coco (coquinho)"),
         (PetSpecies.Pipoca, "Pipoca (gatinho)"),
         (PetSpecies.Bu, "Bu (fantasminha)"),
+        (PetSpecies.Custom, "Meu mascote (PNG)"),
         (PetSpecies.None, "Nenhum"),
     ];
 

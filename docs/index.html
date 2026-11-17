@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dynamic Island para Windows</title>
+  <meta name="description" content="Uma ilha dinâmica no topo do Windows: música com letra, agentes de IA com Permitir e Negar, reuniões com Entrar, tarefas e o seu celular Android. Grátis e open source." />
+  <meta name="theme-color" content="#0f0f10" />
+  <link rel="icon" href="img/icon.png" />
+  <style>
+    :root {
+      --bg: #0f0f10;
+      --surface: #161618;
+      --raised: #1d1d20;
+      --line: rgba(237, 237, 238, 0.08);
+      --line-strong: rgba(237, 237, 238, 0.14);
+      --text: #ededee;
+      --text-2: #a1a1a6;
+      --muted: #6e6e73;
+      --accent: #0a84ff;
+      --green: #30d158;
+      --orange: #ff9f0a;
+      --sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Inter", Roboto, sans-serif;
+      --mono: "Cascadia Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { background: var(--bg); color: var(--text); font: 400 16px/1.6 var(--sans); overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px; }
+
+    /* nav */
+    nav { position: sticky; top: 0; z-index: 20; background: rgba(15, 15, 16, 0.86); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    .nav { display: flex; align-items: center; gap: 32px; height: 64px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+    .brand img { width: 28px; height: 28px; border-radius: 8px; }
+    .links { display: flex; gap: 24px; margin-left: auto; font-size: 15px; color: var(--text-2); }
+    .links a:hover { color: var(--text); }
+    .menu { display: none; margin-left: auto; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line-strong); background: none; color: var(--text); cursor: pointer; }
+    .menu svg { margin: auto; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 10px; font: 500 15px var(--sans); border: 1px solid transparent; cursor: pointer; transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.1s var(--ease); white-space: nowrap; }
+    .btn:active { transform: scale(0.98); }
+    .btn:focus-visible, .seg button:focus-visible, .menu:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn-primary { background: var(--text); color: #111113; }
+    .btn-primary:hover { background: #ffffff; }
+    .btn-quiet { border-color: var(--line-strong); color: var(--text); }
+    .btn-quiet:hover { background: var(--raised); }
+    .btn-small { height: 36px; padding: 0 14px; font-size: 14px; }
+
+    /* hero */
+    .hero { display: grid; grid-template-columns: 5fr 6fr; gap: 56px; align-items: center; padding: 72px 0 88px; }
+    /* grid children may shrink below their content (tabs and code lines scroll instead of widening the page) */
+    .hero > *, .grid > *, .phone > *, .island, .body { min-width: 0; }
+    h1 { font-size: 52px; line-height: 1.08; font-weight: 600; letter-spacing: -0.02em; max-width: 13em; }
+    .lead { margin-top: 20px; font-size: 18px; color: var(--text-2); max-width: 32em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+    .meta { margin-top: 20px; font: 13px var(--mono); color: var(--muted); }
+
+    /* the demo: a slice of a desktop with the island on top */
+    .screen { position: relative; border-radius: 16px; border: 1px solid var(--line-strong); background: #1a2233; overflow: hidden; aspect-ratio: 16 / 11; }
+    .screen::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #2a3a55 0%, #1b2436 55%, #141a26 100%); }
+    .screen .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; background: rgba(20, 20, 22, 0.86); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .screen .bar i { width: 22px; height: 22px; border-radius: 6px; background: rgba(237, 237, 238, 0.14); }
+    .screen .bar i:first-child { background: rgba(237, 237, 238, 0.28); }
+    .island { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: min(92%, 480px); background: #000; color: #fff; border-radius: 26px; padding: 14px 18px 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); }
+    .island .head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8e8e93; margin-bottom: 10px; }
+    .island .head span:last-child { margin-left: auto; font-family: var(--mono); font-size: 11px; }
+    .bit { width: 22px; height: 22px; cursor: pointer; position: relative; flex: none; transition: transform 0.12s var(--ease); }
+    .bit.pat { transform: scale(1.12, 0.86); }
+    .heart { position: absolute; left: 6px; top: -6px; width: 10px; height: 8px; pointer-events: none; animation: rise 0.7s var(--ease) forwards; }
+    @keyframes rise { to { opacity: 0; transform: translateY(-14px); } }
+    .body { min-height: 112px; transition: opacity 0.18s var(--ease), transform 0.18s var(--ease); }
+    .body.out { opacity: 0; transform: translateY(4px); }
+    .t { font-size: 15px; font-weight: 600; }
+    .s { font-size: 12.5px; color: #8e8e93; }
+    .row { display: flex; align-items: center; gap: 12px; }
+    .grow { flex: 1; min-width: 0; }
+    .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chip { display: inline-flex; align-items: center; justify-content: center; height: 34px; border-radius: 17px; font-size: 13px; font-weight: 600; flex: 1; border: 0; cursor: pointer; font-family: var(--sans); }
+    .code { font: 12px var(--mono); background: #141416; color: #d4d4d8; padding: 8px 10px; border-radius: 8px; margin: 8px 0 12px; overflow-x: auto; white-space: nowrap; }
+    .track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); overflow: hidden; margin: 10px 0 6px; }
+    .track b { display: block; height: 100%; border-radius: 2px; }
+    .art { width: 64px; height: 64px; border-radius: 14px; flex: none; background: linear-gradient(135deg, #e83a6a, #2b0f4c); }
+    .steps { font-size: 12.5px; line-height: 1.9; }
+    .diff { font: 11.5px/1.7 var(--mono); background: #0b0b0d; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+    .diff .add { color: #c4f5d0; background: rgba(48, 209, 88, 0.14); border-radius: 4px; padding: 0 6px; }
+    .diff .del { color: #ffa8a8; background: rgba(255, 69, 58, 0.14); border-radius: 4px; padding: 0 6px; text-decoration: line-through; }
+
+    .seg { display: flex; gap: 4px; padding: 4px; margin-top: 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+    .seg::-webkit-scrollbar { display: none; }
+    .seg button { flex: 1 0 auto; height: 34px; padding: 0 12px; border-radius: 8px; border: 0; background: none; color: var(--text-2); font: 500 13.5px var(--sans); cursor: pointer; transition: background-color 0.15s var(--ease), color 0.15s var(--ease); }
+    .seg button:hover { color: var(--text); }
+    .seg button[aria-selected="true"] { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .hint { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+    /* sections */
+    section { padding: 88px 0; border-top: 1px solid var(--line); }
+    h2 { font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; max-width: 20em; }
+    .intro { margin-top: 12px; color: var(--text-2); max-width: 36em; }
+
+    .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-top: 40px; }
+    .card { grid-column: span 2; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; }
+    .card.wide { grid-column: span 3; }
+    .card.full { grid-column: span 6; display: grid; grid-template-columns: 2fr 3fr; gap: 32px; align-items: center; }
+    .card h3 { font-size: 17px; font-weight: 600; }
+    .card p { margin-top: 8px; color: var(--text-2); font-size: 15px; }
+    .card .shot { margin-top: 20px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; background: #1f4e8c; }
+    .card.full .shot { margin-top: 0; }
+    .card .shot img { width: 100%; }
+
+    kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 6px; background: var(--raised); font: 12.5px var(--mono); color: var(--text); text-align: center; }
+
+    .phone { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+    .phones { display: flex; gap: 16px; justify-content: center; }
+    .phones img { width: 46%; max-width: 260px; border-radius: 28px; border: 1px solid var(--line-strong); }
+    .phones img:last-child { margin-top: 48px; }
+    .list { margin-top: 28px; display: grid; gap: 16px; }
+    .list div { padding-left: 16px; border-left: 2px solid var(--line-strong); }
+    .list b { font-weight: 600; }
+    .list span { display: block; color: var(--text-2); font-size: 15px; }
+
+    .compare { margin-top: 40px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .compare div { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 16px; padding: 16px 24px; border-top: 1px solid var(--line); font-size: 15px; }
+    .compare div:first-child { border-top: 0; background: var(--surface); font-size: 13px; color: var(--muted); }
+    .compare .yes { color: var(--text); }
+    .compare .no { color: var(--muted); }
+
+    .get { display: flex; align-items: center; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+    footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+    footer .wrap { display: flex; gap: 24px; flex-wrap: wrap; justify-content: space-between; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 960px) {
+      .hero { grid-template-columns: 1fr; gap: 40px; padding: 48px 0 64px; }
+      h1 { font-size: 40px; }
+      .card, .card.wide { grid-column: span 3; }
+      .card.full { grid-template-columns: 1fr; gap: 20px; }
+      .phone { grid-template-columns: 1fr; gap: 40px; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 0 20px; }
+      .links { display: none; position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; gap: 0; padding: 8px 20px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+      .links.open { display: flex; }
+      .links a { padding: 12px 0; border-top: 1px solid var(--line); }
+      .menu { display: flex; }
+      .nav .btn-small { display: none; }
+      h1 { font-size: 32px; }
+      .lead { font-size: 16px; }
+      .actions .btn { flex: 1 1 100%; }
+      section { padding: 64px 0; }
+      h2 { font-size: 26px; }
+      .grid { grid-template-columns: 1fr; }
+      .card, .card.wide, .card.full { grid-column: auto; padding: 20px; }
+      .screen { aspect-ratio: auto; height: 300px; border-radius: 14px; }
+      .island { top: 10px; width: calc(100% - 20px); padding: 12px 14px 14px; border-radius: 22px; }
+      .compare div { grid-template-columns: 1fr 1fr; padding: 14px 16px; }
+      .compare div > :first-child { grid-column: 1 / -1; font-weight: 600; color: var(--text); }
+      .compare div:first-child > :first-child { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="wrap nav">
+      <a class="brand" href="#"><img src="img/icon.png" alt="" />Dynamic Island</a>
+      <div class="links" id="links">
+        <a href="#recursos">Recursos</a>
+        <a href="#celular">Celular</a>
+        <a href="#comparar">Comparar</a>
+        <a href="https://github.com/theuslpszbr15/dynamic-island-windows">GitHub</a>
+      </div>
+      <button class="menu" aria-label="Menu" aria-expanded="false" onclick="toggleMenu(this)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <a class="btn btn-primary btn-small" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe">Baixar</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <div class="hero">
+      <div>
+        <h1>Uma ilha no topo do Windows para a música, os seus agentes de IA e o celular</h1>
+        <p class="lead">Mostra o que está tocando com a letra, o que o Copilot e o Claude Code estão fazendo (com Permitir e Negar), a próxima reunião com o botão Entrar e conversa com o seu Android. Os cliques passam por ela.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
+            Baixar para Windows
+          </a>
+          <a class="btn btn-quiet" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland-Android.apk">App Android</a>
+        </div>
+        <p class="meta">Grátis · código aberto (MIT) · Windows 10 e 11 · Android 11+</p>
+      </div>
+
+      <div>
+        <div class="screen" aria-label="Demonstração da ilha">
+          <div class="island">
+            <div class="head">
+              <span class="bit" id="bit" role="button" aria-label="Fazer carinho no Bit" onclick="pat()">
+                <svg viewBox="0 0 24 24" width="22" height="22">
+                  <path d="M3.6,10.4 L4.6,2.2 L10.4,6.4 Z M20.4,10.4 L19.4,2.2 L13.6,6.4 Z" fill="#3D444D" stroke="#3D444D" stroke-width="1.4" stroke-linejoin="round"/>
+                  <path d="M5.4,4.6 L6.1,8 L8.4,6.4 Z M18.6,4.6 L17.9,8 L15.6,6.4 Z" fill="#FF8FA3"/>
+                  <path d="M12,4.4 C18.5,4.4 21.6,8.5 21.6,13.2 C21.6,17.7 17.7,20.2 12,20.2 C6.3,20.2 2.4,17.7 2.4,13.2 C2.4,8.5 5.5,4.4 12,4.4 Z" fill="#3D444D" stroke="#5A636E" stroke-width="0.45"/>
+                  <path d="M12,7.3 C16.9,7.3 19.2,10.1 19.2,13.4 C19.2,16.7 16.3,18.6 12,18.6 C7.7,18.6 4.8,16.7 4.8,13.4 C4.8,10.1 7.1,7.3 12,7.3 Z" fill="#1F2328"/>
+                  <ellipse cx="8.25" cy="13.6" rx="2.1" ry="2.4" fill="#fff"/><ellipse cx="15.75" cy="13.6" rx="2.1" ry="2.4" fill="#fff"/>
+                  <ellipse cx="8.6" cy="13.85" rx="1.05" ry="1.35" fill="#1c1c1e"/><ellipse cx="15.4" cy="13.85" rx="1.05" ry="1.35" fill="#1c1c1e"/>
+                </svg>
+              </span>
+              <span id="title">Agentes</span>
+              <span id="clock">seg, 16 nov · 14:30</span>
+            </div>
+            <div class="body" id="body"></div>
+          </div>
+          <div class="bar"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="seg" role="tablist" id="seg">
+          <button role="tab" aria-selected="true" data-mode="agents">Agentes</button>
+          <button role="tab" aria-selected="false" data-mode="approval">Permissão</button>
+          <button role="tab" aria-selected="false" data-mode="media">Música</button>
+          <button role="tab" aria-selected="false" data-mode="meeting">Reunião</button>
+          <button role="tab" aria-selected="false" data-mode="focus">Foco</button>
+          <button role="tab" aria-selected="false" data-mode="discord">Discord</button>
+        </div>
+        <p class="hint">Toque no gatinho para fazer carinho. No app, é <kbd>Shift</kbd> + clique</p>
+      </div>
+    </div>
+  </main>
+
+  <section id="recursos">
+    <div class="wrap">
+      <h2>O que aparece na ilha</h2>
+      <p class="intro">Ela fica como uma barrinha discreta e abre quando algo acontece ou quando você para o mouse em cima.</p>
+      <div class="grid">
+        <div class="card full">
+          <div>
+            <h3>Seus agentes, ao vivo</h3>
+            <p>GitHub Copilot e Claude Code aparecem com os passos (leitura, edição, terminal) e o diff da última edição. Quando o Claude Code pede permissão, você vê o comando exato e responde ali mesmo, ou pelo celular com a digital.</p>
+          </div>
+          <div class="shot"><img src="img/28-approval.png" alt="Pedido de permissão do Claude Code na ilha" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Música com a letra</h3>
+          <p>Capa, controles e progresso de qualquer player, com a linha que está sendo cantada.</p>
+          <div class="shot"><img src="img/02-now-playing.png" alt="Música tocando na ilha" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Reunião em 5 minutos</h3>
+          <p>Lê o Google Agenda ou o Outlook e avisa antes de cada reunião, com o botão Entrar do Teams, Meet ou Zoom.</p>
+          <div class="shot"><img src="img/33-calendar-weather.png" alt="Agenda com as próximas reuniões" loading="lazy" /></div>
+        </div>
+        <div class="card">
+          <h3>Timer e modo foco</h3>
+          <p>Enquanto o Pomodoro corre, as notificações esperam. No fim, quanto você focou no dia e na semana.</p>
+        </div>
+        <div class="card">
+          <h3>Tarefas, água e PIX</h3>
+          <p>Tarefas com prazo, copos de água com lembrete e textos que você copia com um clique.</p>
+        </div>
+        <div class="card">
+          <h3>Calls do Discord</h3>
+          <p>Quem entra e sai da sua call aparece com a foto, sem configurar nada.</p>
+        </div>
+        <div class="card wide">
+          <h3>O Bit e os outros mascotes</h3>
+          <p>Seguem o mouse, dançam com a música e ficam laranja quando um agente precisa de você. Dá para importar o seu em PNG.</p>
+          <div class="shot"><img src="img/43-patpat.png" alt="Mascotes recebendo carinho" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Do jeito que você usa</h3>
+          <p>Dez temas e vidro desfocado, formato notch, vários monitores e atalhos como <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>D</kbd> para esconder. Configurações com busca em <kbd>Ctrl</kbd> <kbd>K</kbd>.</p>
+          <div class="shot"><img src="img/26-glass-media.png" alt="Tema vidro" loading="lazy" /></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="celular">
+    <div class="wrap phone">
+      <div>
+        <h2>O celular entra na conversa</h2>
+        <p class="intro">Pareie com um QR code. Em casa a conexão é direta; fora, passa por um repasse que só vê dados cifrados.</p>
+        <div class="list">
+          <div><b>Aprovar pela digital</b><span>Os pedidos dos agentes chegam como notificação: Negar na hora, Permitir com a digital.</span></div>
+          <div><b>Controle remoto</b><span>Música, volume, bloquear o PC, desligar daqui a uma hora e ligar o PC de novo pela rede.</span></div>
+          <div><b>Área de transferência e arquivos</b><span>Copiou no PC, está no celular. Fotos e arquivos de até 30 MB nos dois sentidos.</span></div>
+          <div><b>Ligações na ilha</b><span>Quem está ligando aparece no PC, com o nome do contato.</span></div>
+        </div>
+      </div>
+      <div class="phones">
+        <img src="img/41-android-approval.png" alt="Aprovação no celular" loading="lazy" />
+        <img src="img/44-android-pc.png" alt="Controle remoto no celular" loading="lazy" />
+      </div>
+    </div>
+  </section>
+
+  <section id="comparar">
+    <div class="wrap">
+      <h2>Grátis, aberto e feito para quem programa</h2>
+      <p class="intro">Comparada aos apps de entalho pagos para Windows.</p>
+      <div class="compare">
+        <div><span></span><span>Dynamic Island</span><span>Apps pagos</span></div>
+        <div><span>Preço</span><span class="yes">Grátis, sem conta</span><span class="no">Pagamento ou assinatura</span></div>
+        <div><span>Código</span><span class="yes">Aberto (MIT)</span><span class="no">Fechado</span></div>
+        <div><span>Copilot e Claude Code ao vivo</span><span class="yes">Passos, diff, Permitir e Negar</span><span class="no">Não</span></div>
+        <div><span>App Android</span><span class="yes">Nativo, fora de casa também</span><span class="no">Página web, mesmo Wi-Fi</span></div>
+        <div><span>Calls do Discord</span><span class="yes">Sim</span><span class="no">Não</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap get">
+      <div>
+        <h2>Baixe e abra</h2>
+        <p class="intro">A versão completa (80 MB) funciona em qualquer Windows. A leve (27 MB, usa uns 70 MB a menos de RAM) precisa do <a href="https://dotnet.microsoft.com/download/dotnet/10.0">.NET 10 Desktop Runtime</a>; se faltar, o Windows oferece o download. Com o .NET instalado, a ilha passa sozinha para a leve na próxima atualização. Se o Windows avisar que protegeu o computador, clique em Mais informações e Executar assim mesmo.</p>
+      </div>
+      <div class="actions" style="margin-top:0">
+        <a class="btn btn-primary" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe">Completa (80 MB)</a>
+        <a class="btn btn-quiet" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland-Leve.exe">Leve (27 MB)</a>
+        <a class="btn btn-quiet" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases">Todas as versões</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>Dynamic Island para Windows · MIT</span>
+      <span><a href="https://github.com/theuslpszbr15/dynamic-island-windows">Código no GitHub</a></span>
+    </div>
+  </footer>
+
+  <script>
+    const modes = {
+      agents: ["Agentes", `
+        <div class="row" style="align-items:flex-start">
+          <div class="steps" style="flex:none;width:44%">
+            <div class="t ellipsis">dynamic-island</div>
+            <div class="s" style="margin-bottom:6px">Copilot · trabalhando</div>
+            <div style="color:#30d158">✓ Leitura</div>
+            <div style="font-weight:600">● Edição</div>
+          </div>
+          <div class="diff grow">
+            <div style="color:#5ac8fa">SettingsWindow.cs</div>
+            <div class="ellipsis"><span class="del">Row("Monitor", null)</span></div>
+            <div class="ellipsis"><span class="add">Row("Monitor", "Em qual tela")</span></div>
+          </div>
+        </div>`],
+      approval: ["Permissão", `
+        <div class="t">Claude Code <span style="color:#ff9f0a">esperando seu OK</span> <span class="s">48s</span></div>
+        <div class="code">$ git push origin main</div>
+        <div class="row" style="gap:10px">
+          <button class="chip" style="background:#5a1d1d;color:#fff" onclick="show('agents')">Negar</button>
+          <button class="chip" style="background:#30d158;color:#000" onclick="show('agents')">Permitir</button>
+        </div>`],
+      media: ["Tocando agora", `
+        <div class="row">
+          <div class="art"></div>
+          <div class="grow">
+            <div class="t ellipsis">Blinding Lights</div>
+            <div class="s ellipsis">The Weeknd · “I said, ooh, I'm blinded by the lights”</div>
+            <div class="track"><b style="width:58%;background:#ff6b8a"></b></div>
+            <div class="row s" style="font-family:var(--mono);font-size:11px"><span>1:58</span><span style="margin-left:auto">-1:22</span></div>
+          </div>
+        </div>`],
+      meeting: ["Agenda", `
+        <div class="row">
+          <div class="grow">
+            <div class="t ellipsis">Daily do time em 5 min</div>
+            <div class="s">14:35 · Microsoft Teams</div>
+          </div>
+          <button class="chip" style="flex:none;padding:0 18px;background:#0a84ff;color:#fff">Entrar</button>
+        </div>
+        <div class="s" style="margin-top:14px;font-family:var(--mono);font-size:11px;line-height:1.9">
+          <div>16:00 · Revisão do PR</div><div>amanhã · Planejamento</div>
+        </div>`],
+      focus: ["Timer", `
+        <div class="row">
+          <div class="grow">
+            <div style="font:600 36px/1.1 var(--sans);font-variant-numeric:tabular-nums">18:42</div>
+            <div class="s">Termina às 14:52 · modo foco (3 esperando)</div>
+          </div>
+        </div>
+        <div class="track" style="margin-top:14px"><b style="width:25%;background:#ff9f0a"></b></div>`],
+      discord: ["Call do Discord", `
+        <div class="row">
+          <div style="width:40px;height:40px;border-radius:50%;background:#5865f2;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none">M</div>
+          <div class="grow">
+            <div class="t ellipsis">Matheus entrou na call</div>
+            <div class="s ellipsis">Geral · 4 na call</div>
+          </div>
+        </div>`],
+    };
+
+    const body = document.getElementById("body");
+    const title = document.getElementById("title");
+    function show(mode) {
+      document.querySelectorAll("#seg button").forEach(b => b.setAttribute("aria-selected", b.dataset.mode === mode));
+      body.classList.add("out");
+      setTimeout(() => {
+        title.textContent = modes[mode][0];
+        body.innerHTML = modes[mode][1];
+        body.classList.remove("out");
+      }, 120);
+    }
+    document.querySelectorAll("#seg button").forEach(b => b.addEventListener("click", () => show(b.dataset.mode)));
+    title.textContent = modes.agents[0];
+    body.innerHTML = modes.agents[1];
+
+    function pat() {
+      const bit = document.getElementById("bit");
+      bit.classList.add("pat");
+      setTimeout(() => bit.classList.remove("pat"), 160);
+      const heart = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      heart.setAttribute("viewBox", "0 0 5 4");
+      heart.setAttribute("class", "heart");
+      heart.innerHTML = '<path fill="#ff4d6d" d="M0 0h2v1H0zM3 0h2v1H3zM0 1h5v1H0zM1 2h3v1H1zM2 3h1v1H2z"/>';
+      bit.appendChild(heart);
+      setTimeout(() => heart.remove(), 700);
+    }
+
+    function toggleMenu(button) {
+      const open = document.getElementById("links").classList.toggle("open");
+      button.setAttribute("aria-expanded", open);
+    }
+    document.querySelectorAll("#links a").forEach(a => a.addEventListener("click", () => document.getElementById("links").classList.remove("open")));
+  </script>
+</body>
+</html>

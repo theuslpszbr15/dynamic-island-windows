@@ -52,8 +52,13 @@ public partial class IslandWindow
         await Shot("06-expanded-system");
         foreach (var path in new[] { Environment.ProcessPath!, Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), @"C:\Windows\notepad.exe" })
             Files.Add(new FileItem(path));
+        var phoneLink = _settings.PhoneLink;
+        _settings.PhoneLink = true;
+        UpdatePhoneSend();
         ShowPage(PageFiles, 1);
         await Shot("07-expanded-files");
+        _settings.PhoneLink = phoneLink;
+        UpdatePhoneSend();
         SetExpanded(false);
 
         // Real end-to-end path: hook process -> named pipe -> island.
@@ -266,6 +271,10 @@ public partial class IslandWindow
         ShowBluetooth([new("Galaxy Buds2", 80), new("MX Master 3", 12)]);
         await Shot("32-system-brightness-bt");
         SetWeather(new WeatherNow("Joinville", 24, 26, 78, 11, "Parcialmente nublado", 116, 19, 28));
+        SetEvents([
+            new(DateTime.Now.AddMinutes(5), DateTime.Now.AddMinutes(35), "Daily do time", "https://teams.microsoft.com/l/meetup-join/demo", "Outlook"),
+            new(DateTime.Today.AddHours(16), DateTime.Today.AddHours(17), "Revisão do app", "https://meet.google.com/abc-defg-hij", "google"),
+        ]);
         ShowPage(PageCalendar, 1);
         await Shot("33-calendar-weather");
         SetExpanded(false);
@@ -326,12 +335,25 @@ public partial class IslandWindow
         ApplyPhoneLink();
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
-        foreach (var section in new[] { "general", "look", "island", "agents", "phone", "tray", "updates", "phone-download" })
+        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "agents", "phone", "phone-end", "tray", "updates", "phone-download" })
         {
             if (section == "phone-download") settingsWindow.ShowDownloadQr();
-            else settingsWindow.Navigate(section);
+            else settingsWindow.Navigate(section == "phone-end" ? "phone" : section);
             await Task.Delay(700);
             var root = (FrameworkElement)settingsWindow.Content;
+            if (section == "phone-end")
+            {
+                // the page's scroller is the tallest one; the Wake-on-LAN card sits at its end
+                System.Windows.Controls.ScrollViewer? page = null;
+                void Find(DependencyObject node)
+                {
+                    if (node is System.Windows.Controls.ScrollViewer s && (page == null || s.ExtentHeight > page.ExtentHeight)) page = s;
+                    for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Find(VisualTreeHelper.GetChild(node, i));
+                }
+                Find(root);
+                page?.ScrollToEnd();
+                await Task.Delay(300);
+            }
             var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
             image.Render(root);
             var png = new PngBitmapEncoder();

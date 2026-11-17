@@ -34,6 +34,18 @@ public sealed partial class PhoneLink : IDisposable
 {
     public const int Version = 1;
     public const int DefaultPort = 47900;
+
+    /// <summary>The Android app built with this PC version (android/app/build.gradle.kts, read at build time).</summary>
+    public static readonly int AndroidVersionCode = int.TryParse(Metadata("AndroidVersionCode"), out var code) ? code : 0;
+    public static readonly string AndroidVersionName = Metadata("AndroidVersionName") ?? "";
+    public static string AndroidApkUrl => $"https://github.com/{Updater.Repository}/releases/latest/download/DynamicIsland-Android.apk";
+
+    static string? Metadata(string key) => typeof(PhoneLink).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+        .Cast<System.Reflection.AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value;
+
+    /// <summary>Raised on the UI thread when a phone connects with an app older than <see cref="AndroidVersionCode"/>.</summary>
+    public event Action<string>? OldApp;
     // MaxPeers counts paired phones; connections still in the TLS/hello stage have their own small budget (and
     // per address), so someone on the network opening sockets can't lock the real phone out. Connections from the
     // relay have no address and a budget of their own.
@@ -53,7 +65,13 @@ public sealed partial class PhoneLink : IDisposable
     public const string RelayLimitMessage = "Limite do repasse atingido. Tente mais tarde ou use seu próprio repasse.";
     public const string RelayWrongKeyMessage = "O repasse não reconheceu este PC. Use \"Parear de novo\" nas Configurações.";
 
-    static string SecretFile => Path.Combine(IslandSettings.Folder, "phone-link.bin");
+    internal static string SecretFile => DemoMode
+        ? Path.Combine(Path.GetTempPath(), $"dynamic-island-demo-{Environment.ProcessId}.bin")
+        : Path.Combine(IslandSettings.Folder, "phone-link.bin");
+
+    /// <summary>Screenshots and perf runs: a throwaway token and certificate and a made-up address, so a published
+    /// screenshot's QR code never pairs with the PC that took it.</summary>
+    internal static bool DemoMode;
 
     readonly Dispatcher _ui;
     readonly object _gate = new();
@@ -66,6 +84,7 @@ public sealed partial class PhoneLink : IDisposable
     string _token = "";
     string _sessions = """{"type":"sessions","sessions":[]}""";
     string _tray = """{"type":"tray","items":[]}""";
+    string? _pcState;
     readonly Dictionary<string, string> _approvals = []; // fingerprint -> JSON line
 
     public PhoneLink(Dispatcher ui) => _ui = ui;
@@ -87,6 +106,17 @@ public sealed partial class PhoneLink : IDisposable
     /// <summary>Raised on the UI thread with a tray item id the phone wants opened.</summary>
     public event Action<string>? Open;
     public event Action? PhonesChanged;
+    /// <summary>Raised on the UI thread with text the phone copied (clipboard sync).</summary>
+    public event Action<string>? Clip;
+    /// <summary>Raised on the UI thread: (action, minutes) from the phone's remote control.</summary>
+    public event Action<string, int>? Remote;
+    /// <summary>Raised on the UI thread: ("ringing" | "offhook" | "idle", contact name, number) for the phone's calls.</summary>
+    public event Action<string, string, string>? Call;
+
+    /// <summary>Clipboard text that travels between the PC and the phone (a line stays well under <see cref="MaxLine"/>).</summary>
+    public const int MaxClipChars = 16_000;
+    public static readonly string[] RemoteActions =
+        ["play", "next", "prev", "volup", "voldown", "mute", "lock", "shutdown", "cancelShutdown"];
 
     public void Start()
     {
@@ -153,6 +183,10 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     /// <summary>A relay close code in words for the island, or null when it isn't one the person can act on.</summary>
+    public const string RelayRefusedPublicMessage =
+        "O repasse público está recusando conexões agora. Crie o seu (grátis) em \"Criar meu repasse\", logo abaixo.";
+    public const string RelayRefusedOwnMessage = "Seu repasse recusou a chave: confira a chave do repasse abaixo.";
+
     public static string? RelayCloseMessage(int? code) => code switch
     {
         RelayLimit => RelayLimitMessage,
@@ -240,7 +274,7 @@ public sealed partial class PhoneLink : IDisposable
     }
 
     public string PairingLink() =>
-        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, Environment.MachineName, Relay, RelayKeyInUse);
+        BuildPairingLink(LocalAddress() ?? "127.0.0.1", Port, Fingerprint, _token, DemoMode ? "MEU-PC" : Environment.MachineName, Relay, RelayKeyInUse);
 
     /// <summary>The QR code's link. <paramref name="relay"/> and <paramref name="relayKey"/> ("" = none) are
     /// optional parameters; the key only goes along with a relay (an own relay with a key: the public one has none).</summary>
@@ -347,6 +381,26 @@ public sealed partial class PhoneLink : IDisposable
         foreach (var peer in peers) peer.Enqueue(line);
     }
 
+    /// <summary>Text copied on the PC goes to the phone's clipboard (too long: not sent).</summary>
+    public void PublishClip(string text)
+    {
+        if (text.Length is 0 or > MaxClipChars) return;
+        Broadcast(new JsonObject { ["type"] = "clip", ["text"] = text }.ToJsonString());
+    }
+
+    /// <summary>What the phone's remote shows: the song, the volume and a pending shutdown (Unix ms, 0 = none).</summary>
+    public void PublishPcState(string title, string artist, bool playing, int volume, bool muted, long shutdownAt)
+    {
+        var line = new JsonObject
+        {
+            ["type"] = "pc", ["title"] = Cut(title, 120), ["artist"] = Cut(artist, 120), ["playing"] = playing,
+            ["volume"] = Math.Clamp(volume, 0, 100), ["muted"] = muted, ["shutdownAt"] = shutdownAt,
+        }.ToJsonString();
+        if (line == _pcState) return;
+        _pcState = line;
+        Broadcast(line);
+    }
+
     static string Cut(string text, int max) => text.Length <= max ? text : text[..max];
 
     // ───────────────────────── connections ─────────────────────────
@@ -429,6 +483,8 @@ public sealed partial class PhoneLink : IDisposable
                     return;
                 }
                 peer.Device = Cut(Str(root, "device") ?? "Android", 40);
+                // apps before 1.3.4 don't say: 0
+                peer.App = root.TryGetProperty("app", out var app) && app.TryGetInt32(out var appCode) ? appCode : 0;
             }
             peer.Since = DateTime.Now;
             peer.Authenticated = true;
@@ -436,15 +492,22 @@ public sealed partial class PhoneLink : IDisposable
             {
                 PhonesChanged?.Invoke();
                 PhoneJoined?.Invoke(peer.Device, peer.Relay);
+                if (peer.App < AndroidVersionCode) OldApp?.Invoke(peer.Device);
             });
             await peer.SendAsync(new JsonObject
             {
                 ["type"] = "welcome", ["v"] = Version, ["desktop"] = Environment.MachineName, ["os"] = "windows",
                 ["relay"] = Relay, // phones paired before the relay learn it here, without a new QR code
                 ["relayKey"] = Relay.Length > 0 ? RelayKeyInUse : "", // only ever sent here, after the token checked out
+                // so the phone can switch this PC on later (Wake-on-LAN), when the link can't reach it
+                ["wake"] = WakeOnLan.Wired() is { } wake ? new JsonObject { ["mac"] = wake.Mac, ["broadcast"] = wake.Broadcast } : null,
+                // so an older app can offer its own update
+                ["android"] = AndroidVersionCode > 0
+                    ? new JsonObject { ["code"] = AndroidVersionCode, ["name"] = AndroidVersionName, ["url"] = AndroidApkUrl } : null,
             }.ToJsonString());
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
+            if (_pcState != null) await peer.SendAsync(_pcState);
             List<string> pending;
             lock (_gate) pending = _approvals.Values.ToList();
             foreach (var line in pending) await peer.SendAsync(line);
@@ -468,6 +531,15 @@ public sealed partial class PhoneLink : IDisposable
                         break;
                     case PhoneAction.Open:
                         _ = _ui.InvokeAsync(() => Open?.Invoke(command.Id!));
+                        break;
+                    case PhoneAction.Clip:
+                        _ = _ui.InvokeAsync(() => Clip?.Invoke(command.Text!));
+                        break;
+                    case PhoneAction.Remote:
+                        _ = _ui.InvokeAsync(() => Remote?.Invoke(command.Text!, command.Minutes));
+                        break;
+                    case PhoneAction.Call:
+                        _ = _ui.InvokeAsync(() => Call?.Invoke(command.State!, command.Name ?? "", command.Number ?? ""));
                         break;
                     case PhoneAction.FileDecline:
                         EndOffer(command.Id!, FileOutcome.Declined);
@@ -547,10 +619,12 @@ public sealed partial class PhoneLink : IDisposable
 
     /// <summary>What the PC does with one JSON line from a phone. Serve's state machine, extracted so tests can
     /// drive it; <see cref="PhoneAction.None"/> means the line is fine but asks for nothing.</summary>
-    internal enum PhoneAction { None, Ping, Decision, Open, FileDecline, FileDone, SendOffer, SendCancel, Bye }
+    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Bye }
 
+    /// <summary>Text is the copied text (Clip) or the remote action (Remote); State/Name/Number describe a Call.</summary>
     internal sealed record PhoneCommand(PhoneAction Action, string? Fingerprint = null, string? Decision = null,
-        string? Id = null, bool Ok = false, JsonElement Offer = default);
+        string? Id = null, bool Ok = false, JsonElement Offer = default, string? Text = null, int Minutes = 0,
+        string? State = null, string? Name = null, string? Number = null);
 
     /// <summary>Lines that don't carry every field their action needs become <see cref="PhoneAction.None"/>
     /// (nothing happens), exactly like the guards they replace.</summary>
@@ -564,6 +638,14 @@ public sealed partial class PhoneLink : IDisposable
                 return new PhoneCommand(PhoneAction.Decision, Fingerprint: fp, Decision: Str(root, "decision"));
             case "open" when id is { Length: > 0 and <= 64 }:
                 return new PhoneCommand(PhoneAction.Open, Id: id);
+            case "clip" when Str(root, "text") is { Length: > 0 and <= MaxClipChars } clip:
+                return new PhoneCommand(PhoneAction.Clip, Text: clip);
+            case "remote" when Str(root, "action") is { } action && RemoteActions.Contains(action):
+                return new PhoneCommand(PhoneAction.Remote, Text: action,
+                    Minutes: root.TryGetProperty("minutes", out var m) && m.TryGetInt32(out var mi) ? Math.Clamp(mi, 1, 720) : 0);
+            case "call" when Str(root, "state") is "ringing" or "offhook" or "idle":
+                return new PhoneCommand(PhoneAction.Call, State: Str(root, "state"),
+                    Name: Cut(Str(root, "name") ?? "", 64), Number: Cut(Str(root, "number") ?? "", 32));
             case "fileDecline" when id != null:
                 return new PhoneCommand(PhoneAction.FileDecline, Id: id);
             case "fileDone" when id != null:
@@ -597,6 +679,7 @@ public sealed partial class PhoneLink : IDisposable
     /// <summary>The PC's private IPv4 on the network that has the default gateway (Wi-Fi or cable).</summary>
     public static string? LocalAddress()
     {
+        if (DemoMode) return "192.168.0.12";
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()
                      .Where(n => n.OperationalStatus == OperationalStatus.Up
                                  && n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
@@ -764,6 +847,8 @@ public sealed partial class PhoneLink : IDisposable
                 catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return; }
                 catch (Exception ex)
                 {
+                    if (ws.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized)
+                        SetRelayProblem(_relayOwn ? RelayRefusedOwnMessage : RelayRefusedPublicMessage);
                     // One line per outage, not one per retry.
                     if (failures++ == 0) Log.Error("PhoneLink.Relay", ex);
                 }
@@ -781,9 +866,14 @@ public sealed partial class PhoneLink : IDisposable
     ClientWebSocket NewRelaySocket(string relay)
     {
         var ws = new ClientWebSocket();
+        ws.Options.CollectHttpResponseDetails = true;
         ws.Options.KeepAliveInterval = RelayKeepAlive;
         ws.Options.KeepAliveTimeout = RelayKeepAliveTimeout;
         if (relay == PublicRelay) ws.Options.RemoteCertificateValidationCallback = PublicRelayValidation;
+        // corporate proxies (407) accept the signed-in Windows user, as browsers do
+        var proxy = System.Net.WebRequest.GetSystemWebProxy();
+        proxy.Credentials = System.Net.CredentialCache.DefaultNetworkCredentials;
+        ws.Options.Proxy = proxy;
         if (RelayKeyInUse.Length > 0) ws.Options.SetRequestHeader("Authorization", "Bearer " + RelayKeyInUse);
         return ws;
     }
@@ -954,6 +1044,8 @@ public sealed partial class PhoneLink : IDisposable
         public SslStream? Stream;
         public bool Authenticated;
         public string Device = "";
+        /// <summary>The app's versionCode from the hello (0: an app too old to say).</summary>
+        public int App;
         public DateTime Since;
         /// <summary>A connection that only carries a file (not a phone in the list, not a pending hello).</summary>
         public volatile bool Fetching;

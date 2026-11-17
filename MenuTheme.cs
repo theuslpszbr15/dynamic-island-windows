@@ -11,7 +11,7 @@ readonly record struct MenuPalette(Wpf.Color Back, Wpf.Color Hover, Wpf.Color Te
 {
     public static MenuPalette For(string theme)
     {
-        if (theme == IslandThemes.Light)
+        if (IslandThemes.IsLight(theme))
             return new(Rgb(0xF9, 0xF9, 0xFB), Argb(0x14, 0, 0, 0), Rgb(0x1C, 0x1C, 0x1E), Rgb(0x6E, 0x6E, 0x73),
                 Argb(0x1A, 0, 0, 0), Argb(0x24, 0, 0, 0), Rgb(0x00, 0x7A, 0xFF));
 

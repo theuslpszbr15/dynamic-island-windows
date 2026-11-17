@@ -15,6 +15,11 @@
     <!-- keeps the island alive without a PC link (IslandService) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- "Ligações no PC" (off until the person turns it on and grants them): who is calling shows on the PC's island -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- to open the Claude app from the island when its notification has nothing to open -->
     <queries>
         <package android:name="com.anthropic.claude" />
@@ -73,6 +78,34 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+
+        <!-- the floating island's "Mandar pro PC" buttons open the picker / read the clipboard through this -->
+        <activity
+            android:name=".SendPickActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- the quick tile reads the clipboard through this (Android only lets an app in front read it) -->
+        <activity
+            android:name=".ClipActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".ClipTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_send_paste"
+            android:label="Copiado → PC"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".LinkService"

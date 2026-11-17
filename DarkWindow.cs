@@ -18,7 +18,9 @@ public abstract class DarkWindow : Window
         Line = Frozen(0xFF2E2E33), Muted = Frozen(0xFF9A9AA0), Accent = Frozen(0xFF0A84FF), Hover = Frozen(0xFF2A2A2F);
 
     readonly (string Id, string Glyph, string Title)[] _sections;
-    readonly StackPanel _nav = new() { Margin = new Thickness(10, 8, 10, 10) };
+    readonly StackPanel _nav = new() { Margin = new Thickness(10, 4, 10, 10) };
+    protected readonly TextBox _searchBox = new();
+    protected string _searchQuery = "";
     protected readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(34, 26, 34, 30) };
     protected string _page;
 
@@ -59,8 +61,68 @@ public abstract class DarkWindow : Window
         header.Children.Add(name);
         DockPanel.SetDock(header, Dock.Top);
         sidebar.Children.Add(header);
+
+        if (sections.Length > 0)
+        {
+            var searchWrap = new Border
+            {
+                Background = Hover, CornerRadius = new CornerRadius(8), BorderBrush = Line, BorderThickness = new Thickness(1),
+                Margin = new Thickness(14, 0, 14, 6), Padding = new Thickness(10, 6, 10, 6),
+            };
+            var searchGrid = new Grid();
+            searchGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
+            searchGrid.ColumnDefinitions.Add(new ColumnDefinition());
+            searchGrid.Children.Add(new TextBlock
+            {
+                Text = "\uE721", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
+                FontSize = 13, Foreground = Muted, VerticalAlignment = VerticalAlignment.Center,
+            });
+            var hint = new TextBlock
+            {
+                Text = "Buscar (Ctrl+K)…", FontSize = 12.5, Foreground = Muted, IsHitTestVisible = false,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            _searchBox.Background = Brushes.Transparent;
+            _searchBox.Foreground = Brushes.White;
+            _searchBox.CaretBrush = Brushes.White;
+            _searchBox.BorderThickness = new Thickness(0);
+            _searchBox.FontSize = 12.5;
+            _searchBox.VerticalAlignment = VerticalAlignment.Center;
+            _searchBox.TextChanged += (_, _) =>
+            {
+                hint.Visibility = _searchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+                _searchQuery = _searchBox.Text.Trim();
+                Render();
+            };
+            _searchBox.GotKeyboardFocus += (_, _) => searchWrap.BorderBrush = Accent;
+            _searchBox.LostKeyboardFocus += (_, _) => searchWrap.BorderBrush = Line;
+            Grid.SetColumn(hint, 1);
+            Grid.SetColumn(_searchBox, 1);
+            searchGrid.Children.Add(hint);
+            searchGrid.Children.Add(_searchBox);
+            searchWrap.Child = searchGrid;
+            DockPanel.SetDock(searchWrap, Dock.Top);
+            sidebar.Children.Add(searchWrap);
+        }
+
         foreach (var (id, glyph, title) in sections) _nav.Children.Add(NavButton(id, glyph, title));
         sidebar.Children.Add(_nav);
+
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control && sections.Length > 0)
+            {
+                e.Handled = true;
+                _searchBox.Focus();
+                _searchBox.SelectAll();
+            }
+            else if (e.Key == Key.Escape && _searchBox.Text.Length > 0)
+            {
+                e.Handled = true;
+                _searchBox.Text = "";
+                Keyboard.ClearFocus();
+            }
+        };
 
         var root = _root;
         root.Background = Ground;
@@ -168,6 +230,7 @@ public abstract class DarkWindow : Window
     public void Navigate(string page)
     {
         if (_sections.All(s => s.Id != page)) return;
+        if (_searchBox.Text.Length > 0) _searchBox.Text = "";
         _page = page;
         Render();
     }
@@ -175,14 +238,57 @@ public abstract class DarkWindow : Window
     /// <summary>Builds the current page again (keeping the scroll position).</summary>
     protected void Render()
     {
-        foreach (RadioButton b in _nav.Children) b.IsChecked = (string)b.Tag == _page;
+        var searching = !string.IsNullOrEmpty(_searchQuery);
+        foreach (RadioButton b in _nav.Children) b.IsChecked = !searching && (string)b.Tag == _page;
         var offset = _scroll.VerticalOffset;
         var page = new StackPanel { MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
+        if (searching)
+        {
+            page.Children.Add(new TextBlock { Text = $"Resultados para \"{_searchQuery}\"", FontSize = 24, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 18) });
+            var matched = 0;
+            foreach (var (id, _, secTitle) in _sections)
+            {
+                if (id == "home") continue;
+                var temp = new StackPanel();
+                Fill(id, temp);
+                foreach (var child in temp.Children.OfType<FrameworkElement>().ToList())
+                {
+                    if (!MatchesSearch(child, _searchQuery) && !secTitle.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) continue;
+                    temp.Children.Remove(child);
+                    page.Children.Add(new TextBlock { Text = secTitle, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Accent, Margin = new Thickness(2, 4, 0, 6) });
+                    page.Children.Add(child);
+                    matched++;
+                }
+            }
+            if (matched == 0)
+                page.Children.Add(Note("Nenhuma opção encontrada para essa busca. Tente termos como \"aurora\", \"jarvis\", \"água\", \"tarefas\", \"atalho\" ou \"discord\"."));
+            _scroll.Content = page;
+            _scroll.ScrollToTop();
+            return;
+        }
         var (_, _, title) = _sections.First(s => s.Id == _page);
         page.Children.Add(new TextBlock { Text = title, FontSize = 28, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 18) });
         Fill(_page, page);
         _scroll.Content = page;
         _scroll.ScrollToVerticalOffset(offset);
+    }
+
+    static bool MatchesSearch(DependencyObject root, string query)
+    {
+        if (root is TextBlock tb && tb.Text.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        if (root is ContentControl { Content: string s } && s.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        if (count == 0 && root is Panel panel)
+        {
+            foreach (UIElement child in panel.Children)
+                if (MatchesSearch(child, query)) return true;
+            return false;
+        }
+        if (count == 0 && root is Decorator dec && dec.Child != null)
+            return MatchesSearch(dec.Child, query);
+        for (var i = 0; i < count; i++)
+            if (MatchesSearch(VisualTreeHelper.GetChild(root, i), query)) return true;
+        return false;
     }
 
     protected abstract void Fill(string section, Panel page);

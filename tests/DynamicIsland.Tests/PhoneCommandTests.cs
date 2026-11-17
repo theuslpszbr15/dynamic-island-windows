@@ -75,5 +75,38 @@ public class PhoneCommandTests
     [Fact]
     public void ByeEndsTheSession() =>
         Assert.Equal(PhoneLink.PhoneAction.Bye, Parse("""{"type":"bye"}""").Action);
+
+    [Fact]
+    public void ClipCarriesTheTextWithinTheLimit()
+    {
+        var command = Parse("""{"type":"clip","text":"copiado"}""");
+        Assert.Equal(PhoneLink.PhoneAction.Clip, command.Action);
+        Assert.Equal("copiado", command.Text);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"clip","text":""}""").Action);
+        var tooLong = new string('a', PhoneLink.MaxClipChars + 1);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse($$"""{"type":"clip","text":"{{tooLong}}"}""").Action);
+    }
+
+    [Fact]
+    public void RemoteOnlyTakesKnownActionsAndClampsMinutes()
+    {
+        var command = Parse("""{"type":"remote","action":"shutdown","minutes":9999}""");
+        Assert.Equal(PhoneLink.PhoneAction.Remote, command.Action);
+        Assert.Equal("shutdown", command.Text);
+        Assert.Equal(720, command.Minutes);
+        Assert.Equal(0, Parse("""{"type":"remote","action":"lock"}""").Minutes);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"remote","action":"format-c"}""").Action);
+    }
+
+    [Fact]
+    public void CallCutsNameAndNumber()
+    {
+        var command = Parse($$"""{"type":"call","state":"ringing","name":"{{new string('n', 100)}}","number":"{{new string('9', 50)}}"}""");
+        Assert.Equal(PhoneLink.PhoneAction.Call, command.Action);
+        Assert.Equal("ringing", command.State);
+        Assert.Equal(64, command.Name!.Length);
+        Assert.Equal(32, command.Number!.Length);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"call","state":"weird"}""").Action);
+    }
 }
 

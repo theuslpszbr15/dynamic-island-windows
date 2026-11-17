@@ -32,6 +32,7 @@ class LinkService : Service() {
     private var worker: Thread? = null
     private var ticker: ScheduledExecutorService? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var callReceiver: android.content.BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,6 +55,10 @@ class LinkService : Service() {
             FileSender.load(this)
             IslandOverlay.linkRunning(this, true)
         }
+        // started again after "Ligações no PC" was turned on: the receiver comes in now
+        if (callReceiver == null && Calls.enabled(this)) {
+            callReceiver = Calls.receiver().also { try { Calls.register(this, it) } catch (_: Exception) {} }
+        }
         return START_STICKY
     }
 
@@ -67,7 +72,7 @@ class LinkService : Service() {
             rerouting = false
             Link.update { it.copy(pairing = pairing, status = LinkStatus.Connecting, message = null, viaRelay = false) }
             val client = LinkClient(pairing, "${Build.MANUFACTURER} ${Build.MODEL}".take(40), route,
-                if (hasRelay) LinkClient.LAN_FIRST_TIMEOUT_MS else LinkClient.CONNECT_TIMEOUT_MS)
+                if (hasRelay) LinkClient.LAN_FIRST_TIMEOUT_MS else LinkClient.CONNECT_TIMEOUT_MS, AppUpdate.installed(this))
             Link.client = client
             try {
                 client.run(listener)
@@ -99,7 +104,7 @@ class LinkService : Service() {
                 // nothing can be answered without the PC (files the PC offered stay: they wait a day, and the PC
                 // offers them again when the link is back)
                 Link.state.value.approvals.forEach { Notifications.cancelApproval(this, it.fingerprint) }
-                Link.update { it.copy(approvals = emptyList(), sessions = emptyList(), tray = emptyList()) }
+                Link.update { it.copy(approvals = emptyList(), sessions = emptyList(), tray = emptyList(), pc = null) }
             }
             showStatus("Sem conexão com ${pairing.name}. Tentando de novo…")
             val wait = BACKOFF_MS[minOf(attempt++, BACKOFF_MS.lastIndex)]
@@ -216,6 +221,14 @@ class LinkService : Service() {
 
         override fun onDiscord(event: DiscordEvent) = Island.discordEvent(event)
 
+        override fun onClip(text: String) = ClipSync.fromPc(this@LinkService, text)
+
+        override fun onWake(mac: String, broadcast: String) = Wake.save(this@LinkService, mac, broadcast)
+
+        override fun onPcState(state: PcState) = Link.update { it.copy(pc = state) }
+
+        override fun onAppVersion(code: Int, name: String, url: String) = AppUpdate.heard(this@LinkService, code, name, url)
+
         override fun onApproval(approval: Approval) {
             Link.update { s -> s.copy(approvals = s.approvals.filterNot { it.fingerprint == approval.fingerprint } + approval) }
             Notifications.showApproval(this@LinkService, approval)
@@ -248,6 +261,8 @@ class LinkService : Service() {
             try { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } catch (_: Exception) {}
         }
         networkCallback = null
+        callReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        callReceiver = null
         Link.client?.close()
         worker?.interrupt()
         worker = null

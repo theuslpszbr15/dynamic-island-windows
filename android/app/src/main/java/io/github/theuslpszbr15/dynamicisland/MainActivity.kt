@@ -79,6 +79,7 @@ class MainActivity : FragmentActivity() {
                     onRetry = { Link.resume(this) },
                     onPause = { Link.pause(this) },
                     onFixNotifications = ::openNotificationSettings,
+                    onRemote = ::remote,
                 )
             }
         }
@@ -87,6 +88,22 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handle(intent)
+    }
+
+    // the only moment Android lets the app read the clipboard: when it is in front
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ClipSync.offer(this)) Toast.makeText(this, "Copiado enviado para o PC", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Lock and shutdown need the owner's fingerprint, face or screen lock; music and volume don't. */
+    private fun remote(action: String, minutes: Int) {
+        val (title, subtitle) = when (action) {
+            "lock" -> "Bloquear o PC?" to (Link.state.value.desktop.ifEmpty { "PC" })
+            "shutdown" -> "Desligar o PC?" to "Em $minutes minutos"
+            else -> return Link.remote(action, minutes)
+        }
+        confirmed(title, subtitle) { Link.remote(action, minutes) }
     }
 
     override fun onResume() {

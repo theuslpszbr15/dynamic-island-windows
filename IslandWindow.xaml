@@ -199,6 +199,7 @@
         </Style>
 
         <Visibility x:Key="PhoneSendVisibility">Collapsed</Visibility>
+        <Visibility x:Key="PhoneActionsVisibility">Collapsed</Visibility>
 
         <DataTemplate x:Key="FileTemplate" DataType="{x:Type local:FileItem}">
             <Grid x:Name="Tile" Width="76" Margin="0,0,4,0" Background="Transparent" Cursor="Hand" ToolTip="{Binding Path}"
@@ -270,6 +271,28 @@
                 </Grid>
                 <Border x:Name="GlassFill" Visibility="Collapsed" />
                 <Border x:Name="IslandBg" Background="Black" CornerRadius="17" />
+
+                <!-- Aurora look: optional animated glowing gradient rim around the island -->
+                <Border x:Name="AuroraRim" Visibility="Collapsed" BorderThickness="1.6" IsHitTestVisible="False">
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1" RelativeTransform="{Binding RelativeSource={RelativeSource Self}}">
+                            <LinearGradientBrush.Transform>
+                                <RotateTransform x:Name="AuroraRotate" CenterX="180" CenterY="60" />
+                            </LinearGradientBrush.Transform>
+                            <GradientStop Color="#FF0A84FF" Offset="0" />
+                            <GradientStop Color="#FFBF5AF2" Offset="0.33" />
+                            <GradientStop Color="#FFFF375F" Offset="0.66" />
+                            <GradientStop Color="#FF30D158" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.BorderBrush>
+                    <Border.Background>
+                        <RadialGradientBrush Center="0.5,0" GradientOrigin="0.5,0" RadiusX="0.9" RadiusY="0.9">
+                            <GradientStop Color="#220A84FF" Offset="0" />
+                            <GradientStop Color="#14BF5AF2" Offset="0.5" />
+                            <GradientStop Color="#00000000" Offset="1" />
+                        </RadialGradientBrush>
+                    </Border.Background>
+                </Border>
 
                 <!-- Liquid glass rim: a bright edge catching light from the top-left, a softer one bottom-right -->
                 <Border x:Name="GlassRim" Visibility="Collapsed" BorderThickness="1.2" IsHitTestVisible="False">
@@ -654,6 +677,26 @@
                                     <Grid.RenderTransform>
                                         <TranslateTransform />
                                     </Grid.RenderTransform>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- shown while the phone link is on (PhoneActionsVisibility); without a phone connected they say so -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="{DynamicResource PhoneActionsVisibility}">
+                                        <TextBlock Text="Pro celular" FontSize="11" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,6" />
+                                        <Button Style="{StaticResource Chip}" Margin="0,0,0,6" ToolTip="Escolher arquivos e mandar pro celular" Click="PhonePick_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8E5;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <TextBlock Text="Arquivo" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Chip}" Margin="0" ToolTip="Mandar o que está copiado (texto, imagem ou arquivos)" Click="PhoneClipboard_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8C8;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <TextBlock Text="Copiado" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
                                     <ScrollViewer x:Name="FilesScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                                         <ItemsControl x:Name="FilesList" ItemTemplate="{StaticResource FileTemplate}">
                                             <ItemsControl.ItemsPanel>
@@ -667,9 +710,9 @@
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8B7;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
                                         <TextBlock Text="Arraste arquivos até a ilha" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
                                         <TextBlock Text="Eles ficam guardados aqui para você arrastar de volta depois" FontSize="11.5"
-                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <Grid x:Name="DropHint" Visibility="Collapsed" Background="#CC000000">
+                                    <Grid x:Name="DropHint" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#CC000000">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <!-- The phone side: only while a phone is connected -->
@@ -759,6 +802,9 @@
                                         <UniformGrid x:Name="CalGrid" Columns="7" />
                                     </StackPanel>
                                     <Border Grid.Column="1" Margin="16,0,0,0" CornerRadius="14" Background="{DynamicResource Card}" Padding="14,10">
+                                        <DockPanel>
+                                        <!-- the next meetings (iCal links / Outlook), above the weather -->
+                                        <StackPanel x:Name="EventsList" DockPanel.Dock="Top" Visibility="Collapsed" Margin="0,0,0,6" />
                                         <Grid>
                                             <StackPanel x:Name="WeatherBox">
                                                 <TextBlock x:Name="WeatherPlace" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
@@ -772,6 +818,7 @@
                                             <TextBlock x:Name="WeatherEmpty" Text="Carregando o clima…" FontSize="12" Foreground="{DynamicResource Muted}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
                                         </Grid>
+                                        </DockPanel>
                                     </Border>
                                 </Grid>
 
@@ -826,6 +873,59 @@
                                         <TextBlock Text="O que o celular mandar e você não aceitar na hora espera aqui por um dia" FontSize="11.5"
                                                    Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
+                                </Grid>
+
+                                <!-- Tasks, Hydration & Quick Snippets -->
+                                <Grid x:Name="TasksPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
+                                        <TranslateTransform />
+                                    </Grid.RenderTransform>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="264" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel x:Name="TasksList" />
+                                        </ScrollViewer>
+                                        <TextBlock x:Name="TasksEmpty" Text="Sem tarefas pendentes — adicione nas Configurações" FontSize="11.5"
+                                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   TextWrapping="Wrap" TextAlignment="Center" Margin="8,0" />
+                                        <StackPanel x:Name="SnippetsBar" Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,0" />
+                                    </Grid>
+                                    <Border Grid.Column="1" Margin="14,0,0,0" CornerRadius="14" Background="{DynamicResource Card}" Padding="12,10">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="&#xEB42;" FontFamily="{StaticResource Icons}" FontSize="13" Foreground="#FF5AC8FA" VerticalAlignment="Center" />
+                                                    <TextBlock x:Name="WaterLabel" Text="0/8 copos" FontSize="12.5" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <Button Style="{StaticResource TinyButton}" Content="−" FontFamily="Segoe UI" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Click="WaterMinus_Click" />
+                                                    <Button Style="{StaticResource TinyButton}" Content="+" FontFamily="Segoe UI" FontSize="11" FontWeight="Bold" Background="#FF0A84FF" Click="WaterPlus_Click" />
+                                                </StackPanel>
+                                            </Grid>
+                                            <Border Grid.Row="1" Height="5" CornerRadius="2.5" Background="{DynamicResource Track}" Margin="0,6,0,8" ClipToBounds="True">
+                                                <Border Background="#FF5AC8FA" CornerRadius="2.5" RenderTransformOrigin="0,0.5">
+                                                    <Border.RenderTransform>
+                                                        <ScaleTransform x:Name="WaterBarScale" ScaleX="0" />
+                                                    </Border.RenderTransform>
+                                                </Border>
+                                            </Border>
+                                            <Border Grid.Row="2" CornerRadius="8" Background="#14FFFFFF" Padding="8,6" Cursor="Hand" MouseLeftButtonUp="QuickNote_Click" ToolTip="Clique para copiar ou editar nas Configurações">
+                                                <TextBlock x:Name="QuickNotePreview" FontSize="11.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
                             </Grid>
 

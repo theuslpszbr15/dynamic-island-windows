@@ -38,7 +38,8 @@ public static class Installer
         foreach (var file in files)
         {
             if (file.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)) continue;
-            var target = Path.Combine(InstallDir, Path.GetRelativePath(source, file));
+            // a downloaded update is named DynamicIsland-1.2.3.exe (or -Leve): installed, it is always DynamicIsland.exe
+            var target = singleFile ? InstalledExe : Path.Combine(InstallDir, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, true);
             bytes += new FileInfo(file).Length;

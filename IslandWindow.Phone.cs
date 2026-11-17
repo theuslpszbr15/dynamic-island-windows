@@ -33,6 +33,7 @@ public partial class IslandWindow
             _phone.Decision += OnPhoneDecision;
             _phone.Open += OnPhoneOpen;
             _phone.PhoneJoined += OnPhoneJoined;
+            _phone.OldApp += OnOldApp;
             _phone.PhonesChanged += UpdatePhoneSend;
             _phone.FileStatus += OnPhoneFile;
             _phone.IncomingOffer += OnPhoneIncoming;
@@ -40,9 +41,14 @@ public partial class IslandWindow
             _phone.IncomingDone += OnPhoneIncomingDone;
             _phone.RelayTrouble += OnRelayTrouble;
             _phone.PendingChanged += OnPhonePending;
+            _phone.Clip += OnPhoneClip;
+            _phone.Remote += OnPhoneRemote;
+            _phone.Call += OnPhoneCall;
+            _phone.PhonesChanged += PublishPhonePc;
             _phone.History = History;
         }
         _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);
+        UpdatePhoneSend();
         if (_phone.Running) return;
         try { _phone.Start(); PhoneError = null; }
         catch (Exception ex)
@@ -57,6 +63,16 @@ public partial class IslandWindow
     }
 
     // Coming in over the internet is new, so it's worth a glance: if it wasn't you, "Parear de novo" cuts it off.
+    readonly HashSet<string> _oldAppWarned = [];
+
+    // Once per phone while the island runs: the QR code to download the new app is one click away.
+    void OnOldApp(string device)
+    {
+        if (SnapshotMode || !_oldAppWarned.Add(device)) return;
+        ShowInfo("\uE8EA", "App do celular desatualizado", $"Atualize para {PhoneLink.AndroidVersionName}",
+            glyphColor: System.Windows.Media.Color.FromRgb(0xFF, 0x9F, 0x0A), action: () => ((App)System.Windows.Application.Current).ShowAppDownload(), seconds: 8);
+    }
+
     void OnPhoneJoined(string device, bool viaRelay)
     {
         if (!viaRelay || SnapshotMode) return;
@@ -166,8 +182,25 @@ public partial class IslandWindow
 
     public bool PhoneReady => CanSendToPhone;
 
-    public void UpdatePhoneSend() =>
+    public void UpdatePhoneSend()
+    {
         Resources["PhoneSendVisibility"] = CanSendToPhone ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        Resources["PhoneActionsVisibility"] = _settings.PhoneLink && _settings.PhoneFiles
+            ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+    }
+
+    void PhonePick_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        e.Handled = true;
+        var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "Mandar pro celular" };
+        if (dialog.ShowDialog(this) == true) SendToPhone(dialog.FileNames);
+    }
+
+    void PhoneClipboard_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        e.Handled = true;
+        SendClipboardToPhone();
+    }
 
     const string NoPhone = "Nenhum celular conectado";
 

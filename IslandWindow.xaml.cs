@@ -21,8 +21,8 @@ public partial class IslandWindow : Window
     enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info }
     enum CompactKind { Clock, Media, Timer, Agent }
 
-    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular"];
+    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7;
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular", "Tarefas e foco"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
     // The two clips ApplySize mutates every frame; created once, so the animation allocates nothing.
@@ -48,7 +48,7 @@ public partial class IslandWindow : Window
     bool _expanded, _hover, _dragOver, _draggingOut, _menuOpen, _ready, _hiddenFullscreen, _compactPulsing, _pillPulsing;
     // _fullscreen: an app is in full screen. _peek: the island shows over it anyway, for one shortcut or alert, until
     // it is back to idle. _peekPinned: shown with the hide shortcut, stays until pressed again or full screen ends.
-    bool _fullscreen, _peek, _peekPinned;
+    bool _fullscreen, _peek, _peekPinned, _underTopBar;
     bool _clickThrough, _dwellBlocked, _dragCandidate;
     DateTime _lastDragOver, _lastWheel, _hoverSince;
     DateTime? _buttonSince;
@@ -62,7 +62,7 @@ public partial class IslandWindow : Window
     readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
     bool _eqPlaying;
-    readonly Border[] _dots = new Border[7];
+    readonly Border[] _dots = new Border[8];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
     Point _pressPoint;
@@ -303,6 +303,7 @@ public partial class IslandWindow : Window
         PageAgents => new(560, 236),
         PageCalendar => new(520, 236),
         PagePending => new(520, 236),
+        PageTasks => new(520, 236),
         PageSystem => new(450, 216),
         _ => ExpandedSize,
     };
@@ -358,7 +359,7 @@ public partial class IslandWindow : Window
         clip.Rect = flatTop ? new Rect(0, -r, w, h + r) : new Rect(0, 0, w, h);
         clip.RadiusX = clip.RadiusY = r;
         IslandContent.Clip = clip;
-        GlassFill.CornerRadius = GlassRim.CornerRadius = IslandBg.CornerRadius;
+        GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = IslandBg.CornerRadius;
         foreach (Border layer in ShadowLayers.Children)
         {
             var spread = -layer.Margin.Left;
@@ -536,6 +537,18 @@ public partial class IslandWindow : Window
 
         if (button)
         {
+            if (over && _settings.DragMonitor && WinForms.Screen.AllScreens.Length > 1
+                && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+            {
+                var target = WinForms.Screen.FromPoint(new System.Drawing.Point(cursor.X, cursor.Y));
+                if (target.DeviceName != _screen?.DeviceName)
+                {
+                    _settings.Monitor = target.DeviceName;
+                    _settings.Save();
+                    PositionWindow();
+                    ShowInfo("\uE7F4", $"Ilha movida para {target.DeviceName.TrimStart('\\', '.')}", "Monitor");
+                }
+            }
             if (over && _clickThrough) _dwellBlocked = true; // user is clicking whatever is underneath
             _buttonSince ??= now;
             // Holding a button over the island for a moment = probably dragging a file onto it.
@@ -679,7 +692,7 @@ public partial class IslandWindow : Window
 
     // ───────────────────────── pages ─────────────────────────
 
-    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage];
+    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage, TasksPage];
 
     void ShowPage(int index, int direction)
     {
@@ -733,6 +746,7 @@ public partial class IslandWindow : Window
             case PageTimer: UpdateTimerUi(); break;
             case PageCalendar: UpdateCalendar(); break;
             case PagePending: UpdatePendingUi(); break;
+            case PageTasks: UpdateTasksUi(); break;
         }
     }
 
@@ -782,7 +796,7 @@ public partial class IslandWindow : Window
     /// <summary>Hidden by the user, or by an app in full screen unless the island is peeking over it.</summary>
     void ApplyHidden()
     {
-        var hide = _userHidden || (_fullscreen && _settings.Fullscreen != FullscreenMode.Always && !_peek);
+        var hide = _userHidden || ((_fullscreen && _settings.Fullscreen != FullscreenMode.Always || _underTopBar) && !_peek);
         if (hide == _hiddenFullscreen) return;
         _hiddenFullscreen = hide;
         Root.IsHitTestVisible = !hide;
@@ -822,6 +836,7 @@ public partial class IslandWindow : Window
         // 4 = presentation mode.
         _fullscreen = Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4;
         if (!_fullscreen) _peek = _peekPinned = false;
+        _underTopBar = IsTopBarUnderIsland(); // e.g. a maximized browser's tabs right under the island
         ApplyHidden();
         EndPeekIfIdle();
         if (!_hiddenFullscreen && _hwnd != IntPtr.Zero)
@@ -839,6 +854,18 @@ public partial class IslandWindow : Window
             }
         }
         if (removed) { Retarget(); if (_expanded) RefreshPage(); PublishPhoneSessions(); }
+    }
+
+    bool IsTopBarUnderIsland()
+    {
+        if (!_settings.SmartHideUnderTopBar || _expanded || _hover || _transient != Transient.None) return false;
+        var fg = Native.GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == _hwnd) return false;
+        var cls = Native.WindowClass(fg);
+        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return false;
+        if (!Native.GetWindowRect(fg, out var r)) return false;
+        var b = (_screen ?? WinForms.Screen.PrimaryScreen!).Bounds;
+        return r.Top <= b.Top + 10 && r.Bottom > b.Top + 60 && r.Left <= b.Left + b.Width / 2 && r.Right >= b.Left + b.Width / 2;
     }
 
     // ───────────────────────── media ─────────────────────────
@@ -867,6 +894,7 @@ public partial class IslandWindow : Window
         HighlightSourceChips();
 
         if (_expanded && _page == PageMedia) RefreshPage();
+        PublishPhonePc();
         if (newTrack && MediaShown) ShowTransient(Transient.NowPlaying, 3.2);
         else Retarget();
     }
@@ -1052,6 +1080,8 @@ public partial class IslandWindow : Window
     void OnVolume(float level, bool muted)
     {
         _currentSystemVolume = level;
+        (_volumeLevel, _volumeMuted) = (level, muted);
+        PublishPhonePc();
         var pct = (int)Math.Round(level * 100);
         VolumeText.Text = muted ? "—" : pct.ToString(CultureInfo.CurrentCulture);
         VolumeIcon.Text = muted || pct == 0 ? "\uE74F" : pct < 34 ? "\uE993" : pct < 67 ? "\uE994" : "\uE995";

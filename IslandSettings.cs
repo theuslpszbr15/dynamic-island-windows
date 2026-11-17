@@ -20,6 +20,9 @@ public enum FullscreenMode { Shortcuts, Alerts, Always }
 /// <summary>Preset for filtering which applications can appear as playing media.</summary>
 public enum MediaFilterPreset { MusicOnly, MusicAndWeb, All, Custom }
 
+public sealed record TaskItem(string Id, string Text, bool Done, string? Due = null);
+public sealed record QuickSnippet(string Label, string Value);
+
 public sealed class IslandSettings
 {
     public IslandShape Shape { get; set; } = IslandShape.Pill;
@@ -32,6 +35,11 @@ public sealed class IslandSettings
     public int TimerMinutes { get; set; } = 25;
     public PetSpecies Mascot { get; set; } = PetSpecies.Bit;
     public string Theme { get; set; } = IslandThemes.Default;
+    /// <summary>The colour of the "Personalizado" theme.</summary>
+    public string CustomThemeColor { get; set; } = "#1E2533";
+    /// <summary>The imported mascot (PetSpecies.Custom), copied into the settings folder.</summary>
+    [JsonIgnore]
+    public static string CustomMascotFile => System.IO.Path.Combine(Folder, "mascot.png");
     public PetOutfit Outfit { get; set; } = PetOutfit.Auto;
     public bool ShowLyrics { get; set; } = true;
     public bool ShowClipboard { get; set; } = true;
@@ -57,6 +65,33 @@ public sealed class IslandSettings
             Save();
         }
     }
+    /// <summary>Animated aurora light rim and glow around the island.</summary>
+    public bool AuroraLook { get; set; }
+    /// <summary>Hides the island when the focused window's top bar sits right under it (e.g. maximized browser tabs).</summary>
+    public bool SmartHideUnderTopBar { get; set; }
+    /// <summary>Drag the island with Ctrl+LeftClick (or Alt+LeftClick) to another monitor and remember it.</summary>
+    public bool DragMonitor { get; set; } = true;
+    /// <summary>Playful idle animations on the mascot (chasing a fly, bouncing a ball, looking around).</summary>
+    public bool PlayfulPet { get; set; } = true;
+    public List<TaskItem> Tasks { get; set; } = [];
+    public int WaterGoal { get; set; } = 8;
+    public int WaterGlasses { get; set; }
+    public string? WaterDate { get; set; }
+    public bool WaterReminder { get; set; }
+    public List<QuickSnippet> Snippets { get; set; } = [];
+    public string QuickNote { get; set; } = "";
+    /// <summary>Secret iCal links (Google Calendar, Outlook on the web, iCloud…) for "Reunião em 5 min".</summary>
+    public List<string> CalendarFeeds { get; set; } = [];
+    /// <summary>Also read the classic Outlook on this PC (only while it is open).</summary>
+    public bool OutlookCalendar { get; set; } = true;
+    /// <summary>While the timer runs, Windows notifications wait and the minutes count as focus.</summary>
+    public bool FocusMode { get; set; } = true;
+    /// <summary>Focused minutes per day (yyyy-MM-dd), the last 30 days.</summary>
+    public Dictionary<string, int> FocusLog { get; set; } = [];
+    /// <summary>Jarvis AI integration endpoint (prepared for user's own Jarvis repository).</summary>
+    public bool JarvisEnabled { get; set; }
+    public string JarvisEndpoint { get; set; } = "http://localhost:11434";
+    public string JarvisVoiceMode { get; set; } = "hold";
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay
@@ -77,6 +112,12 @@ public sealed class IslandSettings
     public bool PhoneTray { get; set; } = true;
     /// <summary>Files can be sent to the paired phone (dropped on the island's "celular" side, or from the tray).</summary>
     public bool PhoneFiles { get; set; } = true;
+    /// <summary>Text copied on one side lands on the other's clipboard.</summary>
+    public bool PhoneClipboard { get; set; } = true;
+    /// <summary>The phone's incoming calls show on the island.</summary>
+    public bool PhoneCalls { get; set; } = true;
+    /// <summary>The phone can control music, volume, lock and shutdown of this PC.</summary>
+    public bool PhoneRemote { get; set; } = true;
     /// <summary>Who joins the Discord call the user is in shows on the island (local RPC, see Services/DiscordVoice).</summary>
     public bool DiscordCalls { get; set; }
     /// <summary>Also a small pill when someone leaves that call.</summary>
@@ -161,6 +202,24 @@ public static class IslandThemes
     public const string Default = "obsidian";
     public const string Glass = "glass";
     public const string Light = "porcelain";
+    /// <summary>The person's own colour (<see cref="CustomColor"/>, kept in IslandSettings.CustomThemeColor).</summary>
+    public const string Custom = "custom";
+
+    public static Color CustomColor { get; set; } = Color.FromRgb(0x1E, 0x25, 0x33);
+
+    /// <summary>Themes that want dark text: Porcelana, and a light custom colour.</summary>
+    public static bool IsLight(string id) =>
+        id == Light || (id == Custom && (0.299 * CustomColor.R + 0.587 * CustomColor.G + 0.114 * CustomColor.B) / 255 > 0.6);
+
+    /// <summary>"#1E2533" or "1E2533" → colour, or null.</summary>
+    public static Color? ParseHex(string? text)
+    {
+        var t = (text ?? "").Trim().TrimStart('#');
+        if (t.Length != 6 || !uint.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out var v)) return null;
+        return Color.FromRgb((byte)(v >> 16), (byte)(v >> 8), (byte)v);
+    }
+
+    public static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     // Deep tones keep the island's white text and the album/agent colours readable; the one light theme
     // flips the text brushes (Ink/Muted/Track) to dark instead.
@@ -177,10 +236,12 @@ public static class IslandThemes
         ("coffee", "Café", Color.FromRgb(0x2B, 0x1D, 0x15)),
         ("plum", "Ameixa", Color.FromRgb(0x2A, 0x16, 0x33)),
         ("cherry", "Cereja", Color.FromRgb(0x33, 0x0F, 0x18)),
+        (Custom, "Personalizado", Color.FromRgb(0x1E, 0x25, 0x33)),
     ];
 
     public static Color Of(string id)
     {
+        if (id == Custom) return CustomColor;
         foreach (var (i, _, c) in All)
             if (i == id) return c;
         return Colors.Black;
