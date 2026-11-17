@@ -927,6 +927,39 @@
                                         </Grid>
                                     </Border>
                                 </Grid>
+
+                                <!-- Jarvis: the last exchange; the voice glow rises from the island's bottom edge -->
+                                <Grid x:Name="JarvisPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
+                                        <TranslateTransform />
+                                    </Grid.RenderTransform>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock x:Name="JarvisAsked" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                    <ScrollViewer Grid.Row="1" Margin="0,4,0,6" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                        <TextBlock x:Name="JarvisAnswer" FontSize="15" TextWrapping="Wrap" />
+                                    </ScrollViewer>
+                                    <Grid Grid.Row="2">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button x:Name="JarvisTalk" Style="{StaticResource Chip}" Margin="0,0,8,0" Click="JarvisTalk_Click">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="JarvisTalkIcon" FontFamily="{StaticResource Icons}" Text="&#xE720;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock x:Name="JarvisTalkText" Text="Falar" FontSize="12.5" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource Chip}" Margin="0" Click="JarvisType_Click">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE765;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock Text="Escrever" FontSize="12.5" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock x:Name="JarvisStateText" FontSize="12" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Grid>
                             </Grid>
 
                             <StackPanel x:Name="Dots" Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" />

@@ -21,8 +21,8 @@ public partial class IslandWindow : Window
     enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info }
     enum CompactKind { Clock, Media, Timer, Agent }
 
-    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular", "Tarefas e foco"];
+    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7, PageJarvis = 8;
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular", "Tarefas e foco", "Jarvis"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
     // The two clips ApplySize mutates every frame; created once, so the animation allocates nothing.
@@ -62,7 +62,7 @@ public partial class IslandWindow : Window
     readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
     bool _eqPlaying;
-    readonly Border[] _dots = new Border[8];
+    readonly Border[] _dots = new Border[9];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
     Point _pressPoint;
@@ -102,6 +102,9 @@ public partial class IslandWindow : Window
         BuildEq(CompactEq, 4, 14);
         BuildEq(NowEq, 4, 16);
         BuildDots();
+        Island.Children.Insert(Island.Children.IndexOf(IslandBg) + 1, _glow);
+        _glow.Source = () => _mic?.Read() ?? Jarvis.SpeechLevel();
+        ApplyGlowLook();
         BuildTimerPresets();
         _cpu = AddMeter("CPU");
         _ram = AddMeter("Memória");
@@ -304,6 +307,7 @@ public partial class IslandWindow : Window
         PageCalendar => new(520, 236),
         PagePending => new(520, 236),
         PageTasks => new(520, 236),
+        PageJarvis => new(520, 236),
         PageSystem => new(450, 216),
         _ => ExpandedSize,
     };
@@ -360,6 +364,7 @@ public partial class IslandWindow : Window
         clip.RadiusX = clip.RadiusY = r;
         IslandContent.Clip = clip;
         GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = IslandBg.CornerRadius;
+        _glow.CornerRadius = r;
         foreach (Border layer in ShadowLayers.Children)
         {
             var spread = -layer.Margin.Left;
@@ -605,6 +610,12 @@ public partial class IslandWindow : Window
     {
         _hoverTimer.Stop();
         if (_hover || _dragOver || _draggingOut || _menuOpen) return;
+        // Jarvis's page stays while it listens, thinks or speaks
+        if (_expanded && _page == PageJarvis && JarvisState != "Pronto")
+        {
+            ScheduleClose(2);
+            return;
+        }
         SetExpanded(false);
         CloseApproval();
     }
@@ -692,7 +703,7 @@ public partial class IslandWindow : Window
 
     // ───────────────────────── pages ─────────────────────────
 
-    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage, TasksPage];
+    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage, TasksPage, JarvisPage];
 
     void ShowPage(int index, int direction)
     {
@@ -747,6 +758,7 @@ public partial class IslandWindow : Window
             case PageCalendar: UpdateCalendar(); break;
             case PagePending: UpdatePendingUi(); break;
             case PageTasks: UpdateTasksUi(); break;
+            case PageJarvis: UpdateJarvisUi(); break;
         }
     }
 

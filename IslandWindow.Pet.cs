@@ -24,6 +24,7 @@ public partial class IslandWindow
         EarLeft.Fill = EarRight.Fill = ground;
         ApplyGlass();
         ApplyAurora();
+        ApplyGlowLook();
         ApplyInk(IslandThemes.IsLight(_settings.Theme));
         MenuPalette.For(_settings.Theme).ApplyToResources();
 

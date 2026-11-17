@@ -907,13 +907,4 @@ public partial class IslandWindow
             ? "Sem nota rápida — clique para abrir Produtividade e anotar"
             : _settings.QuickNote;
     }
-
-    // ───────────────────────── Jarvis AI hook ─────────────────────────
-
-    public void TriggerJarvis()
-    {
-        ShowInfo("\uE99A", _settings.JarvisEnabled ? $"Jarvis ({_settings.JarvisEndpoint}) pronto para vincular" : "Jarvis — integração pronta nas Configurações",
-            "Configurar", glyphColor: Color.FromRgb(0xBF, 0x5A, 0xF2),
-            action: () => ((App)Application.Current).ShowSettings("jarvis"), seconds: 4);
-    }
 }

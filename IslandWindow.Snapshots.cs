@@ -365,6 +365,41 @@ public partial class IslandWindow
         _settings.PhoneLink = false;
         ApplyPhoneLink();
 
+        // The Jarvis chat box with a short demo conversation.
+        JarvisHistory.Add((true, "Que horas são?"));
+        JarvisHistory.Add((false, Jarvis.LocalReply("Que horas são?", DateTime.Now)!.Text));
+        JarvisHistory.Add((true, "Me explica em uma frase o que é um commit."));
+        JarvisHistory.Add((false, "Um commit é um registro das mudanças no código, com uma mensagem dizendo o que mudou."));
+        OpenJarvis();
+        await Task.Delay(600);
+        if (_jarvisWindow?.Content is FrameworkElement chat)
+        {
+            var image = new RenderTargetBitmap((int)(chat.ActualWidth * 1.5), (int)(chat.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
+            image.Render(chat);
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(image));
+            await using var file = File.Create(System.IO.Path.Combine(folder, "45-jarvis.png"));
+            png.Save(file);
+        }
+        _jarvisWindow?.Close();
+        // a steady made-up voice so the glow has something to show
+        _glow.Source = () => (0.55, 0.5, 0.6, 0.35);
+        SetExpanded(true, PageJarvis);
+        SetJarvisState("Falando…");
+        await Task.Delay(900);
+        await Shot("46-jarvis-page");
+        JarvisHistory.Clear();
+        SetJarvisState("Pensando…");
+        await Task.Delay(900);
+        await Shot("47-jarvis-thinking");
+        SetJarvisState("Pronto");
+        SetExpanded(false);
+        SetJarvisState("Ouvindo…");
+        await Task.Delay(900);
+        await Shot("48-jarvis-compact-listening");
+        SetJarvisState("Pronto");
+        _glow.Source = () => _mic?.Read() ?? Jarvis.SpeechLevel();
+
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),
             $"managed={GC.GetTotalMemory(true) / 1048576.0:0.0}MB heap={info.HeapSizeBytes / 1048576.0:0.0}MB " +
