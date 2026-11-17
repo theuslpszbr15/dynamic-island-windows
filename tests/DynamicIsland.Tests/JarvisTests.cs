@@ -77,4 +77,38 @@ public class JarvisTests
         var reply = await Jarvis.AskAsync("Qual é a capital do Brasil? Responda em uma frase.", []);
         Assert.True(reply.Text.Contains("Bras") && !reply.Text.Contains("end of text"), "respondeu: " + reply.Text);
     }
+
+    /// <summary>JARVIS_E2E_AI=1: the engines work from a folder whose path has accents (a Windows user named
+    /// "João"), through a link to the downloaded ones.</summary>
+    [Fact]
+    public async Task EnginesWorkUnderAPathWithAccents()
+    {
+        if (Environment.GetEnvironmentVariable("JARVIS_E2E_AI") != "1") return;
+        var real = Path.GetDirectoryName(Jarvis.Folder(Jarvis.Engine.Ai)!)!;
+        var parent = Path.Combine(Path.GetTempPath(), "João Sá");
+        var link = Path.Combine(parent, "jarvis");
+        Directory.CreateDirectory(parent);
+        // a junction needs no admin rights, unlike a symbolic link
+        if (!Directory.Exists(link))
+            using (var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", ["/c", "mklink", "/J", link, real])
+                   { CreateNoWindow = true, UseShellExecute = false })!)
+                mklink.WaitForExit();
+        Jarvis.RootOverride = link;
+        try
+        {
+            Assert.StartsWith(link, Jarvis.Folder(Jarvis.Engine.Ai));
+            var reply = await Jarvis.AskAsync("Diga olá em uma palavra.", []);
+            Assert.True(!reply.Text.Contains("falhou"), "respondeu: " + reply.Text);
+            var wave = Path.Combine(parent, "fala.wav");
+            await Jarvis.SynthesizeAsync(Jarvis.Folder(Jarvis.Engine.Voice)!, "Bom dia, por favor.", wave);
+            Assert.True(new FileInfo(wave).Length > 1000);
+            var heard = await Jarvis.TranscribeAsync(wave) ?? "";
+            Assert.True(heard.Contains("favor", StringComparison.OrdinalIgnoreCase), "ouviu: " + heard);
+        }
+        finally
+        {
+            Jarvis.RootOverride = null;
+            Directory.Delete(link);
+        }
+    }
 }

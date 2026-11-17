@@ -56,7 +56,10 @@ public static class Jarvis
     public static string Label(Engine engine) => Packages[engine].Label;
     public static string Size(Engine engine) => Packages[engine].Size;
 
-    static string OwnRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DynamicIsland", "jarvis");
+    static string OwnRoot => RootOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DynamicIsland", "jarvis");
+
+    /// <summary>Tests: the engines' folder (to try a path with accents).</summary>
+    internal static string? RootOverride;
 
     // The JARVIS app keeps its engines in Electron's userData (packaged "JARVIS", from source "jarvis-local").
     static IEnumerable<string> Candidates(Engine engine)
@@ -218,7 +221,8 @@ public static class Jarvis
         if (Folder(Engine.Ai) is not { } dir)
             return new("A IA offline ainda não foi baixada: Configurações › Jarvis › Baixar. Hora, data, contas e pesquisas já funcionam.");
         if (!await Thinking.WaitAsync(0)) return new("Ainda estou pensando na pergunta anterior.");
-        var promptFile = Path.Combine(Path.GetTempPath(), $"jarvis-prompt-{Environment.ProcessId}.txt");
+        var promptName = $"prompt-{Environment.ProcessId}.txt";
+        var promptFile = Path.Combine(dir, promptName);
         try
         {
             static string Clean(string s)
@@ -231,8 +235,8 @@ public static class Jarvis
                 prompt.Append($"<|im_start|>{(user ? "user" : "assistant")}\n{Clean(text)}<|im_end|>\n");
             prompt.Append($"<|im_start|>user\n{Clean(message)}<|im_end|>\n<|im_start|>assistant\n");
             await File.WriteAllTextAsync(promptFile, prompt.ToString(), new UTF8Encoding(false));
-            var output = await RunAsync(Executable(Engine.Ai, dir)!,
-                ["-m", Path.Combine(dir, "model.gguf"), "-f", promptFile, "-n", "220", "-c", "4096", "-t", Math.Clamp(Environment.ProcessorCount / 2, 2, 8).ToString(),
+            var output = await RunAsync(Executable(Engine.Ai, dir)!, dir,
+                ["-m", "model.gguf", "-f", promptName, "-n", "220", "-c", "4096", "-t", Math.Clamp(Environment.ProcessorCount / 2, 2, 8).ToString(),
                  "-ngl", "0", "-no-cnv", "--no-display-prompt", "--no-perf", "--no-warmup", "-r", "<|im_end|>"],
                 timeout: TimeSpan.FromMinutes(2));
             var answer = Regex.Replace(Regex.Replace(output, @"\x1b\[[0-9;]*m", ""), @"<\|[^>]*\|>|\[end of text\]", "").Trim();
@@ -430,10 +434,22 @@ public static class Jarvis
         finally { try { File.Delete(wave); } catch { } }
     }
 
-    internal static Task SynthesizeAsync(string dir, string text, string wave, CancellationToken cancel = default) =>
-        RunAsync(Executable(Engine.Voice, dir)!,
-            ["--model", Path.Combine(dir, "voice.onnx"), "--output_file", wave, "--length_scale", (1 / 0.95).ToString("0.00", CultureInfo.InvariantCulture)],
-            input: text.Length > 4000 ? text[..4000] : text, timeout: TimeSpan.FromMinutes(1), cancel: cancel);
+    internal static async Task SynthesizeAsync(string dir, string text, string wave, CancellationToken cancel = default)
+    {
+        var name = $"speech-{Guid.NewGuid():N}.wav";
+        var exe = Executable(Engine.Voice, dir)!;
+        // Piper finds espeak-ng-data next to itself by absolute path; give it a relative one too
+        var espeak = Path.GetRelativePath(dir, Path.Combine(Path.GetDirectoryName(exe)!, "espeak-ng-data"));
+        try
+        {
+            await RunAsync(exe, dir,
+                ["--model", "voice.onnx", "--output_file", name, "--espeak_data", espeak,
+                 "--length_scale", (1 / 0.95).ToString("0.00", CultureInfo.InvariantCulture)],
+                input: text.Length > 4000 ? text[..4000] : text, timeout: TimeSpan.FromMinutes(1), cancel: cancel);
+            File.Move(Path.Combine(dir, name), wave, true);
+        }
+        finally { try { File.Delete(Path.Combine(dir, name)); } catch { } }
+    }
 
     public static void StopSpeaking()
     {
@@ -445,23 +461,32 @@ public static class Jarvis
     public static async Task<string?> TranscribeAsync(string wave)
     {
         if (Folder(Engine.Microphone) is not { } dir) return null;
+        var name = $"mic-{Environment.ProcessId}.wav";
+        var copy = Path.Combine(dir, name);
         try
         {
-            await RunAsync(Executable(Engine.Microphone, dir)!,
-                ["-m", Path.Combine(dir, "model.bin"), "-f", wave, "-l", "pt", "-nt", "-otxt", "-of", wave, "-t", "4"],
+            File.Copy(wave, copy, true);
+            await RunAsync(Executable(Engine.Microphone, dir)!, dir,
+                ["-m", "model.bin", "-f", name, "-l", "pt", "-nt", "-otxt", "-of", name, "-t", "4"],
                 timeout: TimeSpan.FromMinutes(1));
-            var text = await File.ReadAllTextAsync(wave + ".txt");
+            var text = await File.ReadAllTextAsync(copy + ".txt");
             return Regex.Replace(text, @"\s+", " ").Trim();
         }
-        finally { try { File.Delete(wave + ".txt"); } catch { } }
+        finally
+        {
+            try { File.Delete(copy); } catch { }
+            try { File.Delete(copy + ".txt"); } catch { }
+        }
     }
 
-    static async Task<string> RunAsync(string exe, IEnumerable<string> args, string? input = null, TimeSpan? timeout = null,
+    // The engines open files with the ANSI code page: a path like C:\Users\João\… fails, so they run inside their
+    // own folder and get relative names.
+    static async Task<string> RunAsync(string exe, string workDir, IEnumerable<string> args, string? input = null, TimeSpan? timeout = null,
         CancellationToken cancel = default)
     {
         var start = new ProcessStartInfo(exe)
         {
-            WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false, CreateNoWindow = true,
+            WorkingDirectory = workDir, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, StandardInputEncoding = new UTF8Encoding(false),
         };
