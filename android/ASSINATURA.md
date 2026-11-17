@@ -34,3 +34,21 @@ Os APKs antigos foram assinados com a chave de debug. O Android não atualiza um
 assinatura diferente, então **quem tem o APK debug precisa desinstalar uma vez** e instalar o APK de release.
 (Os dados locais do app, como o pareamento, são perdidos; é preciso parear de novo.) Daqui para a frente as
 atualizações funcionam normalmente enquanto a chave for a mesma.
+
+## CI de release (`.github/workflows/release.yml`)
+
+Publicar uma tag `vX.Y.Z` (igual ao `<Version>` do `DynamicIsland.csproj`) builda `DynamicIsland.exe`,
+`DynamicIsland-Leve.exe` e `DynamicIsland-Android.apk`, anexa à release com `SHA256SUMS.txt`, garante a linha
+`versionCode: N` nas notas e confere os digests que o GitHub registrou. Falta de exe, apk ou digest derruba o job
+(e devolve a release para rascunho). Rodar o workflow à mão (`workflow_dispatch`) só builda e confere, não publica.
+
+Secrets do repositório (Settings → Secrets and variables → Actions) para assinar o APK:
+
+| Secret | Conteúdo |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 release.jks` |
+| `ANDROID_STORE_PASSWORD` | senha do keystore (`DI_STORE_PASSWORD` no gradle) |
+| `ANDROID_KEY_ALIAS` | `dynamicisland` |
+| `ANDROID_KEY_PASSWORD` | senha da chave |
+
+Sem esses secrets, uma tag **não publica** (o APK cairia na chave de debug); só o ensaio manual segue com aviso.
