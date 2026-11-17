@@ -382,14 +382,23 @@ public partial class IslandWindow
             png.Save(file);
         }
         _jarvisWindow?.Close();
+        // a steady made-up voice so the glow has something to show
+        _glow.Source = () => (0.55, 0.5, 0.6, 0.35);
         SetExpanded(true, PageJarvis);
         SetJarvisState("Falando…");
+        await Task.Delay(900);
         await Shot("46-jarvis-page");
         JarvisHistory.Clear();
-        SetJarvisState("Ouvindo…");
-        await Shot("47-jarvis-listening");
+        SetJarvisState("Pensando…");
+        await Task.Delay(900);
+        await Shot("47-jarvis-thinking");
         SetJarvisState("Pronto");
         SetExpanded(false);
+        SetJarvisState("Ouvindo…");
+        await Task.Delay(900);
+        await Shot("48-jarvis-compact-listening");
+        SetJarvisState("Pronto");
+        _glow.Source = () => _mic?.Read() ?? Jarvis.SpeechLevel();
 
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),

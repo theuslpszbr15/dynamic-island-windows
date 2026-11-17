@@ -844,34 +844,22 @@
                                     </Border>
                                 </Grid>
 
-                                <!-- Jarvis: the JARVIS app's core, its state and the last exchange -->
+                                <!-- Jarvis: the last exchange; the voice glow rises from the island's bottom edge -->
                                 <Grid x:Name="JarvisPage" Visibility="Collapsed">
                                     <Grid.RenderTransform>
                                         <TranslateTransform />
                                     </Grid.RenderTransform>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="168" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid Width="168" Height="168" VerticalAlignment="Center" Margin="-6,-10,0,-10">
-                                        <local:JarvisCore x:Name="JarvisCoreView" />
-                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <TextBlock x:Name="JarvisStateText" Text="PRONTO" FontFamily="Cascadia Mono, Consolas" FontSize="11" FontWeight="SemiBold"
-                                                       Foreground="#FFD6F9DF" HorizontalAlignment="Center" />
-                                            <TextBlock Text="J / 01" FontFamily="Cascadia Mono, Consolas" FontSize="9.5" Foreground="#FF4D9579" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <Grid Grid.Column="1" Margin="10,0,0,0">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock x:Name="JarvisAsked" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
-                                        <ScrollViewer Grid.Row="1" Margin="0,4,0,6" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-                                            <TextBlock x:Name="JarvisAnswer" FontSize="13.5" TextWrapping="Wrap" />
-                                        </ScrollViewer>
-                                        <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock x:Name="JarvisAsked" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                    <ScrollViewer Grid.Row="1" Margin="0,4,0,6" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                        <TextBlock x:Name="JarvisAnswer" FontSize="15" TextWrapping="Wrap" />
+                                    </ScrollViewer>
+                                    <Grid Grid.Row="2">
+                                        <StackPanel Orientation="Horizontal">
                                             <Button x:Name="JarvisTalk" Style="{StaticResource Chip}" Margin="0,0,8,0" Click="JarvisTalk_Click">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock x:Name="JarvisTalkIcon" FontFamily="{StaticResource Icons}" Text="&#xE720;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -885,6 +873,7 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
+                                        <TextBlock x:Name="JarvisStateText" FontSize="12" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                     </Grid>
                                 </Grid>
                             </Grid>

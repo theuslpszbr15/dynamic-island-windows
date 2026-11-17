@@ -27,10 +27,16 @@ public partial class IslandWindow
     Task<string?>? _micStart;
     DispatcherTimer? _holdTimer;
     JarvisWindow? _jarvisWindow;
+    readonly VoiceGlow _glow = new();
+
+    void ApplyGlowLook() => _glow.Apply(_settings.JarvisGlow, IslandThemes.IsLight(_settings.Theme));
 
     void SetJarvisState(string state)
     {
         JarvisState = state;
+        // the glow follows the mic while listening and Jarvis's voice while speaking; thinking sweeps a beam
+        _glow.Listening = state is "Ouvindo…" or "Falando…";
+        _glow.Processing = state is "Transcrevendo…" or "Pensando…";
         UpdateJarvisUi();
         JarvisChanged?.Invoke();
     }
@@ -39,14 +45,7 @@ public partial class IslandWindow
 
     void UpdateJarvisUi()
     {
-        JarvisCoreView.State = JarvisState switch
-        {
-            "Ouvindo…" => JarvisCore.Mood.Listening,
-            "Pronto" => JarvisCore.Mood.Idle,
-            _ => JarvisCore.Mood.Active,
-        };
-        JarvisStateText.Text = JarvisState.TrimEnd('…').ToUpperInvariant();
-        JarvisStateText.Foreground = new SolidColorBrush(_mic != null ? Color.FromRgb(0xE9, 0x9A, 0x59) : Color.FromRgb(0xD6, 0xF9, 0xDF));
+        JarvisStateText.Text = JarvisState == "Pronto" ? "" : JarvisState;
         var asked = JarvisHistory.LastOrDefault(h => h.User).Text;
         var answer = JarvisHistory.Count > 0 && !JarvisHistory[^1].User ? JarvisHistory[^1].Text : null;
         JarvisAsked.Text = asked != null ? "Você: " + asked : Jarvis.Folder(Jarvis.Engine.Ai) == null

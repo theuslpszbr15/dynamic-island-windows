@@ -93,6 +93,9 @@ public partial class IslandWindow : Window
         BuildEq(CompactEq, 4, 14);
         BuildEq(NowEq, 4, 16);
         BuildDots();
+        Island.Children.Insert(Island.Children.IndexOf(IslandBg) + 1, _glow);
+        _glow.Source = () => _mic?.Read() ?? Jarvis.SpeechLevel();
+        ApplyGlowLook();
         BuildTimerPresets();
         _cpu = AddMeter("CPU");
         _ram = AddMeter("Memória");
@@ -346,6 +349,7 @@ public partial class IslandWindow : Window
             ? new RectangleGeometry(new Rect(0, -r, w, h + r), r, r)
             : new RectangleGeometry(new Rect(0, 0, w, h), r, r);
         GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = IslandBg.CornerRadius;
+        _glow.CornerRadius = r;
         foreach (Border layer in ShadowLayers.Children)
         {
             var spread = -layer.Margin.Left;

@@ -44,8 +44,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\DynamicIsland.ico" LogicalName="DynamicIsland.ico" />
     <!-- "Criar meu repasse" publishes these from the exe (the repository may be private) -->
-    <EmbeddedResource Include="relay\package.json;relay\package-lock.json;relay\tsconfig.json;relay\wrangler.toml"
-                      LogicalName="relay/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="relay\package.json;relay\package-lock.json;relay\tsconfig.json;relay\wrangler.toml" LogicalName="relay/%(Filename)%(Extension)" />
     <EmbeddedResource Include="relay\src\index.ts" LogicalName="relay/src/index.ts" />
   </ItemGroup>
 
@@ -53,15 +52,14 @@
     <!-- GitHub "owner/name" that updates, links and the lyrics User-Agent point to: change it here in a fork. -->
     <AssemblyMetadata Include="UpdateRepository" Value="theuslpszbr15/dynamic-island-windows" />
     <!-- the Android app built alongside: phones with an older one are told to update -->
-    <AssemblyMetadata Include="AndroidVersionCode" Condition="Exists('android\app\build.gradle.kts')"
-                      Value="$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\android\app\build.gradle.kts')), 'versionCode\s*=\s*(\d+)').Result('$1'))" />
-    <AssemblyMetadata Include="AndroidVersionName" Condition="Exists('android\app\build.gradle.kts')"
-                      Value="$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\android\app\build.gradle.kts')), 'versionName\s*=\s*&quot;([^&quot;]+)&quot;').Result('$1'))" />
+    <AssemblyMetadata Include="AndroidVersionCode" Condition="Exists('android\app\build.gradle.kts')" Value="$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\android\app\build.gradle.kts')), 'versionCode\s*=\s*(\d+)').Result('$1'))" />
+    <AssemblyMetadata Include="AndroidVersionName" Condition="Exists('android\app\build.gradle.kts')" Value="$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\android\app\build.gradle.kts')), 'versionName\s*=\s*&quot;([^&quot;]+)&quot;').Result('$1'))" />
     <InternalsVisibleTo Include="DynamicIsland.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- laptop panel brightness (WmiMonitorBrightness) when the screen has no DDC/CI -->
+    <PackageReference Include="NAudio.WinMM" Version="3.3.0" />
     <PackageReference Include="System.Management" Version="10.0.0" />
     <!-- phone link: pairing QR code -->
     <PackageReference Include="QRCoder" Version="1.6.0" />

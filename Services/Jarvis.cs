@@ -370,6 +370,33 @@ public static class Jarvis
 
     static CancellationTokenSource? _speech;
     static System.Media.SoundPlayer? _player;
+    // the voice's loudness every 40 ms, read against the playback clock while it plays
+    static (double Level, double Low, double Mid, double High)[] _envelope = [];
+    static readonly Stopwatch SpeechClock = new();
+
+    /// <summary>How loud Jarvis's voice is right now (zero when silent), for the glow.</summary>
+    public static (double Level, double Low, double Mid, double High) SpeechLevel()
+    {
+        if (!SpeechClock.IsRunning) return default;
+        var i = (int)(SpeechClock.ElapsedMilliseconds / 40);
+        var envelope = _envelope;
+        return i < envelope.Length ? envelope[i] : default;
+    }
+
+    static (double, double, double, double)[] Envelope(string wave)
+    {
+        var bytes = File.ReadAllBytes(wave);
+        var rate = BitConverter.ToInt32(bytes, 24);
+        var data = 12;
+        while (data + 8 <= bytes.Length && Encoding.ASCII.GetString(bytes, data, 4) != "data") data += 8 + BitConverter.ToInt32(bytes, data + 4);
+        data += 8;
+        var window = rate / 25 * 2;
+        double low = 0, mid = 0;
+        var list = new List<(double, double, double, double)>();
+        for (var at = data; at + window <= bytes.Length; at += window)
+            list.Add(JarvisMic.Levels(bytes, at, window, rate, ref low, ref mid));
+        return [.. list];
+    }
 
     /// <summary>Says the text with the Piper voice (stops what was being said). False without the voice engine.</summary>
     public static async Task<bool> SpeakAsync(string text)
@@ -386,7 +413,10 @@ public static class Jarvis
             {
                 using var player = new System.Media.SoundPlayer(wave);
                 _player = player;
+                try { _envelope = Envelope(wave); } catch { _envelope = []; }
+                SpeechClock.Restart();
                 using (cancel.Token.Register(player.Stop)) player.PlaySync();
+                SpeechClock.Reset();
                 _player = null;
             });
             return true;

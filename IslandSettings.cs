@@ -68,6 +68,8 @@ public sealed class IslandSettings
     public string JarvisVoiceMode { get; set; } = "hold";
     /// <summary>Jarvis says its answers with the Piper voice (when downloaded).</summary>
     public bool JarvisSpeak { get; set; } = true;
+    /// <summary>Colors of the voice glow while Jarvis listens, thinks or speaks (VoiceGlow.Variants) or "off".</summary>
+    public string JarvisGlow { get; set; } = "colorful";
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay

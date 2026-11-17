@@ -656,6 +656,9 @@ public sealed partial class SettingsWindow : DarkWindow
                 [("hold", "Segurar para falar"), ("text", "Só escrever")],
                 S.JarvisVoiceMode, m => { S.JarvisVoiceMode = m; S.Save(); }),
             Toggle("Falar as respostas", "Com a voz baixada, o Jarvis lê a resposta em voz alta.", S.JarvisSpeak, v => { S.JarvisSpeak = v; S.Save(); }),
+            Choice("Brilho da voz", "As cores que sobem da borda da ilha quando você fala e quando o Jarvis responde.",
+                [.. VoiceGlow.Variants, ("off", "Desligado")],
+                S.JarvisGlow, v => { S.JarvisGlow = v; S.Save(); _app.Island.ApplyLook(); }),
             Row("Conversar agora", "Abre a caixa do Jarvis embaixo da ilha.", open)));
 
         page.Children.Add(Card("Motores locais",
