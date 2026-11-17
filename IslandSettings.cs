@@ -126,6 +126,10 @@ public sealed class IslandSettings
     public bool DiscordLeaves { get; set; } = true;
     /// <summary>Who joins and leaves also goes to the paired phone's floating island (over the same pinned link).</summary>
     public bool DiscordToPhone { get; set; } = true;
+    /// <summary>Notices switched off on the phone's island ("Avisos da ilha"), shared with the phone over the link.</summary>
+    public List<string> IslandOffKinds { get; set; } = [];
+    /// <summary>When that list last changed (Unix ms, 0 = never): the newest side wins when PC and phone disagree.</summary>
+    public long IslandOffAt { get; set; }
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
     public FullscreenMode Fullscreen { get; set; } = FullscreenMode.Alerts;
     public bool CheckUpdates { get; set; } = true;

@@ -110,3 +110,42 @@ public class PhoneCommandTests
     }
 }
 
+
+public class PhoneFilterTests
+{
+    static PhoneLink.PhoneCommand Parse(string json) =>
+        PhoneLink.ParseCommand(JsonDocument.Parse(json).RootElement.Clone());
+
+    [Fact]
+    public void FilterCarriesKnownKindsOnly()
+    {
+        var c = Parse("""{"type":"filter","off":["Discord","Nope","Discord","Media"],"at":1700000000000}""");
+        Assert.Equal(PhoneLink.PhoneAction.Filter, c.Action);
+        Assert.Equal(new[] { "Discord", "Media" }, c.Kinds);
+        Assert.Equal(1700000000000, c.At);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"filter","off":["Discord"]}""")]               // no time
+    [InlineData("""{"type":"filter","off":["Discord"],"at":0}""")]         // never changed
+    [InlineData("""{"type":"filter","off":"Discord","at":5}""")]           // not a list
+    [InlineData("""{"type":"filter","off":[1],"at":5}""")]                 // not strings
+    public void BadFilterAsksForNothing(string json) =>
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse(json).Action);
+
+    [Fact]
+    public void TheNewestChangeWinsAndTheSameInstantStops()
+    {
+        Assert.True(PhoneLink.FilterIsNewer(10, 11));
+        Assert.False(PhoneLink.FilterIsNewer(10, 10));
+        Assert.False(PhoneLink.FilterIsNewer(10, 9));
+    }
+
+    [Fact]
+    public void FilterLineRoundTrips()
+    {
+        var c = Parse(PhoneLink.FilterLine(["Call", "Offer"], 42));
+        Assert.Equal(new[] { "Call", "Offer" }, c.Kinds);
+        Assert.Equal(42, c.At);
+    }
+}

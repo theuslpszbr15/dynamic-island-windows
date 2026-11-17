@@ -105,6 +105,7 @@ object Island {
     const val KEEP_DONE_MS = 60_000L
     /** The last joins and leaves, newest first. */
     const val MAX_EVENTS = 20
+    const val DUPLICATE_MS = 5_000L
     /** A Claude notification left unread stops lighting the pill after this (it stays in the shade). */
     const val CLAUDE_MS = 10 * 60_000L
 
@@ -127,7 +128,17 @@ object Island {
     private val _transfers = MutableStateFlow<List<LiveTransfer>>(emptyList())
     val transfers: StateFlow<List<LiveTransfer>> = _transfers
 
-    fun discordEvent(e: DiscordEvent) = _discord.update { (listOf(e) + it).take(MAX_EVENTS) }
+    fun discordEvent(e: DiscordEvent) = _discord.update { with(it, e) }
+
+    /**
+     * The same person joining (or leaving) the same call twice in a few seconds is one notice: the PC can reach the
+     * phone over the LAN and the relay at once, and a reconnection repeats what was last said.
+     */
+    fun with(list: List<DiscordEvent>, e: DiscordEvent): List<DiscordEvent> {
+        val same = list.firstOrNull { it.name == e.name }
+        if (same != null && same.joined == e.joined && same.channel == e.channel && e.at - same.at in 0..DUPLICATE_MS) return list
+        return (listOf(e) + list).take(MAX_EVENTS)
+    }
 
     fun clearDiscord() { _discord.value = emptyList() }
 

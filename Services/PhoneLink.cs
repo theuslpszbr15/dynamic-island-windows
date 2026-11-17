@@ -112,6 +112,8 @@ public sealed partial class PhoneLink : IDisposable
     public event Action<string, int>? Remote;
     /// <summary>Raised on the UI thread: ("ringing" | "offhook" | "idle", contact name, number) for the phone's calls.</summary>
     public event Action<string, string, string>? Call;
+    /// <summary>A phone says which notices are switched off on its island (kinds, Unix ms of the change).</summary>
+    public event Action<IReadOnlyList<string>, long>? FilterFromPhone;
 
     /// <summary>Clipboard text that travels between the PC and the phone (a line stays well under <see cref="MaxLine"/>).</summary>
     public const int MaxClipChars = 16_000;
@@ -374,6 +376,41 @@ public sealed partial class PhoneLink : IDisposable
         return o.ToJsonString();
     }
 
+    /// <summary>The notice kinds the phone's island knows (Pill.Kind in the app, minus the resting pill).</summary>
+    internal static readonly string[] FilterKinds = ["Approval", "Claude", "Offer", "Transfer", "Discord", "Media", "Call", "Outgoing"];
+
+    /// <summary>The "off" list of a {"type":"filter"} line: only known kinds, no repeats; null if it isn't a list of strings.</summary>
+    internal static List<string>? CleanKinds(JsonElement root)
+    {
+        if (!root.TryGetProperty("off", out var list) || list.ValueKind != JsonValueKind.Array) return null;
+        var kinds = new List<string>();
+        foreach (var item in list.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String) return null;
+            var kind = item.GetString();
+            if (kind != null && Array.IndexOf(FilterKinds, kind) >= 0 && !kinds.Contains(kind)) kinds.Add(kind);
+        }
+        return kinds;
+    }
+
+    /// <summary>The newest change wins; the same instant is no change (so a line bounced back stops there).</summary>
+    internal static bool FilterIsNewer(long currentAt, long incomingAt) => incomingAt > currentAt;
+
+    internal static string FilterLine(IEnumerable<string> off, long at) => new JsonObject
+    {
+        ["type"] = "filter", ["off"] = new JsonArray(off.Select(k => (JsonNode)JsonValue.Create(k)!).ToArray()), ["at"] = at,
+    }.ToJsonString();
+
+    string? _filter;
+
+    /// <summary>The notice filter every phone should have: kept for phones that join later, sent to the ones connected now.</summary>
+    public void PublishFilter(IEnumerable<string> off, long at)
+    {
+        var line = FilterLine(off, at);
+        _filter = line;
+        Broadcast(line);
+    }
+
     void Broadcast(string line)
     {
         List<Peer> peers;
@@ -508,6 +545,7 @@ public sealed partial class PhoneLink : IDisposable
             await peer.SendAsync(_sessions);
             await peer.SendAsync(_tray);
             if (_pcState != null) await peer.SendAsync(_pcState);
+            if (_filter is { } filter) await peer.SendAsync(filter);
             List<string> pending;
             lock (_gate) pending = _approvals.Values.ToList();
             foreach (var line in pending) await peer.SendAsync(line);
@@ -552,6 +590,9 @@ public sealed partial class PhoneLink : IDisposable
                         break;
                     case PhoneAction.SendCancel:
                         CancelIncoming(command.Id!);
+                        break;
+                    case PhoneAction.Filter:
+                        _ = _ui.InvokeAsync(() => FilterFromPhone?.Invoke(command.Kinds!, command.At));
                         break;
                     case PhoneAction.Bye:
                         return;
@@ -619,12 +660,13 @@ public sealed partial class PhoneLink : IDisposable
 
     /// <summary>What the PC does with one JSON line from a phone. Serve's state machine, extracted so tests can
     /// drive it; <see cref="PhoneAction.None"/> means the line is fine but asks for nothing.</summary>
-    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Bye }
+    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Filter, Bye }
 
     /// <summary>Text is the copied text (Clip) or the remote action (Remote); State/Name/Number describe a Call.</summary>
     internal sealed record PhoneCommand(PhoneAction Action, string? Fingerprint = null, string? Decision = null,
         string? Id = null, bool Ok = false, JsonElement Offer = default, string? Text = null, int Minutes = 0,
-        string? State = null, string? Name = null, string? Number = null);
+        string? State = null, string? Name = null, string? Number = null,
+        IReadOnlyList<string>? Kinds = null, long At = 0);
 
     /// <summary>Lines that don't carry every field their action needs become <see cref="PhoneAction.None"/>
     /// (nothing happens), exactly like the guards they replace.</summary>
@@ -655,6 +697,9 @@ public sealed partial class PhoneLink : IDisposable
                 return new PhoneCommand(PhoneAction.SendOffer, Offer: root);
             case "sendCancel" when id != null:
                 return new PhoneCommand(PhoneAction.SendCancel, Id: id);
+            case "filter" when root.TryGetProperty("at", out var at) && at.TryGetInt64(out var atMs) && atMs > 0
+                && CleanKinds(root) is { } kinds:
+                return new PhoneCommand(PhoneAction.Filter, Kinds: kinds, At: atMs);
             case "bye":
                 return new PhoneCommand(PhoneAction.Bye);
             default:
