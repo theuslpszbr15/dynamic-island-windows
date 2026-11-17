@@ -458,5 +458,19 @@ public partial class IslandWindow
             _phone?.PublishFilter(_settings.IslandOffKinds, _settings.IslandOffAt);
     }
 
+    /// <summary>Turns one notice on or off on the phone's island from the PC's settings; goes to every phone.</summary>
+    public void SetNoticeShown(string kind, bool shown)
+    {
+        var next = _settings.IslandOffKinds.Where(k => k != kind).ToList();
+        if (!shown) next.Add(kind);
+        if (next.Count == _settings.IslandOffKinds.Count && next.All(_settings.IslandOffKinds.Contains)) return;
+        _settings.IslandOffKinds = next;
+        _settings.IslandOffAt = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), _settings.IslandOffAt + 1);
+        _settings.Save();
+        _phone?.PublishFilter(next, _settings.IslandOffAt);
+    }
+
+    public bool NoticeShown(string kind) => !NoticeOff(kind);
+
     bool NoticeOff(string kind) => _settings.IslandOffKinds.Contains(kind);
 }

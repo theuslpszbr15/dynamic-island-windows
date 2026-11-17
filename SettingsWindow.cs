@@ -1090,7 +1090,26 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.PhoneCalls, v => { S.PhoneCalls = v; S.Save(); }),
             Row("Enviar e receber", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
+        page.Children.Add(NoticesCard());
         page.Children.Add(WakeCard());
+    }
+
+    /// <summary>"Avisos da ilha do celular": the same switches as the app's screen, kept in sync over the link.</summary>
+    Border NoticesCard()
+    {
+        var isl = _app.Island;
+        (string Kind, string Title, string? Note)[] rows =
+        [
+            ("Approval", "Pedidos de permissão dos agentes", "Segurança: desligado, a ilha do celular não avisa quando um agente espera sua resposta."),
+            ("Offer", "Solicitações de envio recebidas", null),
+            ("Outgoing", "Esperando o PC aceitar um envio", null),
+            ("Claude", "Avisos do app do Claude", null),
+            ("Transfer", "Transferências (andamento e fim)", null),
+            ("Discord", "Quem entra e sai da call", "Vale também para a ilha do PC."),
+            ("Call", "Estou numa call", null),
+        ];
+        return Card("Avisos da ilha do celular", rows.Select(r =>
+            Toggle(r.Title, r.Note ?? "Muda aqui e no celular ao mesmo tempo.", isl.NoticeShown(r.Kind), v => isl.SetNoticeShown(r.Kind, v))).ToArray());
     }
 
     bool? _wakeArmed;

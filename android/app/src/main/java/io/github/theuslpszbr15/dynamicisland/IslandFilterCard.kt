@@ -42,7 +42,7 @@ private val groups: List<Pair<String, List<Entry>>> = listOf(
     ),
 )
 
-/** What the island may tell. Saved on this phone only; the PC is not told. */
+/** What the island may tell. Shared with the PC (Configurações → Celular), the newest change wins. */
 @Composable
 fun IslandFilterCard() {
     val context = LocalContext.current
