@@ -64,10 +64,10 @@ public sealed class IslandSettings
     public bool FocusMode { get; set; } = true;
     /// <summary>Focused minutes per day (yyyy-MM-dd), the last 30 days.</summary>
     public Dictionary<string, int> FocusLog { get; set; } = [];
-    /// <summary>Jarvis AI integration endpoint (prepared for user's own Jarvis repository).</summary>
-    public bool JarvisEnabled { get; set; }
-    public string JarvisEndpoint { get; set; } = "http://localhost:11434";
+    /// <summary>Jarvis's shortcut: "hold" = hold to talk (a tap opens the chat box), "text" = always the chat box.</summary>
     public string JarvisVoiceMode { get; set; } = "hold";
+    /// <summary>Jarvis says its answers with the Piper voice (when downloaded).</summary>
+    public bool JarvisSpeak { get; set; } = true;
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay

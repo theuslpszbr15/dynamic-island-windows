@@ -47,6 +47,8 @@ static class Native
     public static bool IsMouseButtonDown() =>
         (GetAsyncKeyState(0x01) & 0x8000) != 0 || (GetAsyncKeyState(0x02) & 0x8000) != 0;
 
+    public static bool IsKeyDown(uint virtualKey) => (GetAsyncKeyState((int)virtualKey) & 0x8000) != 0;
+
     public const long WS_EX_TRANSPARENT = 0x20;
 
     [DllImport("shell32.dll")]

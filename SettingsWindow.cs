@@ -44,6 +44,8 @@ public sealed partial class SettingsWindow : DarkWindow
         SetUpTransfers();
         _app.Island.Discord.StatusChanged += OnDiscordStatus;
         Closed += (_, _) => _app.Island.Discord.StatusChanged -= OnDiscordStatus;
+        Services.Jarvis.Changed += OnJarvisChanged;
+        Closed += (_, _) => Services.Jarvis.Changed -= OnJarvisChanged;
         Activated += (_, _) => AdoptOwnRelay();
         Render();
     }
@@ -84,6 +86,9 @@ public sealed partial class SettingsWindow : DarkWindow
             "6. No celular, escaneie o código de pareamento de novo."));
         return panel;
     }
+
+    // download progress arrives from a worker thread
+    void OnJarvisChanged() => Dispatcher.BeginInvoke(() => { if (_page == "jarvis") Render(); });
 
     void OnDiscordStatus()
     {
@@ -161,8 +166,8 @@ public sealed partial class SettingsWindow : DarkWindow
                 QuickBtn(S.AuroraLook ? "Personalizar" : "Ligar Aurora", () => { S.AuroraLook = true; S.Save(); _app.Island.ApplyLook(); Render(); })),
             Row("Produtividade na ilha", "Tarefas rápidas, meta de água (💧) e textos rápidos (PIX, e-mail, links) com 1 clique.",
                 QuickBtn("Abrir tarefas", () => Navigate("productivity"))),
-            Row("Jarvis (sua IA pessoal)", "Conector pronto para quando você subir o seu Jarvis no GitHub.",
-                QuickBtn("Ver conector", () => Navigate("jarvis")))));
+            Row("Jarvis (sua IA pessoal)", "Pergunte pela ilha: segure " + Hotkeys.Keys(S, "jarvis") + " para falar ou toque para escrever.",
+                QuickBtn("Abrir Jarvis", () => Navigate("jarvis")))));
     }
 
     void General(Panel page)
@@ -619,31 +624,46 @@ public sealed partial class SettingsWindow : DarkWindow
 
     void Jarvis(Panel page)
     {
-        var endpoint = new TextBox
+        var keys = Hotkeys.Keys(S, "jarvis");
+        UIElement Engine(Services.Jarvis.Engine engine, string what)
         {
-            Text = S.JarvisEndpoint, Width = 280, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5,
-            Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
-            BorderThickness = new Thickness(1), BorderBrush = Line,
-        };
-        var save = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
-        save.Click += (_, _) => { S.JarvisEndpoint = endpoint.Text.Trim(); S.Save(); Render(); };
-        var epRow = new StackPanel { Orientation = Orientation.Horizontal };
-        epRow.Children.Add(endpoint);
-        epRow.Children.Add(save);
+            var folder = Services.Jarvis.Folder(engine);
+            if (folder != null)
+            {
+                var ready = Note("✓ Pronto" + (Services.Jarvis.FromJarvisApp(engine) ? " (do app JARVIS)" : ""));
+                ready.Foreground = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+                return Row(Services.Jarvis.Label(engine), what, ready);
+            }
+            var busy = Services.Jarvis.Progress.TryGetValue(engine, out var progress);
+            var get = new Button { Content = busy ? progress : $"Baixar ({Services.Jarvis.Size(engine)})", Style = (Style)Resources["Action"], IsEnabled = !busy };
+            get.Click += async (_, _) =>
+            {
+                get.IsEnabled = false;
+                var error = await Services.Jarvis.InstallAsync(engine);
+                if (error != null) DarkDialog.Ask(this, "Jarvis", error, "OK", null);
+                Render();
+            };
+            return Row(Services.Jarvis.Label(engine), what, get);
+        }
 
-        var test = new Button { Content = "Testar no entalho", Style = (Style)Resources["Action"] };
-        test.Click += (_, _) => _app.Island.TriggerJarvis();
+        var open = new Button { Content = "Abrir o Jarvis", Style = (Style)Resources["Action"] };
+        open.Click += (_, _) => _app.Island.OpenJarvis();
 
-        page.Children.Add(Card("Jarvis — Conector de IA e Voz no Entalho",
-            Note("Estrutura pronta para integrar o seu repositório do Jarvis assim que você publicar no GitHub. " +
-                 "O atalho global (" + Hotkeys.Keys(S, "jarvis") + "), o estado visual na ilha e o canal de comandos locais já estão preparados."),
-            Toggle("Habilitar integração com o Jarvis", "Ativa o atalho " + Hotkeys.Keys(S, "jarvis") + " e o conector local para comandos de voz/texto na ilha.",
-                S.JarvisEnabled, v => { S.JarvisEnabled = v; S.Save(); }),
-            Choice("Modo de ativação", "Como você vai chamar o Jarvis pelo entalho.",
-                [("hold", "Segurar atalho para falar (Push-to-Talk)"), ("wake", "Palavra de ativação + atalho"), ("text", "Apenas texto / silencioso")],
+        page.Children.Add(Card("Jarvis",
+            Note("O seu assistente (github.com/theuslpszbr15/JARVIS) dentro da ilha: segure " + keys + " e fale, ou toque no atalho para " +
+                 "escrever. A resposta aparece na ilha e é falada. Tudo roda neste PC: nada vai para a internet depois de baixar."),
+            Choice("Atalho " + keys, "Segurar: fala. Tocar: abre para escrever.",
+                [("hold", "Segurar para falar"), ("text", "Só escrever")],
                 S.JarvisVoiceMode, m => { S.JarvisVoiceMode = m; S.Save(); }),
-            Row("Endpoint / Repositório local", "URL ou porta local onde o Jarvis responde.", epRow),
-            Row("Testar chamada na ilha", "Mostra o aviso do Jarvis na Dynamic Island agora.", test)));
+            Toggle("Falar as respostas", "Com a voz baixada, o Jarvis lê a resposta em voz alta.", S.JarvisSpeak, v => { S.JarvisSpeak = v; S.Save(); }),
+            Row("Conversar agora", "Abre a caixa do Jarvis embaixo da ilha.", open)));
+
+        page.Children.Add(Card("Motores locais",
+            Note("Os mesmos do app JARVIS. Se o JARVIS já baixou algum, a ilha usa o dele. Cada arquivo é conferido (SHA-256) antes de rodar. " +
+                 "Sem a IA, o Jarvis já responde hora, data, contas e pesquisas."),
+            Engine(Services.Jarvis.Engine.Ai, "Para conversar sobre qualquer assunto, sem internet."),
+            Engine(Services.Jarvis.Engine.Voice, "Para o Jarvis falar as respostas."),
+            Engine(Services.Jarvis.Engine.Microphone, "Para falar com o Jarvis segurando o atalho.")));
     }
 
     /// <summary>Who joins the Discord call. By default the island's own Discord app (nothing to set up: "Conectar" and
