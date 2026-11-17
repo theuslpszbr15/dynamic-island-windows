@@ -189,7 +189,8 @@ public static class Jarvis
     // ───────────────────────── answering ─────────────────────────
 
     const string SystemPrompt = "Você é JARVIS, um assistente pessoal que vive na Dynamic Island do Windows. Responda em português " +
-                                "brasileiro de forma curta, educada e precisa. Não finja acesso à internet ou ao computador. Não use markdown.";
+                                "brasileiro de forma curta, educada e precisa. Não finja acesso à internet ou ao computador: " +
+                                "nunca diga que abriu, fechou ou fez algo no PC. Não use markdown.";
 
     static readonly SemaphoreSlim Thinking = new(1, 1);
     static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
@@ -200,6 +201,20 @@ public static class Jarvis
         message = message.Trim();
         if (message.Length is 0 or > 2000) return new("Escreva uma pergunta de até 2000 caracteres.");
         if (LocalReply(message, DateTime.Now) is { } local) return local;
+        if (OpenRequest(message) is { } request)
+        {
+            if (FindApp(request) is not { } app) return new($"Não achei \"{request}\" neste PC.");
+            try
+            {
+                Process.Start(new ProcessStartInfo(app.Target) { UseShellExecute = true });
+                return new($"Abrindo {app.Name}.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Jarvis open", ex);
+                return new($"Não consegui abrir {app.Name}.");
+            }
+        }
         if (Folder(Engine.Ai) is not { } dir)
             return new("A IA offline ainda não foi baixada: Configurações › Jarvis › Baixar. Hora, data, contas e pesquisas já funcionam.");
         if (!await Thinking.WaitAsync(0)) return new("Ainda estou pensando na pergunta anterior.");
@@ -261,14 +276,14 @@ public static class Jarvis
         if (search.Success)
         {
             var query = search.Groups[1].Value.Trim();
-            return new($"Preparei uma pesquisa por: {query}.", "Abrir pesquisa", "https://www.google.com/search?q=" + Uri.EscapeDataString(query));
+            return new($"Pesquisando {query} no Google.", "Abrir pesquisa", "https://www.google.com/search?q=" + Uri.EscapeDataString(query));
         }
         var site = Regex.Match(text, @"^(?:abra|abrir|abre)\s+(?:o\s+)?(youtube|google)[.!]?$");
         if (site.Success)
         {
             var youtube = site.Groups[1].Value == "youtube";
             var name = youtube ? "YouTube" : "Google";
-            return new($"O {name} está pronto.", $"Abrir {name}", youtube ? "https://www.youtube.com/" : "https://www.google.com/");
+            return new($"Abrindo o {name}.", $"Abrir {name}", youtube ? "https://www.youtube.com/" : "https://www.google.com/");
         }
         if (Regex.IsMatch(text, @"^(oi|ola|bom dia|boa tarde|boa noite|jarvis)[!.,\s]*$")) return new("À disposição. Em que posso ajudar?");
         if (Regex.IsMatch(text, @"\b(ajuda|comandos|o que voce faz)\b"))
@@ -284,6 +299,67 @@ public static class Jarvis
         foreach (var c in s.Normalize(NormalizationForm.FormD))
             if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark) sb.Append(char.ToLowerInvariant(c));
         return sb.ToString();
+    }
+
+    // ───────────────────────── opening apps ─────────────────────────
+
+    public sealed record App(string Name, string Target);
+
+    // Windows' own apps by the names people say; anything else must be a shortcut in the Start menu.
+    static readonly (string[] Says, App App)[] KnownApps =
+    [
+        (["calculadora", "calculator"], new("a Calculadora", "calc.exe")),
+        (["bloco de notas", "notepad", "bloco de nota"], new("o Bloco de Notas", "notepad.exe")),
+        (["paint"], new("o Paint", "mspaint.exe")),
+        (["explorador de arquivos", "explorer", "meus arquivos", "arquivos"], new("o Explorador de Arquivos", "explorer.exe")),
+        (["configuracoes", "configuracao", "ajustes do windows"], new("as Configurações", "ms-settings:")),
+        (["gerenciador de tarefas", "task manager"], new("o Gerenciador de Tarefas", "taskmgr.exe")),
+        (["terminal", "prompt de comando", "cmd", "powershell"], new("o Terminal", "wt.exe")),
+        (["camera"], new("a Câmera", "microsoft.windows.camera:")),
+        (["relogio", "alarme", "alarmes", "cronometro"], new("o Relógio", "ms-clock:")),
+        (["loja", "microsoft store"], new("a Microsoft Store", "ms-windows-store:")),
+        (["ferramenta de captura", "captura de tela", "recorte"], new("a Ferramenta de Captura", "ms-screenclip:")),
+    ];
+
+    static readonly Regex OpenVerb = new(
+        @"^(?:jarvis[,!]?\s+)?(?:por favor\s+)?(?:abre|abra|abrir|abri|inicia|inicie|iniciar|executa|execute|executar|open)\s+(?:(?:o|a|os|as|meu|minha|um|uma)\s+)?(.+?)[\s.!?]*$");
+
+    /// <summary>What to open in "abre a calculadora" (or just "calculadora", when that is an app), else null.</summary>
+    public static string? OpenRequest(string input)
+    {
+        var text = Plain(input.Trim());
+        var verb = OpenVerb.Match(text);
+        if (verb.Success) return verb.Groups[1].Value.Trim();
+        var bare = Regex.Replace(text, @"[\s.!?]+$", "");
+        return bare.Length > 0 && bare.Split(' ').Length <= 3 && FindApp(bare, loose: false) != null ? bare : null;
+    }
+
+    /// <summary>A Windows app it knows by name, or a Start menu shortcut whose name matches (exactly unless
+    /// <paramref name="loose"/>). Never a path from the text.</summary>
+    public static App? FindApp(string name, bool loose = true)
+    {
+        name = Plain(name.Trim());
+        if (name.Length < 2) return null;
+        foreach (var (says, app) in KnownApps)
+            if (says.Contains(name)) return app;
+        var shortcuts = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+                Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
+            }
+            .Where(Directory.Exists)
+            .SelectMany(d => Directory.EnumerateFiles(d, "*.lnk", new EnumerationOptions
+            {
+                // localized junctions ("Programas") deny listing; the real folders are walked anyway
+                RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint,
+            }))
+            .Where(f => !Plain(Path.GetFileNameWithoutExtension(f)).Contains("uninstall") && !Plain(Path.GetFileNameWithoutExtension(f)).Contains("desinstalar"))
+            .Select(f => (Path: f, Name: Plain(Path.GetFileNameWithoutExtension(f))))
+            .ToList();
+        var best = shortcuts.FirstOrDefault(s => s.Name == name);
+        if (best.Path == null && loose) best = shortcuts.Where(s => s.Name.StartsWith(name)).OrderBy(s => s.Name.Length).FirstOrDefault();
+        if (best.Path == null && loose && name.Length >= 4) best = shortcuts.Where(s => s.Name.Contains(name)).OrderBy(s => s.Name.Length).FirstOrDefault();
+        return best.Path == null ? null : new App("o " + Path.GetFileNameWithoutExtension(best.Path), best.Path);
     }
 
     /// <summary>Only Google and YouTube over https, as in JARVIS.</summary>

@@ -6,11 +6,11 @@ using DynamicIsland.Services;
 
 namespace DynamicIsland;
 
-// JARVIS on the island: Ctrl+Alt+J held = talk (released = ask), tapped = the chat box; answers show as a card and are
-// spoken with the Piper voice.
+// JARVIS on the island: Ctrl+Alt+J opens its page (the JARVIS core, the state and the last exchange); held = talk
+// (released = ask), tapped = the bar to type. Answers are spoken with the Piper voice.
 public partial class IslandWindow
 {
-    static readonly Color JarvisColor = Color.FromRgb(0xBF, 0x5A, 0xF2);
+    static readonly Color JarvisColor = Color.FromRgb(0x83, 0xD4, 0xB4);
     const int JarvisHistoryMax = 20;
     static readonly TimeSpan TapLimit = TimeSpan.FromMilliseconds(400), ListenLimit = TimeSpan.FromSeconds(30);
 
@@ -31,13 +31,69 @@ public partial class IslandWindow
     void SetJarvisState(string state)
     {
         JarvisState = state;
+        UpdateJarvisUi();
         JarvisChanged?.Invoke();
     }
 
-    /// <summary>The global shortcut: hold to talk (with the microphone engine and "segurar para falar"), else the chat box.</summary>
+    bool JarvisOnScreen => _expanded && _page == PageJarvis;
+
+    void UpdateJarvisUi()
+    {
+        JarvisCoreView.State = JarvisState switch
+        {
+            "Ouvindo…" => JarvisCore.Mood.Listening,
+            "Pronto" => JarvisCore.Mood.Idle,
+            _ => JarvisCore.Mood.Active,
+        };
+        JarvisStateText.Text = JarvisState.TrimEnd('…').ToUpperInvariant();
+        JarvisStateText.Foreground = new SolidColorBrush(_mic != null ? Color.FromRgb(0xE9, 0x9A, 0x59) : Color.FromRgb(0xD6, 0xF9, 0xDF));
+        var asked = JarvisHistory.LastOrDefault(h => h.User).Text;
+        var answer = JarvisHistory.Count > 0 && !JarvisHistory[^1].User ? JarvisHistory[^1].Text : null;
+        JarvisAsked.Text = asked != null ? "Você: " + asked : Jarvis.Folder(Jarvis.Engine.Ai) == null
+            ? "Sem a IA baixada: hora, data, contas, pesquisas e abrir programas" : "Pergunte o que quiser: tudo roda neste PC";
+        JarvisAnswer.Text = JarvisState switch
+        {
+            "Ouvindo…" => "Estou ouvindo…",
+            "Transcrevendo…" => "Entendendo o que você disse…",
+            "Pensando…" => "Pensando…",
+            _ => answer ?? "À disposição. Segure " + Hotkeys.Keys(_settings, "jarvis") + " e fale, ou toque em Escrever.",
+        };
+        JarvisTalkText.Text = _mic != null ? "Enviar" : "Falar";
+        JarvisTalkIcon.Text = _mic != null ? "\uE724" : "\uE720";
+    }
+
+    /// <summary>Shows the island open on Jarvis's page, as if the mouse were over it.</summary>
+    void ShowJarvisPage()
+    {
+        if (_userHidden) SetUserHidden(false);
+        if (!JarvisOnScreen) SetExpanded(true, PageJarvis);
+        if (!_hover) ScheduleClose(8);
+    }
+
+    void JarvisTalk_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (Jarvis.Folder(Jarvis.Engine.Microphone) == null)
+        {
+            ((App)Application.Current).ShowSettings("jarvis");
+            return;
+        }
+        if (_mic != null) _ = StopListeningAsync();
+        else StartListening();
+    }
+
+    void JarvisType_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        OpenJarvis();
+    }
+
+    /// <summary>The global shortcut: opens Jarvis's page; held = talk (with the microphone engine and "segurar para
+    /// falar"), tapped = the bar to type.</summary>
     public void TriggerJarvis()
     {
         if (_mic != null) return;
+        ShowJarvisPage();
         if (_settings.JarvisVoiceMode != "hold" || Jarvis.Folder(Jarvis.Engine.Microphone) == null)
         {
             OpenJarvis();
@@ -68,7 +124,8 @@ public partial class IslandWindow
         _jarvisWindow.Closed += (_, _) => _jarvisWindow = null;
         var center = Left + ActualWidth / 2;
         _jarvisWindow.Left = center - JarvisWindow.CardWidth / 2;
-        _jarvisWindow.Top = Top + 52;
+        // under the island open on Jarvis's page
+        _jarvisWindow.Top = Top + ExpandedFor(PageJarvis).Height + 6;
         _jarvisWindow.Show();
         _jarvisWindow.Activate();
     }
@@ -141,17 +198,20 @@ public partial class IslandWindow
         JarvisHistory.Add((false, reply.Text));
         if (JarvisHistory.Count > JarvisHistoryMax) JarvisHistory.RemoveRange(0, JarvisHistory.Count - JarvisHistoryMax);
         JarvisLast = reply;
-        SetJarvisState("Pronto");
+        var speak = _settings.JarvisSpeak && Jarvis.Folder(Jarvis.Engine.Voice) != null;
+        SetJarvisState(speak ? "Falando…" : "Pronto");
 
+        // "pesquise…", "abre o YouTube": the link opens right away (only Google and YouTube over https)
         if (reply.ActionUrl is { } url && Jarvis.SafeLink(url))
-            ShowInfo("\uE99A", reply.Text, reply.ActionLabel ?? "Abrir", glyphColor: JarvisColor, seconds: 8,
-                action: () => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }));
-        else
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+        if (!JarvisOnScreen)
             ShowCard(null, "Jarvis", "", reply.Text, seconds: Math.Clamp(3 + reply.Text.Length / 18.0, 5, 14), glyph: "\uE99A");
 
-        if (!_settings.JarvisSpeak || Jarvis.Folder(Jarvis.Engine.Voice) == null) return;
-        SetJarvisState("Falando…");
-        await Jarvis.SpeakAsync(reply.Text);
-        if (JarvisState == "Falando…") SetJarvisState("Pronto");
+        if (speak)
+        {
+            await Jarvis.SpeakAsync(reply.Text);
+            if (JarvisState == "Falando…") SetJarvisState("Pronto");
+        }
+        if (JarvisOnScreen && !_hover) ScheduleClose(Math.Clamp(3 + reply.Text.Length / 25.0, 5, 12));
     }
 }

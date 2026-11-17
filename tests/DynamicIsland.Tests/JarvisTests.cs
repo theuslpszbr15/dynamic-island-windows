@@ -37,6 +37,23 @@ public class JarvisTests
     {
         Assert.Equal("À disposição. Em que posso ajudar?", Jarvis.LocalReply("Olá!", Now)!.Text);
         Assert.Null(Jarvis.LocalReply("me conta uma piada", Now));
+        Assert.Null(Jarvis.OpenRequest("me conta uma piada"));
+    }
+
+    [Theory]
+    [InlineData("abre a calculadora", "calc.exe")]
+    [InlineData("Calculadora", "calc.exe")]
+    [InlineData("Jarvis, abra o bloco de notas.", "notepad.exe")]
+    [InlineData("abrir as configurações", "ms-settings:")]
+    public void OpensWindowsAppsByName(string said, string target) =>
+        Assert.Equal(target, Jarvis.FindApp(Jarvis.OpenRequest(said)!)!.Target);
+
+    [Fact]
+    public void NeverOpensAPathFromTheText()
+    {
+        Assert.Null(Jarvis.FindApp(@"C:\Windows\System32\cmd.exe /c del"));
+        Assert.Equal("app que nao existe xyz", Jarvis.OpenRequest("abre o app que não existe xyz"));
+        Assert.Null(Jarvis.FindApp("app que nao existe xyz"));
     }
 
     /// <summary>JARVIS_E2E=1: downloads the voice and microphone engines (~240 MB, checked by SHA-256), has the voice

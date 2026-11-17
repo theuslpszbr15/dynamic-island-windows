@@ -382,7 +382,14 @@ public partial class IslandWindow
             png.Save(file);
         }
         _jarvisWindow?.Close();
+        SetExpanded(true, PageJarvis);
+        SetJarvisState("Falando…");
+        await Shot("46-jarvis-page");
         JarvisHistory.Clear();
+        SetJarvisState("Ouvindo…");
+        await Shot("47-jarvis-listening");
+        SetJarvisState("Pronto");
+        SetExpanded(false);
 
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),
