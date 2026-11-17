@@ -498,29 +498,6 @@ private fun RemoteButton(label: String, modifier: Modifier, onClick: () -> Unit)
 }
 
 @Composable
-private fun TrayTab(state: LinkUi, onOpen: (TrayItem) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-        Text("O que está fixado na bandeja da ilha. Toque para abrir no PC.", color = Muted, fontSize = 13.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-        when {
-            state.status != LinkStatus.Connected ->
-                Text("Ligue-se ao PC para ver a bandeja.", color = Muted, fontSize = 14.sp)
-            state.tray.isEmpty() ->
-                Text("A bandeja está vazia (ou desligada para o celular nas Configurações do PC). " +
-                    "Arraste arquivos ou apps até a ilha para fixá-los.", color = Muted, fontSize = 14.sp)
-            else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(104.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                gridItems(state.tray, key = { it.id }) { TrayTile(it, onOpen) }
-            }
-        }
-    }
-}
-
-@Composable
 private fun TrayTile(item: TrayItem, onOpen: (TrayItem) -> Unit) {
     val icon = remember(item.id) {
         item.icon?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }

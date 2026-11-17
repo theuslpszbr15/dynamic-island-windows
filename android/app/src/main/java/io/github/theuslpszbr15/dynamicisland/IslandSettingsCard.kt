@@ -141,6 +141,8 @@ fun IslandSettingsCard() {
             Switch(checked = look.dock, onCheckedChange = { change(look.copy(dock = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
 
+        // a build without the listener declared (see AndroidManifest) has nothing to switch on here
+        if (DiscordListener.available(context)) {
         Section("Música, Discord e Claude")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Mostrar a música tocando (Spotify, YouTube Music…)", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
@@ -179,6 +181,7 @@ fun IslandSettingsCard() {
                 else "${time.format(Date(claude.at))} · Claude · canal \"${claude.channel}\" · ${claude.category.ifEmpty { "sem categoria" }}" +
                     (if (claude.actions.isNotEmpty()) " · botões: ${claude.actions.joinToString()}" else ""),
                 color = MutedColor, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        }
         }
     }
 }
