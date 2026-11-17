@@ -74,6 +74,27 @@ class IslandTest {
         assertEquals(Pill.Kind.Offer, Island.pill(0, 1, 0, emptyList(), emptyList(), null, null, now + Island.CLAUDE_MS, note).kind)
     }
 
+    @Test fun switchedOffKindsAreSkipped() {
+        val now = 100_000L
+        val note = ClaudeNote("k", "Título", "Texto", now - 1_000)
+        val running = LiveTransfer("t", "Mandando pro PC", "", 40, LiveTransfer.State.Running, now - 1_000)
+        val joined = DiscordEvent(true, "Ana", "Geral", 2, null, now - 1_000)
+        val call = PhoneCall("Geral", "Servidor", now - 60_000, emptyList())
+        val song = NowPlaying("app", "Música", "Artista", true, 0, 200_000, now)
+        // nothing off: same as before
+        assertEquals(Pill.Kind.Approval, Island.pill(1, 1, 1, listOf(running), listOf(joined), call, song, now, note, emptySet()).kind)
+        // an off kind falls through to the next one in line
+        assertEquals(Pill.Kind.Claude, Island.pill(1, 1, 0, emptyList(), emptyList(), null, null, now, note, setOf(Pill.Kind.Approval)).kind)
+        assertEquals(Pill.Kind.Offer, Island.pill(0, 1, 0, emptyList(), emptyList(), null, null, now, note, setOf(Pill.Kind.Claude)).kind)
+        assertEquals(Pill.Kind.Discord, Island.pill(0, 0, 0, listOf(running), listOf(joined), null, null, now, null, setOf(Pill.Kind.Transfer)).kind)
+        // transfers off hides both the running one and the just-finished one
+        val done = running.copy(state = LiveTransfer.State.Done)
+        assertEquals(Pill.Kind.Idle, Island.pill(0, 0, 0, listOf(done), emptyList(), null, null, now, null, setOf(Pill.Kind.Transfer)).kind)
+        assertEquals(Pill.Kind.Call, Island.pill(0, 0, 1, emptyList(), emptyList(), call, song, now, null, setOf(Pill.Kind.Media)).kind)
+        assertEquals(Pill.Kind.Outgoing, Island.pill(0, 0, 1, emptyList(), emptyList(), call, null, now, null, setOf(Pill.Kind.Call)).kind)
+        assertEquals(Pill.Kind.Idle, Island.pill(0, 0, 1, emptyList(), emptyList(), null, null, now, null, setOf(Pill.Kind.Outgoing)).kind)
+    }
+
     @Test fun songPositionMovesOnlyWhilePlaying() {
         val song = NowPlaying("app", "t", "a", true, 10_000, 60_000, at = 1_000)
         assertEquals(15_000, song.positionAt(6_000))

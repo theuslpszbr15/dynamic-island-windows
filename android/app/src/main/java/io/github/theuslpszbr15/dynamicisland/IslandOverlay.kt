@@ -169,7 +169,7 @@ object IslandOverlay {
     fun refresh(context: Context) {
         val app = context.applicationContext
         main.post {
-            IslandLook.load(app)
+            IslandLook.load(app); IslandFilter.load(app)
             val host = above
             val want = isOn(app) && (host != null || canDraw(app))
             // the accessibility service came or went: the window moves to (or from) above the status bar
@@ -443,6 +443,7 @@ private fun IslandUi(
     val mediaState by Island.media.collectAsState()
     val art by MediaWatcher.art.collectAsState()
     val look by IslandLook.state.collectAsState()
+    val off by IslandFilter.off.collectAsState()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     // The clock only ticks while something on screen moves on its own: an open card (elapsed times, player position),
     // the Discord call timer, or a pill entry inside its flash window. At rest, it stops, so an idle island costs
@@ -460,7 +461,7 @@ private fun IslandUi(
     }
 
     val media = if (look.media) mediaState else null
-    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude)
+    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude, off)
     val screen = LocalConfiguration.current.screenWidthDp.dp
 
     // What shows: an open card, a short notice, the song (cover and bars beside the camera) or the resting pill;

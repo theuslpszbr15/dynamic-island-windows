@@ -161,26 +161,28 @@ object Island {
         media: NowPlaying?,
         now: Long,
         claude: ClaudeNote? = null,
+        /** Kinds the person switched off (see [IslandFilter]): skipped, the next one in line shows instead. */
+        off: Set<Pill.Kind> = emptySet(),
     ): Pill {
-        if (approvals > 0) return Pill(Pill.Kind.Approval,
+        if (approvals > 0 && Pill.Kind.Approval !in off) return Pill(Pill.Kind.Approval,
             if (approvals == 1) "Agente pedindo permissão" else "$approvals pedidos de permissão", "Toque para responder", approvals)
-        claude?.takeIf { now - it.at in 0..CLAUDE_MS }?.let {
+        claude?.takeIf { Pill.Kind.Claude !in off && now - it.at in 0..CLAUDE_MS }?.let {
             return Pill(Pill.Kind.Claude, it.title.ifEmpty { "Claude" }, it.text.ifEmpty { "Toque para abrir no Claude" })
         }
-        if (incoming > 0) return Pill(Pill.Kind.Offer,
+        if (incoming > 0 && Pill.Kind.Offer !in off) return Pill(Pill.Kind.Offer,
             if (incoming == 1) "Nova solicitação de envio" else "$incoming solicitações de envio", "Toque para aceitar ou rejeitar", incoming)
-        transfers.firstOrNull { it.state == LiveTransfer.State.Running }?.let {
+        transfers.firstOrNull { Pill.Kind.Transfer !in off && it.state == LiveTransfer.State.Running }?.let {
             return Pill(Pill.Kind.Transfer, it.title, if (it.percent >= 0) "${it.percent}%" else "Aguardando")
         }
-        discord.firstOrNull()?.takeIf { now - it.at in 0..FLASH_MS }?.let {
+        discord.firstOrNull()?.takeIf { Pill.Kind.Discord !in off && now - it.at in 0..FLASH_MS }?.let {
             return Pill(Pill.Kind.Discord, if (it.joined) "${it.name} entrou na call" else "${it.name} saiu da call", it.channel)
         }
-        transfers.firstOrNull()?.takeIf { now - it.at in 0..FLASH_MS }?.let {
+        transfers.firstOrNull()?.takeIf { Pill.Kind.Transfer !in off && now - it.at in 0..FLASH_MS }?.let {
             return Pill(Pill.Kind.Transfer, it.title, if (it.state == LiveTransfer.State.Done) "Pronto" else "Falhou")
         }
-        if (media != null && media.playing) return Pill(Pill.Kind.Media, media.title, media.artist)
-        if (call != null) return Pill(Pill.Kind.Call, call.title.ifEmpty { "Na call" }, "Call do Discord")
-        if (outgoing > 0) return Pill(Pill.Kind.Outgoing, "Esperando o PC aceitar",
+        if (media != null && media.playing && Pill.Kind.Media !in off) return Pill(Pill.Kind.Media, media.title, media.artist)
+        if (call != null && Pill.Kind.Call !in off) return Pill(Pill.Kind.Call, call.title.ifEmpty { "Na call" }, "Call do Discord")
+        if (outgoing > 0 && Pill.Kind.Outgoing !in off) return Pill(Pill.Kind.Outgoing, "Esperando o PC aceitar",
             if (outgoing == 1) "1 envio" else "$outgoing envios", outgoing)
         return Pill(Pill.Kind.Idle, "")
     }
