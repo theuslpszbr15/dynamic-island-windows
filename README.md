@@ -178,6 +178,7 @@ Compilar: JDK 17+ e Android SDK 35, `cd android` e `gradlew assembleRelease`. Pa
 crie `android/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`; fica fora do git) ou use as
 variáveis `DI_STORE_FILE`, `DI_STORE_PASSWORD`, `DI_KEY_ALIAS` e `DI_KEY_PASSWORD`. Sem chave, o release usa a chave de debug
 da máquina, e esse APK não atualiza por cima de um assinado em outro lugar.
+Veja [android/ASSINATURA.md](android/ASSINATURA.md): backup da chave e aviso de que quem tem o APK debug precisa desinstalar uma vez.
 
 ## Desenvolvimento
 
