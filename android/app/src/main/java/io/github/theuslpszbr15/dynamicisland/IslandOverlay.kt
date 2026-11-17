@@ -543,7 +543,9 @@ private fun IslandUi(
                 "media" -> MediaPill(look, art, media)
                 "pill" -> Notice(pill, look, art, discord, screen)
                 is Pill.Kind -> Box(Modifier.width(minOf(screen - 16.dp, 380.dp)).padding(14.dp)) {
-                    OpenCard(which, context, link, outgoing, transfers, discord, call, claude, media, art, now, onOpen)
+                    OpenCard(which, context, link, outgoing, transfers,
+                        // one card holds the PC's people and the phone's own call: each half follows its own switch
+                        if (Pill.Kind.Discord in off) emptyList() else discord, if (Pill.Kind.Call in off) null else call, claude, media, art, now, onOpen)
                 }
                 else -> {}
             }
