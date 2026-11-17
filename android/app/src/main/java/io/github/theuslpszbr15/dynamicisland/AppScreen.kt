@@ -132,6 +132,7 @@ private fun LocalScreen(onConnect: () -> Unit) {
         }
         IslandSettingsCard()
         IslandFilterCard()
+        AppUpdateCard()
         Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(16.dp)) {
             Text("Conectar ao PC", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Text("Com a ilha do PC: aprovar pedidos do Claude Code, mandar arquivos e textos, e ver quem entra na call " +
@@ -342,6 +343,7 @@ private fun AgentsTab(
         }
         item { IslandSettingsCard() }
         item { IslandFilterCard() }
+        item { AppUpdateCard() }
         item {
             TextButton(onClick = onUnpair, modifier = Modifier.padding(vertical = 18.dp)) {
                 Text("Desparear deste PC", color = Red)
