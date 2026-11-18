@@ -13,7 +13,7 @@ public sealed class DarkDialog : Window
 {
     bool _ok;
 
-    DarkDialog(string title, string message, string ok, string? cancel, bool danger)
+    DarkDialog(string title, string message, string ok, string? cancel, bool danger, string? code)
     {
         Title = title;
         WindowStyle = WindowStyle.None;
@@ -28,12 +28,21 @@ public sealed class DarkDialog : Window
         Foreground = Brushes.White;
         Resources.MergedDictionaries.Add(DarkWindow.Styles());
 
-        var stack = new StackPanel { Width = 380 };
+        var stack = new StackPanel { Width = code != null ? 620 : 380 };
         stack.Children.Add(new TextBlock { Text = title, FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) });
         stack.Children.Add(new TextBlock
         {
             Text = message, Foreground = DarkWindow.Frozen(0xFFB4B4BA), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18),
         });
+        if (code != null)
+            // the whole script, exactly what will run
+            stack.Children.Add(new TextBox
+            {
+                Text = code, IsReadOnly = true, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 12.5,
+                MaxHeight = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Background = DarkWindow.Frozen(0xFF141416), Foreground = Brushes.White, BorderThickness = new Thickness(1),
+                BorderBrush = DarkWindow.Frozen(0xFF3A3A40), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, -6, 0, 18),
+            });
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         if (cancel != null)
         {
@@ -59,10 +68,12 @@ public sealed class DarkDialog : Window
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
     }
 
-    /// <summary>True when the person picks <paramref name="ok"/>. Without <paramref name="cancel"/> it is just a notice.</summary>
-    public static bool Ask(Window? owner, string title, string message, string ok = "OK", string? cancel = "Cancelar", bool danger = false)
+    /// <summary>True when the person picks <paramref name="ok"/>. Without <paramref name="cancel"/> it is just a notice;
+    /// <paramref name="code"/> is shown whole, read-only.</summary>
+    public static bool Ask(Window? owner, string title, string message, string ok = "OK", string? cancel = "Cancelar", bool danger = false,
+        string? code = null)
     {
-        var dialog = new DarkDialog(title, message, ok, cancel, danger);
+        var dialog = new DarkDialog(title, message, ok, cancel, danger, code);
         if (owner is { IsVisible: true })
         {
             dialog.Owner = owner;

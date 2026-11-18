@@ -741,15 +741,17 @@ public sealed partial class SettingsWindow : DarkWindow
 
         page.Children.Add(Card("Jarvis",
             Note("O seu assistente (github.com/theuslpszbr15/JARVIS) dentro da ilha: segure " + keys + " e fale, ou toque no atalho para " +
-                 "escrever. A resposta aparece na ilha e é falada. Tudo roda neste PC: nada vai para a internet depois de baixar."),
+                 "escrever. A resposta aparece na ilha e é falada. Com a chave da Groq ele executa tarefas; sem ela, roda só neste PC."),
             Choice("Atalho " + keys, "Segurar: fala. Tocar: abre para escrever.",
                 [("hold", "Segurar para falar"), ("text", "Só escrever")],
                 S.JarvisVoiceMode, m => { S.JarvisVoiceMode = m; S.Save(); }),
-            Toggle("Falar as respostas", "Com a voz baixada, o Jarvis lê a resposta em voz alta.", S.JarvisSpeak, v => { S.JarvisSpeak = v; S.Save(); }),
+            Toggle("Falar as respostas", "O Jarvis lê a resposta em voz alta (voz baixada ou a voz em português do Windows).", S.JarvisSpeak, v => { S.JarvisSpeak = v; S.Save(); }),
             Choice("Brilho da voz", "As cores que sobem da borda da ilha quando você fala e quando o Jarvis responde.",
                 [.. VoiceGlow.Variants, ("off", "Desligado")],
                 S.JarvisGlow, v => { S.JarvisGlow = v; S.Save(); _app.Island.ApplyLook(); }),
             Row("Conversar agora", "Abre a caixa do Jarvis embaixo da ilha.", open)));
+
+        page.Children.Add(BrainCard());
 
         page.Children.Add(Card("Motores locais",
             Note("Os mesmos do app JARVIS. Se o JARVIS já baixou algum, a ilha usa o dele. Cada arquivo é conferido (SHA-256) antes de rodar. " +
@@ -757,6 +759,80 @@ public sealed partial class SettingsWindow : DarkWindow
             Engine(Services.Jarvis.Engine.Ai, "Para conversar sobre qualquer assunto, sem internet."),
             Engine(Services.Jarvis.Engine.Voice, "Para o Jarvis falar as respostas."),
             Engine(Services.Jarvis.Engine.Microphone, "Para falar com o Jarvis segurando o atalho.")));
+    }
+
+    /// <summary>The Project.Jarvis brain: a Groq key (kept with DPAPI) turns on the tools (Notepad, apps, notes, timer…).</summary>
+    Border BrainCard()
+    {
+        var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+        var brain = _app.Island.Brain;
+        var state = Note(JarvisBrain.HasKey
+            ? $"✓ Ligado. O Jarvis responde pela Groq e executa tarefas no PC. Lembra de {brain.FactCount} coisa(s) sobre você."
+            : "Desligado: sem a chave, o Jarvis só conversa (com a IA local) e abre programas.");
+        if (JarvisBrain.HasKey) state.Foreground = green;
+
+        var key = new PasswordBox
+        {
+            Width = 230, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White,
+            CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = "Começa com gsk_",
+        };
+        var save = new Button { Content = "Salvar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        save.Click += (_, _) =>
+        {
+            if (!JarvisBrain.SaveKey(key.Password.Trim()))
+            {
+                DarkDialog.Ask(this, "Jarvis", "Essa não parece uma chave da Groq (começa com gsk_).", "OK", null);
+                return;
+            }
+            Render();
+        };
+        var keyRow = new StackPanel { Orientation = Orientation.Horizontal };
+        keyRow.Children.Add(key);
+        keyRow.Children.Add(save);
+
+        var create = new Button { Content = "Criar chave grátis", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
+        create.Click += (_, _) => Process.Start(new ProcessStartInfo("https://console.groq.com/keys") { UseShellExecute = true });
+        var import = new Button { Content = "Importar do Project.Jarvis", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
+        import.Click += (_, _) =>
+        {
+            var folder = JarvisBrain.ProjectFolder();
+            if (folder == null)
+            {
+                var pick = new Microsoft.Win32.OpenFolderDialog { Title = "Pasta do Project.Jarvis" };
+                if (pick.ShowDialog(this) != true) return;
+                folder = pick.FolderName;
+            }
+            DarkDialog.Ask(this, "Jarvis", brain.ImportProject(folder), "OK", null);
+            Render();
+        };
+        var forget = new Button { Content = "Esquecer tudo", Style = (Style)Resources["Action"], IsEnabled = brain.FactCount > 0 };
+        forget.Click += (_, _) =>
+        {
+            if (!DarkDialog.Ask(this, "Esquecer tudo?", "O Jarvis apaga o que lembra sobre você e o histórico da conversa.", "Esquecer", danger: true)) return;
+            brain.ForgetEverything();
+            Render();
+        };
+        var actions = new WrapPanel();
+        actions.Children.Add(create);
+        actions.Children.Add(import);
+        actions.Children.Add(forget);
+
+        var name = new TextBox
+        {
+            Text = S.JarvisUserName, Width = 230, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover,
+            Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+        };
+        name.LostFocus += (_, _) => { S.JarvisUserName = name.Text.Trim(); S.Save(); };
+
+        return Card("Cérebro (Project.Jarvis)",
+            Note("O cérebro do github.com/theuslpszbr15/Project.Jarvis: com uma chave grátis da Groq, o Jarvis escreve no Bloco de Notas, " +
+                 "abre programas e sites, anota, cria pastas, lê arquivos, mostra o uso do PC, muda o volume, controla a música, " +
+                 "põe timer, lembrete e tarefa, vê o clima, pesquisa na Wikipédia e lembra de você. Scripts só rodam depois que você " +
+                 "lê o código e permite. O que você pede vai para a Groq; a chave fica guardada só neste PC (criptografada)."),
+            state,
+            Row("Chave da Groq", JarvisBrain.HasKey ? "Salva. Cole outra para trocar, ou salve vazio para apagar." : "console.groq.com › API Keys", keyRow),
+            Row("Seu nome", "Como o Jarvis te chama.", name),
+            actions);
     }
 
     /// <summary>Who joins the Discord call. By default the island's own Discord app (nothing to set up: "Conectar" and

@@ -402,16 +402,19 @@ public static class Jarvis
         return [.. list];
     }
 
-    /// <summary>Says the text with the Piper voice (stops what was being said). False without the voice engine.</summary>
+    /// <summary>Says the text with the Piper voice, or the Windows Portuguese voice without it (stops what was being
+    /// said). False when there is no voice.</summary>
     public static async Task<bool> SpeakAsync(string text)
     {
-        if (Folder(Engine.Voice) is not { } dir || string.IsNullOrWhiteSpace(text)) return false;
+        if (!CanSpeak || string.IsNullOrWhiteSpace(text)) return false;
+        var dir = Folder(Engine.Voice);
         StopSpeaking();
         var cancel = _speech = new CancellationTokenSource();
         var wave = Path.Combine(Path.GetTempPath(), $"jarvis-voice-{Environment.ProcessId}-{Guid.NewGuid():N}.wav");
         try
         {
-            await SynthesizeAsync(dir, text, wave, cancel.Token);
+            if (dir != null) await SynthesizeAsync(dir, text, wave, cancel.Token);
+            else if (!await WindowsVoiceAsync(text, wave)) return false;
             if (cancel.IsCancellationRequested) return true;
             await Task.Run(() =>
             {
@@ -449,6 +452,30 @@ public static class Jarvis
             File.Move(Path.Combine(dir, name), wave, true);
         }
         finally { try { File.Delete(Path.Combine(dir, name)); } catch { } }
+    }
+
+    /// <summary>The Piper voice is downloaded, or Windows has a Portuguese voice.</summary>
+    public static bool CanSpeak => Folder(Engine.Voice) != null || WindowsVoice.Value != null;
+
+    static readonly Lazy<Windows.Media.SpeechSynthesis.VoiceInformation?> WindowsVoice = new(() =>
+    {
+        try
+        {
+            var voices = Windows.Media.SpeechSynthesis.SpeechSynthesizer.AllVoices;
+            return voices.FirstOrDefault(v => v.Language.StartsWith("pt-BR", StringComparison.OrdinalIgnoreCase))
+                   ?? voices.FirstOrDefault(v => v.Language.StartsWith("pt", StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return null; }
+    });
+
+    static async Task<bool> WindowsVoiceAsync(string text, string wave)
+    {
+        if (WindowsVoice.Value is not { } voice) return false;
+        using var synth = new Windows.Media.SpeechSynthesis.SpeechSynthesizer { Voice = voice };
+        using var stream = await synth.SynthesizeTextToStreamAsync(text.Length > 4000 ? text[..4000] : text);
+        await using var file = File.Create(wave);
+        await stream.AsStreamForRead().CopyToAsync(file);
+        return true;
     }
 
     public static void StopSpeaking()
