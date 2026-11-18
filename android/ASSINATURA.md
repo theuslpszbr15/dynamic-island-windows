@@ -52,3 +52,17 @@ Secrets do repositório (Settings → Secrets and variables → Actions) para as
 | `ANDROID_KEY_PASSWORD` | senha da chave |
 
 Sem esses secrets, uma tag **não publica** (o APK cairia na chave de debug); só o ensaio manual segue com aviso.
+
+## Por que a v1.8.8 pede desinstalar (e como evitar)
+
+O Android só atualiza um app por cima de outro quando os dois foram assinados com a **mesma chave**. O app que está
+nos celulares (até a v1.8.7, Android 1.5.0) foi assinado com a chave de debug desta máquina
+(`C:\Users\brend\.android\debug.keystore`, SHA-256 `ea7480fd...87ad`). O APK da v1.8.8 foi assinado com a chave de
+release (certificado Horus, SHA-256 `7bf076c2...1939`), então o celular recusa a atualização por cima.
+
+- **Caminho adotado:** trocar a chave agora, uma única vez. Desinstalar o app antigo, instalar o da v1.8.8 e parear de
+  novo. Dali em diante toda atualização funciona por cima.
+- **Alternativa (atualiza por cima, sem desinstalar):** assinar o APK da v1.8.8 com a chave de debug
+  (`apksigner sign --ks %USERPROFILE%\.android\debug.keystore ...`). O pareamento e os dados são mantidos. O custo é
+  manter a chave de debug (sem proteção e só neste PC) como chave oficial; a migração para a chave de release fica
+  para depois, com a mesma desinstalação.
