@@ -25,6 +25,11 @@
     <!-- to open the Claude app from the island when its notification has nothing to open -->
     <queries>
         <package android:name="com.anthropic.claude" />
+        <!-- the logo and name of the app a notification came from (launcher apps only, never the full package list) -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application

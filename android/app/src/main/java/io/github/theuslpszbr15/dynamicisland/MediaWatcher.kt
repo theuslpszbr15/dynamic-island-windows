@@ -122,11 +122,21 @@ object MediaWatcher {
     fun previous() { controller?.transportControls?.skipToPrevious() }
     fun seek(ms: Long) { controller?.transportControls?.seekTo(ms) }
 
-    /** Opens the app that is playing. */
+    /** The song's own screen in its app (what a tap on the player in the shade opens); null if the app gave none. Android 14+ must be told the island may start it. */
+    private fun openSession(context: Context, c: MediaController): Unit? {
+        val intent = c.sessionActivity ?: return null
+        val options = if (android.os.Build.VERSION.SDK_INT >= 34) android.app.ActivityOptions.makeBasic()
+            .setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+            .toBundle() else null
+        intent.send(context, 0, null, null, null, null, options)
+        return Unit
+    }
+
+    /** Opens the app that is playing, on the song's screen when the app has one. */
     fun openApp(context: Context) {
         val c = controller ?: return
         try {
-            c.sessionActivity?.send() ?: context.packageManager.getLaunchIntentForPackage(c.packageName)
+            openSession(context, c) ?: context.packageManager.getLaunchIntentForPackage(c.packageName)
                 ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)?.let(context::startActivity)
         } catch (_: Exception) {}
     }

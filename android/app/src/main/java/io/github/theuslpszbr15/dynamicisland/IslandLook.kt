@@ -24,6 +24,8 @@ data class Look(
      * island can go above the status bar ([IslandAccessibility]); [y] is then ignored.
      */
     val dock: Boolean = false,
+    /** Long texts slide by and long lists scroll inside the island; off, what does not fit is cut short. */
+    val scroll: Boolean = true,
 ) {
     /** Always inside what the screen can show. */
     fun clamped() = copy(
@@ -64,7 +66,7 @@ object IslandLook {
         _state.value = Look(
             p.getInt("w", d.width), p.getInt("h", d.height), p.getFloat("c", d.corner),
             p.getInt("x", d.x), p.getInt("y", d.y), p.getFloat("o", d.opacity), p.getBoolean("m", d.media),
-            p.getBoolean("hd", d.hide), p.getBoolean("dk", d.dock),
+            p.getBoolean("hd", d.hide), p.getBoolean("dk", d.dock), p.getBoolean("sc", d.scroll),
         ).clamped()
         loaded = true
         return _state.value
@@ -77,7 +79,7 @@ object IslandLook {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt("w", l.width).putInt("h", l.height).putFloat("c", l.corner)
             .putInt("x", l.x).putInt("y", l.y).putFloat("o", l.opacity).putBoolean("m", l.media)
-            .putBoolean("hd", l.hide).putBoolean("dk", l.dock).apply()
+            .putBoolean("hd", l.hide).putBoolean("dk", l.dock).putBoolean("sc", l.scroll).apply()
         IslandOverlay.place(context)
     }
 }

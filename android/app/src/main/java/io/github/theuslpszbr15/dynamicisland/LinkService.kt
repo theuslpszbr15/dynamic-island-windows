@@ -197,6 +197,7 @@ class LinkService : Service() {
         override fun onSessions(sessions: List<Session>) {
             val before = Link.state.value.sessions
             Link.update { it.copy(sessions = sessions) }
+            Island.forget(sessions)
             SessionAlerts.settled(before, sessions).forEach { Notifications.cancelSessionAlert(this@LinkService, it) }
             SessionAlerts.changes(before, sessions).forEach { Notifications.showSessionAlert(this@LinkService, it) }
         }

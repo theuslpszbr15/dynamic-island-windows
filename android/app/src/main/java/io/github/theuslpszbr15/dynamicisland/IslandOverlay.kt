@@ -21,7 +21,9 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -36,6 +38,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -52,7 +55,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -76,7 +83,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -440,6 +449,9 @@ private fun IslandUi(
     val discord by Island.discord.collectAsState()
     val call by Island.call.collectAsState()
     val claude by Island.claude.collectAsState()
+    val notes by Island.notes.collectAsState()
+    val handled by Island.handled.collectAsState()
+    val pending = remember(link.sessions, handled) { Island.pending(link.sessions, handled) }
     val mediaState by Island.media.collectAsState()
     val art by MediaWatcher.art.collectAsState()
     val look by IslandLook.state.collectAsState()
@@ -453,6 +465,7 @@ private fun IslandUi(
     val needsClock = open != null ||
         call != null ||
         claude?.let { wall - it.at in 0..Island.CLAUDE_MS } == true ||
+        notes.any { wall - it.at in 0..Island.NOTE_MS } ||
         discord.any { wall - it.at in 0..Island.FLASH_MS } ||
         transfers.any { it.state == LiveTransfer.State.Running || wall - it.at in 0..Island.FLASH_MS }
     LaunchedEffect(needsClock) {
@@ -461,7 +474,7 @@ private fun IslandUi(
     }
 
     val media = if (look.media) mediaState else null
-    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude, off)
+    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude, off = off, notes = notes, pending = pending)
     val screen = LocalConfiguration.current.screenWidthDp.dp
 
     // What shows: an open card, a short notice, the song (cover and bars beside the camera) or the resting pill;
@@ -540,12 +553,13 @@ private fun IslandUi(
             when (which) {
                 "hidden" -> Box(Modifier.size(0.dp))
                 "rest" -> Box(Modifier.size(look.width.dp, look.height.dp))
-                "media" -> MediaPill(look, art, media)
-                "pill" -> Notice(pill, look, art, discord, screen)
+                "media" -> MediaPill(look, art, media, context)
+                "pill" -> Notice(pill, look, art, discord, notes.firstOrNull(), screen)
                 is Pill.Kind -> Box(Modifier.width(minOf(screen - 16.dp, 380.dp)).padding(14.dp)) {
                     OpenCard(which, context, link, outgoing, transfers,
                         // one card holds the PC's people and the phone's own call: each half follows its own switch
-                        if (Pill.Kind.Discord in off) emptyList() else discord, if (Pill.Kind.Call in off) null else call, claude, media, art, now, onOpen)
+                        if (Pill.Kind.Discord in off) emptyList() else discord, if (Pill.Kind.Call in off) null else call, claude, media, art, now,
+                        notes, pending, look.scroll, onOpen)
                 }
                 else -> {}
             }
@@ -584,16 +598,19 @@ private class DockShape(val radius: Dp, val shoulder: Dp) : Shape {
  * wider than at rest. Its size follows the person's choices, never the song's name (that is in the player).
  */
 @Composable
-private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?) {
+private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?, context: Context) {
     val h = look.height.dp
     val icon = (h - 8.dp).coerceAtLeast(14.dp)
     Row(
         Modifier.size(look.width.dp + h * 2, h).padding(horizontal = (h - icon) / 2 + 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (art != null) Cover(art, icon, icon * 0.28f)
-        else Box(Modifier.size(icon).background(Green, CircleShape), contentAlignment = Alignment.Center) {
-            Text("♪", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        // a tap on the cover opens the song's screen in its app (Spotify…); anywhere else on the pill opens the player card
+        Box(Modifier.clip(RoundedCornerShape(icon * 0.28f)).clickable { MediaWatcher.openApp(context) }) {
+            if (art != null) Cover(art, icon, icon * 0.28f)
+            else Box(Modifier.size(icon).background(Green, CircleShape), contentAlignment = Alignment.Center) {
+                Text("♪", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.weight(1f))
         Wave(media?.playing == true)
@@ -602,23 +619,59 @@ private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?) {
 
 /** The grown pill: an icon, one line and what a tap does. Always the same width: a long text is cut, never stretches it. */
 @Composable
-private fun Notice(pill: Pill, look: Look, art: Bitmap?, discord: List<DiscordEvent>, screen: Dp) {
-    val height = maxOf(look.height.dp, if (pill.hint.isNotEmpty()) 44.dp else 0.dp)
+@OptIn(ExperimentalFoundationApi::class)
+private fun Notice(pill: Pill, look: Look, art: Bitmap?, discord: List<DiscordEvent>, note: AppNote?, screen: Dp) {
+    val height = maxOf(look.height.dp, if (pill.kind == Pill.Kind.Notification) 50.dp else if (pill.hint.isNotEmpty()) 44.dp else 0.dp)
     val width = minOf(screen - 16.dp, maxOf(look.width.dp + 120.dp, 250.dp))
+    // with "Rolagem" on, a line too long for the pill slides by instead of being cut
+    val slide = if (look.scroll) Modifier.basicMarquee(iterations = 2, initialDelayMillis = 900) else Modifier
+    val overflow = if (look.scroll) TextOverflow.Clip else TextOverflow.Ellipsis
     Row(
         Modifier.size(width, height).padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Leading(pill, art, discord.firstOrNull(), size = (height - 12.dp).coerceIn(20.dp, 32.dp))
+        val size = (height - 12.dp).coerceIn(20.dp, 32.dp)
+        if (pill.kind == Pill.Kind.Notification && note != null) NoteIcon(note, size)
+        else Leading(pill, art, discord.firstOrNull(), size = size)
         Column(Modifier.padding(horizontal = 8.dp).weight(1f)) {
+            // the notification's own app is the first words: the logo says it too, but not every logo is known
+            if (pill.kind == Pill.Kind.Notification && note != null && note.title.isNotEmpty())
+                Text(note.app, color = Muted, fontSize = 9.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(pill.text, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+                overflow = overflow, modifier = slide)
             if (pill.hint.isNotEmpty())
-                Text(pill.hint, color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(pill.hint, color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = overflow, modifier = slide)
         }
         when (pill.kind) {
-            Pill.Kind.Offer, Pill.Kind.Approval, Pill.Kind.Outgoing -> if (pill.count > 1) Badge(pill.count, colorOf(pill.kind))
+            Pill.Kind.Offer, Pill.Kind.Approval, Pill.Kind.Outgoing, Pill.Kind.Pending -> if (pill.count > 1) Badge(pill.count, colorOf(pill.kind))
             else -> {}
+        }
+    }
+}
+
+/** The app's logo, arriving its own way ([NoteStyle], from the kind of notification) each time a new one comes. */
+@Composable
+private fun NoteIcon(note: AppNote, size: Dp) {
+    val icons by AppIcons.icons.collectAsState()
+    val icon = icons[note.pkg]
+    val style = NoteStyle.of(note.category, note.pkg)
+    val progress = remember(note.key, note.at) { Animatable(0f) }
+    LaunchedEffect(note.key, note.at) { progress.animateTo(1f, tween(900, easing = LinearEasing)) }
+    val f = style.frame(progress.value)
+    val wide = with(LocalDensity.current) { size.toPx() }
+    Box(
+        Modifier.size(size).graphicsLayer {
+            scaleX = f.scale; scaleY = f.scale
+            rotationZ = f.rotation
+            translationX = f.dx * wide
+            alpha = f.alpha
+            if (f.swingFromTop) transformOrigin = TransformOrigin(0.5f, 0f)
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (icon != null) Image(icon.asImageBitmap(), null, modifier = Modifier.size(size).clip(RoundedCornerShape(size * 0.24f)))
+        else Box(Modifier.size(size).background(Muted, CircleShape), contentAlignment = Alignment.Center) {
+            Text(note.app.take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -629,6 +682,8 @@ private fun colorOf(kind: Pill.Kind) = when (kind) {
     Pill.Kind.Offer -> Green
     Pill.Kind.Transfer, Pill.Kind.Outgoing -> Blue
     Pill.Kind.Discord, Pill.Kind.Call -> DiscordBlue
+    Pill.Kind.Notification -> Blue
+    Pill.Kind.Pending -> ClaudeOrange
     Pill.Kind.Media -> Green
     Pill.Kind.Idle -> Muted
 }
@@ -648,6 +703,8 @@ private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
                 Pill.Kind.Outgoing -> "↑"
                 Pill.Kind.Discord, Pill.Kind.Call -> event?.name?.take(1)?.uppercase() ?: "☏"
                 Pill.Kind.Media -> "♪"
+                Pill.Kind.Notification -> "●"
+                Pill.Kind.Pending -> "…"
                 Pill.Kind.Idle -> ""
             }
             Box(Modifier.size(size).background(colorOf(pill.kind), CircleShape), contentAlignment = Alignment.Center) {
@@ -707,6 +764,9 @@ private fun OpenCard(
     media: NowPlaying?,
     art: Bitmap?,
     now: Long,
+    notes: List<AppNote>,
+    pending: List<Session>,
+    scroll: Boolean,
     onOpen: (Pill.Kind?) -> Unit,
 ) {
     val close = { onOpen(null) }
@@ -780,6 +840,50 @@ private fun OpenCard(
                     }
                 }
             }
+        Pill.Kind.Notification -> if (notes.isEmpty()) Gone(close) else Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Notificações", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("Limpar", color = Muted, fontSize = 12.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable { notes.forEach { DiscordListener.dismissNote(it.key) }; close() }
+                        .padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+            Column(Modifier.padding(top = 8.dp).heightIn(max = 300.dp).then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                (if (scroll) notes else notes.take(4)).forEach { n ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { DiscordListener.openNote(context, n.key); close() },
+                        verticalAlignment = Alignment.Top) {
+                        NoteIcon(n, 34.dp)
+                        Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                            Text(n.app + " · " + ago(now - n.at), color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (n.title.isNotEmpty()) Text(n.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (n.text.isNotEmpty()) Text(n.text, color = Muted, fontSize = 12.sp, maxLines = if (scroll) 6 else 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+        // what the agents still wait for; "Dispensar" also clears the same alert in the shade, so it is not told twice
+        Pill.Kind.Pending -> if (pending.isEmpty()) Gone(close) else Column {
+            Text("Esperando você", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Column(Modifier.padding(top = 8.dp).heightIn(max = 300.dp).then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                (if (scroll) pending else pending.take(3)).forEach { s ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.agent + if (s.project.isBlank()) "" else " · ${s.project}", color = Color.White, fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(s.detail.ifEmpty { "Precisa da sua resposta no PC." }, color = Muted, fontSize = 12.sp,
+                                maxLines = if (scroll) 4 else 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        Button("Dispensar", Card, Modifier.padding(start = 8.dp)) {
+                            Island.handle(s)
+                            Notifications.cancelSessionAlert(context, s.id)
+                            if (pending.size <= 1) close()
+                        }
+                    }
+                }
+            }
+        }
         Pill.Kind.Idle -> Gone(close)
     }
 }

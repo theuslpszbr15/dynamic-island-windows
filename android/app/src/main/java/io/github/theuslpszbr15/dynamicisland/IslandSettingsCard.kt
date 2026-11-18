@@ -119,7 +119,15 @@ fun IslandSettingsCard() {
             }
             Switch(checked = look.hide, onCheckedChange = { change(look.copy(hide = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
-        TextButton(onClick = { change(Look(media = look.media, hide = look.hide, dock = look.dock)) }) { Text("Voltar ao padrão") }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Rolagem na ilha", color = Color.White, fontSize = 13.5.sp)
+                Text("Textos longos deslizam na pílula e as listas dos cartões rolam com o dedo. Desligado, o que não cabe é cortado.",
+                    color = MutedColor, fontSize = 12.sp)
+            }
+            Switch(checked = look.scroll, onCheckedChange = { change(look.copy(scroll = it)) }, modifier = Modifier.padding(start = 12.dp))
+        }
+        TextButton(onClick = { change(Look(media = look.media, hide = look.hide, dock = look.dock, scroll = look.scroll)) }) { Text("Voltar ao padrão") }
 
         Section("Por cima da barra de notificações")
         Text(

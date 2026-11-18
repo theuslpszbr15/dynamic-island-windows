@@ -34,6 +34,8 @@ private val groups: List<Pair<String, List<Entry>>> = listOf(
     ),
     "Neste celular" to listOf(
         Entry(Pill.Kind.Claude, "Avisos do app do Claude"),
+        Entry(Pill.Kind.Notification, "Notificações de todos os apps", "A ilha não acende quando chega uma notificação."),
+        Entry(Pill.Kind.Pending, "Pendências dos agentes (esperando você)"),
         Entry(Pill.Kind.Transfer, "Transferências (andamento e fim)"),
     ),
     "Discord" to listOf(

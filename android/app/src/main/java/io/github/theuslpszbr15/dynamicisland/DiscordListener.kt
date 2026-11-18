@@ -9,11 +9,12 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 /**
- * Reads only two apps' notifications. The Claude app's (a decision card waiting, an answer ready): its title and
+ * Reads notifications for the island. The Claude app's (a decision card waiting, an answer ready): its title and
  * text light the island until it leaves the shade, and a tap opens it like the notification would. And the
  * Discord app's ongoing notification (the one it shows while you are in a voice call) so the island
- * can show the channel, how long the call has been going and its buttons (sair, mutar…). Every other notification
- * is ignored on arrival: nothing is stored, logged or sent anywhere. Off until the person turns on
+ * can show the channel, how long the call has been going and its buttons (sair, mutar…). Every other app's notification
+ * lights the island with that app's logo and sits in a card until it leaves the shade: only title and text, in memory,
+ * never logged or sent anywhere (one switch in Avisos da ilha turns it off). Off until the person turns on
  * "Acesso a notificações" for the app (Android asks; on an APK from outside the Play Store, Android 13+ first wants
  * "Permitir configurações restritas" in the app's info screen).
  */
@@ -22,7 +23,7 @@ class DiscordListener : NotificationListenerService() {
         connected = true
         // the same permission lets the island read the song playing
         MediaWatcher.start(this)
-        try { activeNotifications?.forEach(::look) } catch (_: Exception) {}
+        try { activeNotifications?.forEach { look(it, fresh = false) } } catch (_: Exception) {}
         if (current == null) Island.phoneCall(null)
     }
 
@@ -31,6 +32,7 @@ class DiscordListener : NotificationListenerService() {
         MediaWatcher.stop()
         clear()
         if (listener === this) listener = null
+        forgetNotes()
         forgetClaude()
     }
 
@@ -39,11 +41,12 @@ class DiscordListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.key == current) clear()
         if (sbn.key == claudeKey) forgetClaude()
+        forgetNote(sbn.key)
     }
 
-    private fun look(sbn: StatusBarNotification) {
+    private fun look(sbn: StatusBarNotification, fresh: Boolean = true) {
         if (sbn.packageName in CLAUDE) return claude(sbn)
-        if (sbn.packageName !in PACKAGES) return
+        if (sbn.packageName !in PACKAGES) return note(sbn, fresh)
         val n = sbn.notification ?: return
         val ongoing = n.flags and Notification.FLAG_ONGOING_EVENT != 0
         val extras = n.extras
@@ -55,7 +58,7 @@ class DiscordListener : NotificationListenerService() {
             if (ongoing) title.take(80) else "", if (ongoing) text.take(80) else "", actions.map { it.take(30) }))
         if (!isCall(ongoing, n.category, n.channelId, n.flags)) {
             if (sbn.key == current) clear()
-            return
+            return note(sbn, fresh)
         }
         current = sbn.key
         intents = n.actions.orEmpty().map { it.actionIntent }
@@ -83,6 +86,23 @@ class DiscordListener : NotificationListenerService() {
         IslandOverlay.refresh(this)
     }
 
+    /** Any other app's notification: it lights the island with that app's logo and waits in the card until it leaves the shade. */
+    private fun note(sbn: StatusBarNotification, fresh: Boolean) {
+        val n = sbn.notification ?: return
+        if (sbn.packageName == packageName || !isNote(n.flags, n.category)) return
+        val extras = n.extras
+        val title = DiscordEvent.clean(extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(), 60)
+        val text = DiscordEvent.clean((extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)
+            ?: extras?.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty().replace('\n', ' '), 160)
+        if (title.isEmpty() && text.isEmpty()) return
+        AppIcons.load(this, sbn.packageName, n)
+        val at = if (fresh) System.currentTimeMillis() else sbn.postTime.takeIf { it > 0 } ?: 0L
+        n.contentIntent?.let { synchronized(noteIntents) { noteIntents[sbn.key] = it; if (noteIntents.size > 60) noteIntents.remove(noteIntents.keys.first()) } }
+        listener = this
+        Island.note(AppNote(sbn.key, sbn.packageName, AppIcons.label(this, sbn.packageName), title, text, at, n.category.orEmpty()))
+        IslandOverlay.refresh(this)
+    }
+
     private fun clear() {
         current = null
         intents = emptyList()
@@ -101,6 +121,45 @@ class DiscordListener : NotificationListenerService() {
         private val PACKAGES = setOf("com.discord", "com.discord.beta", "com.discord.alpha")
         /** The Claude app. */
         private val CLAUDE = setOf("com.anthropic.claude")
+
+        private val noteIntents = LinkedHashMap<String, PendingIntent>()
+
+        private fun forgetNote(key: String) {
+            synchronized(noteIntents) { noteIntents.remove(key) }
+            Island.noteGone(key)
+        }
+
+        private fun forgetNotes() {
+            synchronized(noteIntents) { noteIntents.clear() }
+            Island.clearNotes()
+        }
+
+        /** What a notification may be told as a notice: not a group's summary, not an app working (ongoing), not a player. */
+        fun isNote(flags: Int, category: String?): Boolean =
+            flags and (Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_FOREGROUND_SERVICE) == 0 &&
+                category != Notification.CATEGORY_TRANSPORT
+
+        /** Opens what the notification is about, as a tap in the shade would, and takes it off the island and out of the shade. */
+        fun openNote(context: Context, key: String): Boolean {
+            val intent = synchronized(noteIntents) { noteIntents[key] }
+            val ok = try {
+                if (intent == null) false else {
+                    val options = if (android.os.Build.VERSION.SDK_INT >= 34) android.app.ActivityOptions.makeBasic()
+                        .setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                        .toBundle() else null
+                    intent.send(context, 0, null, null, null, null, options)
+                    true
+                }
+            } catch (_: Exception) { false }
+            dismissNote(key)
+            return ok
+        }
+
+        /** Takes it off the island and out of the shade. */
+        fun dismissNote(key: String) {
+            forgetNote(key)
+            try { listener?.cancelNotification(key) } catch (_: Exception) {}
+        }
 
         @Volatile private var claudeKey: String? = null
         @Volatile private var claudeIntent: PendingIntent? = null
