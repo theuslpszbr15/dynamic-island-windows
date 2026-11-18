@@ -25,7 +25,7 @@ public partial class IslandWindow : IJarvisHost
 
     JarvisMic? _mic;
     Task<string?>? _micStart;
-    DispatcherTimer? _holdTimer;
+    DispatcherTimer? _holdTimer, _listenLimit;
     JarvisWindow? _jarvisWindow;
     readonly VoiceGlow _glow = new();
     JarvisBrain? _brain;
@@ -177,8 +177,15 @@ public partial class IslandWindow : IJarvisHost
     {
         if (_mic != null) return;
         Jarvis.StopSpeaking();
-        _mic = new JarvisMic();
+        var mic = _mic = new JarvisMic();
         _micStart = _mic.StartAsync();
+        // a click on "Falar" has no key to release: the limit ends it, and a mic that failed to start ends it at once
+        _listenLimit?.Stop();
+        _listenLimit = new DispatcherTimer { Interval = ListenLimit };
+        _listenLimit.Tick += (_, _) => { if (ReferenceEquals(_mic, mic)) _ = StopListeningAsync(); };
+        _listenLimit.Start();
+        _micStart.ContinueWith(t => { if (t.Result != null && ReferenceEquals(_mic, mic)) _ = StopListeningAsync(); },
+            TaskScheduler.FromCurrentSynchronizationContext());
         SetJarvisState("Ouvindo…");
         ShowInfo("\uE720", "Ouvindo…", "solte para enviar", glyphColor: JarvisColor, seconds: ListenLimit.TotalSeconds + 2);
     }
@@ -188,6 +195,7 @@ public partial class IslandWindow : IJarvisHost
     {
         if (_mic is not { } mic || _micStart is not { } starting) return;
         _mic = null;
+        _listenLimit?.Stop();
         var error = await starting;
         var wave = error == null ? await mic.StopAsync() : null;
         mic.Dispose();
