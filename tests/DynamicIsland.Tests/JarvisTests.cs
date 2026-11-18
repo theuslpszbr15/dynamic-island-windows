@@ -111,4 +111,43 @@ public class JarvisTests
             Directory.Delete(link);
         }
     }
+
+    sealed class QuietHost : IJarvisHost
+    {
+        public readonly List<string> Done = [];
+        public void Remind(double minutes, string text) => Done.Add("lembrete " + text);
+        public void StartTimer(int minutes) => Done.Add("timer " + minutes);
+        public void AddTask(string text) => Done.Add("tarefa " + text);
+        public void Media(string action) => Done.Add("midia " + action);
+        public Task<bool> ConfirmScriptAsync(string description, string code) { Done.Add("script " + code); return Task.FromResult(false); }
+    }
+
+    /// <summary>JARVIS_E2E_GROQ=1 with a Groq key saved (or a Project.Jarvis to import it from): the brain calls its
+    /// tools for real and answers with what they returned; an island action reaches the host.</summary>
+    [Fact]
+    public async Task BrainUsesItsTools()
+    {
+        if (Environment.GetEnvironmentVariable("JARVIS_E2E_GROQ") != "1") return;
+        var memory = Path.Combine(Path.GetTempPath(), "jarvis-brain-e2e");
+        Directory.CreateDirectory(memory);
+        foreach (var old in Directory.GetFiles(memory)) File.Delete(old);
+        JarvisBrain.MemoryOverride = memory;
+        var host = new QuietHost();
+        var brain = new JarvisBrain(host, () => "Teste");
+        if (!JarvisBrain.HasKey && JarvisBrain.ProjectFolder() is { } project) brain.ImportProject(project);
+        Assert.True(JarvisBrain.HasKey, "sem chave da Groq");
+
+        try
+        {
+            var reply = await brain.RespondAsync("Quanto de memória RAM o meu PC está usando agora? Use a ferramenta.");
+            Assert.True(reply.Contains('%') || reply.Contains("GB"), "respondeu: " + reply);
+            reply = await brain.RespondAsync("Põe um timer de 3 minutos.");
+            Assert.True(host.Done.Contains("timer 3"), "respondeu: " + reply);
+            // asked again: it must act again, not just repeat the earlier answer
+            reply = await brain.RespondAsync("Põe outro timer de 3 minutos.");
+            Assert.True(host.Done.Count(d => d == "timer 3") == 2, "respondeu: " + reply);
+            Assert.DoesNotContain(host.Done, d => d.StartsWith("script"));
+        }
+        finally { JarvisBrain.MemoryOverride = null; }
+    }
 }

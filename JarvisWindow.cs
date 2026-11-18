@@ -71,7 +71,12 @@ public sealed class JarvisWindow : Window
         };
 
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
-        Deactivated += (_, _) => { if (!_island.JarvisListening) Close(); };
+        Deactivated += (_, _) =>
+        {
+            // clicking elsewhere while talking sends what was said
+            if (_island.JarvisListening) _ = _island.StopListeningAsync();
+            Close();
+        };
         Loaded += (_, _) => _input.Focus();
         _island.JarvisChanged += Refresh;
         Closed += (_, _) => _island.JarvisChanged -= Refresh;
@@ -88,7 +93,7 @@ public sealed class JarvisWindow : Window
 
     void ToggleMic()
     {
-        if (Jarvis.Folder(Jarvis.Engine.Microphone) == null)
+        if (!IslandWindow.CanListen)
         {
             ((App)Application.Current).ShowSettings("jarvis");
             return;
@@ -100,7 +105,7 @@ public sealed class JarvisWindow : Window
     void Refresh()
     {
         _mic.Foreground = _island.JarvisListening ? DarkWindow.Frozen(0xFFE99A59) : Brushes.White;
-        _mic.ToolTip = Jarvis.Folder(Jarvis.Engine.Microphone) == null ? "Baixe o microfone em Configurações › Jarvis"
+        _mic.ToolTip = !IslandWindow.CanListen ? "Para falar: chave da Groq ou microfone em Configurações › Jarvis"
             : _island.JarvisListening ? "Parar e enviar" : "Falar";
     }
 }

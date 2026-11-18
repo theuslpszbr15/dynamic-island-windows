@@ -6,9 +6,9 @@ using DynamicIsland.Services;
 
 namespace DynamicIsland;
 
-// JARVIS on the island: Ctrl+Alt+J opens its page (the JARVIS core, the state and the last exchange); held = talk
-// (released = ask), tapped = the bar to type. Answers are spoken with the Piper voice.
-public partial class IslandWindow
+// JARVIS on the island: Ctrl+Alt+J opens its page; held = talk (released = ask), tapped = the bar to type. With a Groq key
+// the Project.Jarvis brain answers and acts through its tools; without one, the local engines answer.
+public partial class IslandWindow : IJarvisHost
 {
     static readonly Color JarvisColor = Color.FromRgb(0x83, 0xD4, 0xB4);
     const int JarvisHistoryMax = 20;
@@ -25,9 +25,52 @@ public partial class IslandWindow
 
     JarvisMic? _mic;
     Task<string?>? _micStart;
-    DispatcherTimer? _holdTimer;
+    DispatcherTimer? _holdTimer, _listenLimit;
     JarvisWindow? _jarvisWindow;
     readonly VoiceGlow _glow = new();
+    JarvisBrain? _brain;
+    public JarvisBrain Brain => _brain ??= new JarvisBrain(this, () => _settings.JarvisUserName);
+
+    /// <summary>Speech goes to Groq's Whisper with a key, else to the local microphone engine.</summary>
+    public static bool CanListen => JarvisBrain.HasKey || Jarvis.Folder(Jarvis.Engine.Microphone) != null;
+
+    // ───────────────────────── what the brain's tools do on the island ─────────────────────────
+
+    void IJarvisHost.Remind(double minutes, string text)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            ShowCard(null, "Lembrete", "Jarvis", text, seconds: 12, glyph: "\uEA8F");
+            if (_settings.JarvisSpeak && Jarvis.CanSpeak) _ = Jarvis.SpeakAsync("Lembrete: " + text);
+        };
+        timer.Start();
+    }
+
+    void IJarvisHost.StartTimer(int minutes) => StartTimer(minutes);
+
+    void IJarvisHost.AddTask(string text)
+    {
+        _settings.Tasks.Add(new TaskItem(Guid.NewGuid().ToString("N")[..8], text.Trim(), false));
+        _settings.Save();
+        UpdateTasksUi();
+    }
+
+    void IJarvisHost.Media(string action)
+    {
+        switch (action)
+        {
+            case "proxima": _media.Next(); break;
+            case "anterior": _media.Previous(); break;
+            default: _media.PlayPause(); break;
+        }
+    }
+
+    Task<bool> IJarvisHost.ConfirmScriptAsync(string description, string code) =>
+        Task.FromResult(DarkDialog.Ask(null, "O Jarvis quer rodar um script",
+            (description.Length > 0 ? description : "Sem descrição.") + "\n\nLeia o código inteiro antes de permitir: ele roda com as suas permissões.",
+            "Permitir", "Não", danger: true, code: code));
 
     void ApplyGlowLook() => _glow.Apply(_settings.JarvisGlow, IslandThemes.IsLight(_settings.Theme));
 
@@ -48,8 +91,8 @@ public partial class IslandWindow
         JarvisStateText.Text = JarvisState == "Pronto" ? "" : JarvisState;
         var asked = JarvisHistory.LastOrDefault(h => h.User).Text;
         var answer = JarvisHistory.Count > 0 && !JarvisHistory[^1].User ? JarvisHistory[^1].Text : null;
-        JarvisAsked.Text = asked != null ? "Você: " + asked : Jarvis.Folder(Jarvis.Engine.Ai) == null
-            ? "Sem a IA baixada: hora, data, contas, pesquisas e abrir programas" : "Pergunte o que quiser: tudo roda neste PC";
+        JarvisAsked.Text = asked != null ? "Você: " + asked : JarvisBrain.HasKey ? "Peça o que quiser: o Jarvis age no PC"
+            : Jarvis.Folder(Jarvis.Engine.Ai) == null ? "Sem a IA: hora, data, contas, pesquisas e abrir programas" : "Pergunte o que quiser: tudo roda neste PC";
         JarvisAnswer.Text = JarvisState switch
         {
             "Ouvindo…" => "Estou ouvindo…",
@@ -72,7 +115,7 @@ public partial class IslandWindow
     void JarvisTalk_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        if (Jarvis.Folder(Jarvis.Engine.Microphone) == null)
+        if (!CanListen)
         {
             ((App)Application.Current).ShowSettings("jarvis");
             return;
@@ -93,7 +136,7 @@ public partial class IslandWindow
     {
         if (_mic != null) return;
         ShowJarvisPage();
-        if (_settings.JarvisVoiceMode != "hold" || Jarvis.Folder(Jarvis.Engine.Microphone) == null)
+        if (_settings.JarvisVoiceMode != "hold" || !CanListen)
         {
             OpenJarvis();
             return;
@@ -134,8 +177,15 @@ public partial class IslandWindow
     {
         if (_mic != null) return;
         Jarvis.StopSpeaking();
-        _mic = new JarvisMic();
+        var mic = _mic = new JarvisMic();
         _micStart = _mic.StartAsync();
+        // a click on "Falar" has no key to release: the limit ends it, and a mic that failed to start ends it at once
+        _listenLimit?.Stop();
+        _listenLimit = new DispatcherTimer { Interval = ListenLimit };
+        _listenLimit.Tick += (_, _) => { if (ReferenceEquals(_mic, mic)) _ = StopListeningAsync(); };
+        _listenLimit.Start();
+        _micStart.ContinueWith(t => { if (t.Result != null && ReferenceEquals(_mic, mic)) _ = StopListeningAsync(); },
+            TaskScheduler.FromCurrentSynchronizationContext());
         SetJarvisState("Ouvindo…");
         ShowInfo("\uE720", "Ouvindo…", "solte para enviar", glyphColor: JarvisColor, seconds: ListenLimit.TotalSeconds + 2);
     }
@@ -145,6 +195,7 @@ public partial class IslandWindow
     {
         if (_mic is not { } mic || _micStart is not { } starting) return;
         _mic = null;
+        _listenLimit?.Stop();
         var error = await starting;
         var wave = error == null ? await mic.StopAsync() : null;
         mic.Dispose();
@@ -165,7 +216,7 @@ public partial class IslandWindow
         SetJarvisState("Transcrevendo…");
         ShowInfo("\uE720", "Transcrevendo…", "", glyphColor: JarvisColor, seconds: 60);
         string? said;
-        try { said = await Jarvis.TranscribeAsync(wave); }
+        try { said = (JarvisBrain.HasKey ? await JarvisBrain.TranscribeAsync(wave) : null) ?? await Jarvis.TranscribeAsync(wave); }
         catch (Exception ex)
         {
             Log.Error("Jarvis transcribe", ex);
@@ -193,11 +244,11 @@ public partial class IslandWindow
         JarvisHistory.Add((true, message));
         SetJarvisState("Pensando…");
         ShowInfo("\uE99A", "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);
-        var reply = await Jarvis.AskAsync(message, history);
+        var reply = JarvisBrain.HasKey ? new Jarvis.Reply(await Brain.RespondAsync(message)) : await Jarvis.AskAsync(message, history);
         JarvisHistory.Add((false, reply.Text));
         if (JarvisHistory.Count > JarvisHistoryMax) JarvisHistory.RemoveRange(0, JarvisHistory.Count - JarvisHistoryMax);
         JarvisLast = reply;
-        var speak = _settings.JarvisSpeak && Jarvis.Folder(Jarvis.Engine.Voice) != null;
+        var speak = _settings.JarvisSpeak && Jarvis.CanSpeak;
         SetJarvisState(speak ? "Falando…" : "Pronto");
 
         // "pesquise…", "abre o YouTube": the link opens right away (only Google and YouTube over https)

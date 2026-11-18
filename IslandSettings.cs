@@ -94,6 +94,8 @@ public sealed class IslandSettings
     public bool JarvisSpeak { get; set; } = true;
     /// <summary>Colors of the voice glow while Jarvis listens, thinks or speaks (VoiceGlow.Variants) or "off".</summary>
     public string JarvisGlow { get; set; } = "colorful";
+    /// <summary>How Jarvis calls the person (the Groq brain's prompt); empty = "o usuário".</summary>
+    public string JarvisUserName { get; set; } = "";
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay
