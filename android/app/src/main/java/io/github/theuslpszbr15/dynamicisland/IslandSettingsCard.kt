@@ -40,9 +40,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val CardColor = Color(0xFF1C1C1E)
-private val MutedColor = Color(0xFF8E8E93)
-private val BlueColor = Color(0xFF0A84FF)
+private val CardColor = Color(0xFF1E1E21)
+private val MutedColor = Color(0xFF9B9BA3)
+private val BlueColor = Color(0xFFF2F2F4)
 
 /** The island's switch, Android's permissions, its size and place (live) and the music / Discord reading. */
 @Composable
@@ -62,7 +62,7 @@ fun IslandSettingsCard() {
     var showSeen by remember { mutableStateOf(false) }
     fun change(l: Look) = IslandLook.set(context, l)
 
-    Column(Modifier.fillMaxWidth().background(CardColor, RoundedCornerShape(18.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().background(CardColor, RoundedCornerShape(24.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Ilha", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
@@ -76,7 +76,7 @@ fun IslandSettingsCard() {
             }, modifier = Modifier.padding(start = 12.dp))
         }
         if (on && !canDraw) {
-            Text("Falta permitir \"Sobrepor a outros apps\" para o Dynamic Island.", color = Color(0xFFFF9F0A), fontSize = 13.sp,
+            Text("Falta permitir \"Sobrepor a outros apps\" para o Dynamic Island.", color = Color(0xFFF5B544), fontSize = 13.sp,
                 modifier = Modifier.padding(top = 8.dp))
             TextButton(onClick = { context.startActivity(IslandOverlay.permissionIntent(context)) }) { Text("Permitir") }
         }
@@ -85,7 +85,7 @@ fun IslandSettingsCard() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Look.presets.forEach { (name, apply) ->
                 Text(name, color = Color.White, fontSize = 12.5.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2C2C2E))
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2B2B2F))
                         .clickable { change(apply(look)) }.padding(horizontal = 12.dp, vertical = 7.dp))
             }
         }

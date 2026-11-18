@@ -57,13 +57,13 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-private val SCard = Color(0xFF1C1C1E)
-private val STile = Color(0xFF2C2C30)
-private val SMuted = Color(0xFF8E8E93)
-private val SBlue = Color(0xFF0A84FF)
-private val SGreen = Color(0xFF30D158)
-private val SOrange = Color(0xFFFF9F0A)
-private val SRed = Color(0xFFFF453A)
+private val SCard = Color(0xFF1E1E21)
+private val STile = Color(0xFF2B2B2F)
+private val SMuted = Color(0xFF9B9BA3)
+private val SBlue = Color(0xFFF2F2F4)
+private val SGreen = Color(0xFF4ADE80)
+private val SOrange = Color(0xFFF5B544)
+private val SRed = Color(0xFFF26B63)
 
 /** Copies and offers on a worker thread (the PC asks first), then says how it went. */
 private suspend fun offer(context: Context, work: () -> String): String =
@@ -133,7 +133,7 @@ fun SendTab(state: LinkUi) {
             Text(it, color = if (good) SGreen else SOrange, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp))
         }
         if (textOpen) {
-            Column(Modifier.padding(top = 18.dp).fillMaxWidth().background(SCard, RoundedCornerShape(18.dp)).padding(14.dp)) {
+            Column(Modifier.padding(top = 18.dp).fillMaxWidth().background(SCard, RoundedCornerShape(24.dp)).padding(14.dp)) {
                 Text("Texto", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 OutlinedTextField(
                     value = text, onValueChange = { if (it.length <= FileOffer.MAX_TEXT_CHARS) text = it },
@@ -161,7 +161,7 @@ private fun PcCard(state: LinkUi) {
         LinkStatus.Paused -> SMuted to "Parado: toque em Procurar o PC lá em cima"
         else -> SRed to (state.message ?: "Sem conexão com o PC")
     }
-    Row(Modifier.padding(top = 4.dp).fillMaxWidth().background(SCard, RoundedCornerShape(18.dp)).padding(16.dp),
+    Row(Modifier.padding(top = 4.dp).fillMaxWidth().background(SCard, RoundedCornerShape(24.dp)).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Icon(painterResource(R.drawable.ic_pc), contentDescription = null, tint = Color.White,
             modifier = Modifier.padding(end = 14.dp).size(30.dp))
@@ -179,7 +179,7 @@ private fun PcCard(state: LinkUi) {
 @Composable
 private fun SendTile(icon: Int, label: String, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.height(92.dp).background(if (enabled) STile else STile.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
+        modifier.height(92.dp).background(if (enabled) STile else STile.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
             .clickable(enabled = enabled, onClick = onClick).padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {

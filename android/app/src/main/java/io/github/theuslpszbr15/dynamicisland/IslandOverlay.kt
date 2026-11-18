@@ -103,6 +103,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -131,14 +132,14 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
 
 private val Black = Color(0xFF000000)
-private val Card = Color(0xFF1C1C1E)
-private val Muted = Color(0xFF9A9AA0)
-private val Blue = Color(0xFF0A84FF)
-private val Orange = Color(0xFFFF9F0A)
-private val Green = Color(0xFF30D158)
-private val Red = Color(0xFFFF453A)
+private val Chip = Color(0xFF2B2B2F)
+private val Card = Color(0xFF1E1E21)
+private val Muted = Color(0xFF9B9BA3)
+private val Blue = Color(0xFFF2F2F4)
+private val Orange = Color(0xFFF5B544)
+private val Green = Color(0xFF4ADE80)
+private val Red = Color(0xFFF26B63)
 private val DiscordBlue = Color(0xFF5865F2)
-private val ClaudeOrange = Color(0xFFD97757)
 
 /**
  * The island: a black pill at the top of the screen, over any app, sized and placed as the person set it
@@ -665,9 +666,7 @@ private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?, context: Con
         // a tap on the cover opens the song's screen in its app (Spotify…); anywhere else on the pill opens the player card
         Box(Modifier.clip(RoundedCornerShape(icon * 0.28f)).clickable { MediaWatcher.openApp(context) }) {
             if (art != null) Cover(art, icon, icon * 0.28f)
-            else Box(Modifier.size(icon).background(Green, CircleShape), contentAlignment = Alignment.Center) {
-                Text("♪", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
+            else IconChip(R.drawable.ic_music, icon)
         }
         Spacer(Modifier.weight(1f))
         Wave(media?.playing == true)
@@ -733,23 +732,37 @@ private fun NoteIcon(note: AppNote, size: Dp) {
     }
 }
 
+/** Colour says a status, not a kind: amber for a request, red for the camera, the agent's own orange; the rest is plain. */
 private fun colorOf(kind: Pill.Kind) = when (kind) {
     Pill.Kind.Approval -> Orange
-    Pill.Kind.Claude -> ClaudeOrange
-    Pill.Kind.Offer -> Green
-    Pill.Kind.Transfer, Pill.Kind.Outgoing -> Blue
-    Pill.Kind.Discord, Pill.Kind.Call -> DiscordBlue
-    Pill.Kind.Notification -> Blue
-    Pill.Kind.Pending -> ClaudeOrange
-    Pill.Kind.Timer -> Orange
-    Pill.Kind.Battery -> Green
     Pill.Kind.Recording -> Red
-    Pill.Kind.Ring -> Green
-    Pill.Kind.Live -> Blue
-    Pill.Kind.Today -> Blue
-    Pill.Kind.Media -> Green
-    Pill.Kind.Idle -> Muted
+    else -> Blue
 }
+
+private fun iconOf(kind: Pill.Kind): Int = when (kind) {
+    Pill.Kind.Approval, Pill.Kind.Claude -> R.drawable.ic_agent
+    Pill.Kind.Offer -> R.drawable.ic_download
+    Pill.Kind.Transfer -> R.drawable.ic_swap
+    Pill.Kind.Outgoing -> R.drawable.ic_upload
+    Pill.Kind.Discord, Pill.Kind.Call -> R.drawable.ic_chat
+    Pill.Kind.Media -> R.drawable.ic_music
+    Pill.Kind.Notification -> R.drawable.ic_bell
+    Pill.Kind.Pending -> R.drawable.ic_dots
+    Pill.Kind.Timer -> R.drawable.ic_timer
+    Pill.Kind.Battery -> R.drawable.ic_battery
+    Pill.Kind.Recording -> R.drawable.ic_mic
+    Pill.Kind.Ring -> R.drawable.ic_phone
+    Pill.Kind.Live -> R.drawable.ic_chevron
+    Pill.Kind.Today -> R.drawable.ic_sun
+    Pill.Kind.Idle -> R.drawable.ic_dots
+}
+
+/** A small square holding the icon of what this is about (warm grey, so it sits inside the black pill). */
+@Composable
+private fun IconChip(icon: Int, size: Dp, tint: Color = Color.White) =
+    Box(Modifier.size(size).background(Chip, RoundedCornerShape(size * 0.3f)), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(icon), null, tint = tint, modifier = Modifier.size(size * 0.56f))
+    }
 
 @Composable
 private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
@@ -757,36 +770,19 @@ private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
     when {
         pill.kind == Pill.Kind.Media && art != null -> Cover(art, size, 7.dp)
         avatar != null -> Avatar(event!!, size)
-        else -> {
-            val glyph = when (pill.kind) {
-                Pill.Kind.Approval -> "!"
-                Pill.Kind.Claude -> "✳"
-                Pill.Kind.Offer -> "↓"
-                Pill.Kind.Transfer -> "⇅"
-                Pill.Kind.Outgoing -> "↑"
-                Pill.Kind.Discord, Pill.Kind.Call -> event?.name?.take(1)?.uppercase() ?: "☏"
-                Pill.Kind.Media -> "♪"
-                Pill.Kind.Notification -> "●"
-                Pill.Kind.Pending -> "…"
-                Pill.Kind.Timer -> "⏱"
-                Pill.Kind.Battery -> "⚡"
-                Pill.Kind.Recording -> "●"
-                Pill.Kind.Ring -> "☎"
-                Pill.Kind.Live -> "➜"
-                Pill.Kind.Today -> "☀"
-                Pill.Kind.Idle -> ""
+        (pill.kind == Pill.Kind.Discord || pill.kind == Pill.Kind.Call) && event?.name?.isNotEmpty() == true ->
+            Box(Modifier.size(size).background(Chip, CircleShape), contentAlignment = Alignment.Center) {
+                Text(event.name.take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
-            Box(Modifier.size(size).background(colorOf(pill.kind), CircleShape), contentAlignment = Alignment.Center) {
-                Text(glyph, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        else -> IconChip(iconOf(pill.kind), size, tint = colorOf(pill.kind).let { if (it == Blue) Color.White else it })
     }
 }
 
+/** A count on the right of a notice: off-white, dark number. */
 @Composable
 private fun Badge(n: Int, color: Color) =
-    Box(Modifier.size(20.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
-        Text("$n", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    Box(Modifier.size(20.dp).background(Color(0xFFF2F2F4), CircleShape), contentAlignment = Alignment.Center) {
+        Text("$n", color = Color(0xFF141416), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 
 /** Four bars bouncing while the song plays (still when paused). */
@@ -800,7 +796,7 @@ private fun Wave(playing: Boolean) {
         val w = size.width / 7
         phases.forEachIndexed { i, p ->
             val h = size.height * (if (playing) p.value else 0.25f)
-            drawRoundRect(Green, Offset(i * 2 * w, (size.height - h) / 2), Size(w, h), CornerRadius(w / 2))
+            drawRoundRect(Blue, Offset(i * 2 * w, (size.height - h) / 2), Size(w, h), CornerRadius(w / 2))
         }
     }
 }
@@ -876,7 +872,7 @@ private fun OpenCard(
                 Title(c.title.ifEmpty { "Claude" }, c.text)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button("Dispensar", Card, Modifier.weight(1f)) { DiscordListener.dismissClaude(); close() }
-                    Button("Abrir no Claude", ClaudeOrange, Modifier.weight(1f)) { DiscordListener.openClaude(context); close() }
+                    Button("Abrir no Claude", Blue, Modifier.weight(1f), color = Black) { DiscordListener.openClaude(context); close() }
                 }
             }
         } ?: Gone(close)
@@ -1171,15 +1167,16 @@ private fun Ask(title: String, detail: String, no: Pair<String, () -> Unit>, yes
     Title(title, detail)
     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(no.first, Card, Modifier.weight(1f), color = Red, onClick = no.second)
-        if (yes != null) Button(yes.first, Green, Modifier.weight(1f), color = Black, onClick = yes.second)
+        if (yes != null) Button(yes.first, Blue, Modifier.weight(1f), color = Black, onClick = yes.second)
     }
 }
 
 @Composable
-private fun Button(label: String, background: Color, modifier: Modifier = Modifier, color: Color = Color.White, onClick: () -> Unit) =
+private fun Button(label: String, background: Color, modifier: Modifier = Modifier, color: Color = Color.Unspecified, onClick: () -> Unit) =
     Box(modifier.pressable(onClick).clip(RoundedCornerShape(50)).background(background).padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center) {
-        Text(label, color = color, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, color = if (color != Color.Unspecified) color else if (background.luminance() > 0.5f) Black else Color.White,
+            fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 
 @Composable

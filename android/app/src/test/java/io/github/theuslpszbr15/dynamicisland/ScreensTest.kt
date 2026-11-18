@@ -15,7 +15,10 @@ import org.robolectric.annotation.GraphicsMode
 class ScreensTest {
     private val pairing = Pairing("192.168.0.12", 47900, "a".repeat(64), "abcDEF0123456789_-xyz", "PC-DO-MATHEUS")
 
-    private fun shot(name: String, state: LinkUi, pending: Pairing? = null) =
+    private fun shot(name: String, state: LinkUi, pending: Pairing? = null, setup: Boolean = false) {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        // the permissions screen only shows on the first run: every other shot starts after it
+        if (!setup) Setup.finish(context)
         captureRoboImage("build/screens/$name.png") {
             CompositionLocalProvider(LocalStill provides true) {
                 AppTheme {
@@ -23,6 +26,17 @@ class ScreensTest {
                 }
             }
         }
+    }
+
+    @Test fun permissions() = shot("00-permissoes", LinkUi(), setup = true)
+
+    @Test fun send() = shot("07-enviar", LinkUi(
+        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 2,
+    ))
+
+    @Test fun history() = shot("08-historico", LinkUi(
+        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 3,
+    ))
 
     @Test fun pair() = shot("01-parear", LinkUi())
 

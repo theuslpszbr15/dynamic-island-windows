@@ -534,8 +534,12 @@ public sealed class JarvisBrain
                $"Disco C: {disk.AvailableFreeSpace / Gb:0.0} GB livres de {disk.TotalSize / Gb:0} GB.";
     }
 
+    /// <summary>Set by the island: applies volume to Spotify only (true = handled, false = no Spotify session).</summary>
+    public static Func<string, bool>? SpotifyVolume;
+
     static string Volume(string action)
     {
+        if (SpotifyVolume?.Invoke(action) == true) return $"Volume do Spotify: {action}.";
         byte key = action switch { "aumentar" => 0xAF, "diminuir" => 0xAE, "mudo" => 0xAD, _ => 0 };
         if (key == 0) return "Ação inválida.";
         for (var i = 0; i < (action == "mudo" ? 1 : 5); i++) Native.PressKey(key);

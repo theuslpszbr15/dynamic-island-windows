@@ -44,9 +44,9 @@ public partial class IslandWindow
             case "play": _media.PlayPause(); break;
             case "next": _media.Next(); break;
             case "prev": _media.Previous(); break;
-            case "volup": Native.PressKey(VK_VOLUME_UP); break;
-            case "voldown": Native.PressKey(VK_VOLUME_DOWN); break;
-            case "mute": Native.PressKey(VK_VOLUME_MUTE); break;
+            case "volup": if (!_spotifyVolume.Nudge(0.02f)) Native.PressKey(VK_VOLUME_UP); break;
+            case "voldown": if (!_spotifyVolume.Nudge(-0.02f)) Native.PressKey(VK_VOLUME_DOWN); break;
+            case "mute": if (!_spotifyVolume.ToggleMute()) Native.PressKey(VK_VOLUME_MUTE); break;
             case "lock":
                 if (!SnapshotMode) LockWorkStation();
                 break;

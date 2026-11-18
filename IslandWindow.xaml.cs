@@ -79,6 +79,13 @@ public partial class IslandWindow : Window
         _media = new MediaService(Dispatcher, settings);
         _volume = new VolumeService(Dispatcher);
         _spotifyVolume = new AppVolumeService(Dispatcher);
+        JarvisBrain.SpotifyVolume = a => a switch
+        {
+            "aumentar" => Dispatcher.Invoke(() => _spotifyVolume.Nudge(0.10f)),
+            "diminuir" => Dispatcher.Invoke(() => _spotifyVolume.Nudge(-0.10f)),
+            "mudo" => Dispatcher.Invoke(() => _spotifyVolume.ToggleMute()),
+            _ => false
+        };
         _battery = new BatteryService(Dispatcher);
         _hub = new AgentHub(Dispatcher);
         _notifications = new NotificationService(Dispatcher);
@@ -683,7 +690,9 @@ public partial class IslandWindow : Window
     {
         if (!_expanded && _transient == Transient.Volume)
         {
-            _volume.Nudge(e.Delta > 0 ? 0.02f : -0.02f);
+            // Wheel on the volume pill adjusts Spotify only; with no Spotify session it falls back to the master volume.
+            if (!_spotifyVolume.Nudge(e.Delta > 0 ? 0.02f : -0.02f))
+                _volume.Nudge(e.Delta > 0 ? 0.02f : -0.02f);
             e.Handled = true;
             return;
         }

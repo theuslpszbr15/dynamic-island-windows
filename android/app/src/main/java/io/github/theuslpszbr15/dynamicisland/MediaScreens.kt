@@ -75,12 +75,12 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-private val MCard = Color(0xFF1C1C1E)
-private val MTile = Color(0xFF2C2C30)
-private val MMuted = Color(0xFF8E8E93)
-private val MBlue = Color(0xFF0A84FF)
-private val MOrange = Color(0xFFFF9F0A)
-private val MRed = Color(0xFFFF453A)
+private val MCard = Color(0xFF1E1E21)
+private val MTile = Color(0xFF2B2B2F)
+private val MMuted = Color(0xFF9B9BA3)
+private val MBlue = Color(0xFFF2F2F4)
+private val MOrange = Color(0xFFF5B544)
+private val MRed = Color(0xFFF26B63)
 
 /** Runs [then] once the phone is unlocked (the app also shows over the lock screen, for the agents' requests). */
 fun whenUnlocked(context: Context, then: () -> Unit) {

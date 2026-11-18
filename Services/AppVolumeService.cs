@@ -64,84 +64,118 @@ public sealed class AppVolumeService : IDisposable
         finally { _busy.Release(); }
     }
 
-    /// <summary>Toggles the app's mute (right-click on the volume column).</summary>
-    public async void ToggleMute()
+    /// <summary>Toggles the app's mute (right-click on the volume column). Returns false when Spotify has no audio session.</summary>
+    public bool ToggleMute()
     {
-        if (!await _busy.WaitAsync(0)) return;
+        if (!_busy.Wait(0)) return true;
         try
         {
-            var state = await Task.Run(() => WithSession(volume =>
+            var state = WithSession(volume =>
             {
                 volume.GetMute(out var muted);
                 var ctx = Guid.Empty;
                 volume.SetMute(!muted, ref ctx);
-            }));
-            _ = _ui.InvokeAsync(() => Changed?.Invoke(state?.Level ?? 0, state?.Muted ?? false, state != null));
+            });
+            if (state != null) _ui.InvokeAsync(() => Changed?.Invoke(state.Value.Level, state.Value.Muted, true));
+            return state != null;
         }
-        catch { }
+        catch { return false; }
         finally { _busy.Release(); }
     }
 
     (float Level, bool Muted)? Read()
     {
-        var volume = FindVolume();
-        if (volume == null) return null;
-        volume.GetMasterVolume(out var level);
-        volume.GetMute(out var muted);
+        var volumes = FindVolumes();
+        if (volumes.Count == 0) return null;
+        volumes[0].GetMasterVolume(out var level);
+        volumes[0].GetMute(out var muted);
         return (level, muted);
     }
 
-    /// <summary>Applies <paramref name="apply"/> to the app's session volume, then reads the resulting state.</summary>
+    /// <summary>Applies <paramref name="apply"/> to every Spotify session (all output devices), then reads the resulting state.</summary>
     (float Level, bool Muted)? WithSession(Action<ISimpleAudioVolume> apply)
     {
-        var volume = FindVolume();
-        if (volume == null) return null;
-        apply(volume);
-        volume.GetMasterVolume(out var level);
-        volume.GetMute(out var muted);
+        var volumes = FindVolumes();
+        if (volumes.Count == 0) return null;
+        foreach (var v in volumes) { try { apply(v); } catch { } }
+        volumes[0].GetMasterVolume(out var level);
+        volumes[0].GetMute(out var muted);
         return (level, muted);
     }
 
-    /// <summary>The app's ISimpleAudioVolume on the default output device, or null while it plays nothing.
-    /// Everything except the returned volume is released here; the volume RCW is left to the finalizer
-    /// (releasing the session control it was cast from would invalidate it).</summary>
-    ISimpleAudioVolume? FindVolume()
+    /// <summary>Raises/lowers Spotify's volume by <paramref name="delta"/> (mouse wheel). Returns false when Spotify has no audio session.</summary>
+    public bool Nudge(float delta)
     {
+        if (!_busy.Wait(0)) return true;
+        try
+        {
+            var state = WithSession(volume =>
+            {
+                volume.GetMasterVolume(out var cur);
+                var ctx = Guid.Empty;
+                volume.SetMasterVolume(Math.Clamp(cur + delta, 0f, 1f), ref ctx);
+            });
+            if (state != null) _ui.InvokeAsync(() => Changed?.Invoke(state.Value.Level, state.Value.Muted, true));
+            return state != null;
+        }
+        catch { return false; }
+        finally { _busy.Release(); }
+    }
+
+    /// <summary>Every Spotify ISimpleAudioVolume on every active output device (any process named like the app, any session).
+    /// Device/manager/enumerator are released here; the volume RCWs are left to the finalizer
+    /// (releasing the session control they were cast from would invalidate them).</summary>
+    List<ISimpleAudioVolume> FindVolumes()
+    {
+        var found = new List<ISimpleAudioVolume>();
         var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
         try
         {
-            if (enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia, out var device) != 0 || device == null) return null;
+            if (enumerator.EnumAudioEndpoints(eRender, 1 /* DEVICE_STATE_ACTIVE */, out var devices) != 0 || devices == null) return found;
             try
             {
-                var iid = typeof(IAudioSessionManager2).GUID;
-                if (device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out var obj) != 0 || obj is not IAudioSessionManager2 manager) return null;
-                try
+                if (devices.GetCount(out var deviceCount) != 0) return found;
+                for (uint d = 0; d < deviceCount; d++)
                 {
-                    if (manager.GetSessionEnumerator(out var sessions) != 0 || sessions == null) return null;
+                    if (devices.Item(d, out var device) != 0 || device == null) continue;
+                    try { CollectFromDevice(device, found); }
+                    catch { }
+                    finally { Marshal.ReleaseComObject(device); }
+                }
+            }
+            finally { Marshal.ReleaseComObject(devices); }
+        }
+        catch { }
+        finally { Marshal.ReleaseComObject(enumerator); }
+        return found;
+    }
+
+    void CollectFromDevice(IMMDevice device, List<ISimpleAudioVolume> found)
+    {
+        var iid = typeof(IAudioSessionManager2).GUID;
+        if (device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out var obj) != 0 || obj is not IAudioSessionManager2 manager) return;
+        try
+        {
+            if (manager.GetSessionEnumerator(out var sessions) != 0 || sessions == null) return;
+            try
+            {
+                if (sessions.GetCount(out var count) != 0) return;
+                for (var i = 0; i < count; i++)
+                {
+                    if (sessions.GetSession(i, out var control) != 0 || control == null) continue;
                     try
                     {
-                        if (sessions.GetCount(out var count) != 0) return null;
-                        for (var i = 0; i < count; i++)
-                        {
-                            if (sessions.GetSession(i, out var control) != 0 || control == null) continue;
-                            try
-                            {
-                                var control2 = (IAudioSessionControl2)control;
-                                if (control2.GetProcessId(out var pid) != 0 || pid == 0) continue;
-                                if (!ProcessNameOf(pid).Equals(_processName, StringComparison.OrdinalIgnoreCase)) continue;
-                                return (ISimpleAudioVolume)control;
-                            }
-                            catch { }
-                        }
-                        return null;
+                        var control2 = (IAudioSessionControl2)control;
+                        if (control2.GetProcessId(out var pid) != 0 || pid == 0) continue;
+                        if (!ProcessNameOf(pid).Equals(_processName, StringComparison.OrdinalIgnoreCase)) continue;
+                        found.Add((ISimpleAudioVolume)control);
                     }
-                    finally { Marshal.ReleaseComObject(sessions); }
+                    catch { }
                 }
-                finally { Marshal.ReleaseComObject(manager); }
             }
-            finally { Marshal.ReleaseComObject(device); }
+            finally { Marshal.ReleaseComObject(sessions); }
         }
-        finally { Marshal.ReleaseComObject(enumerator); }
+        finally { Marshal.ReleaseComObject(manager); }
     }
 
     string ProcessNameOf(uint pid)
@@ -157,11 +191,18 @@ public sealed class AppVolumeService : IDisposable
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IMMDeviceEnumerator
     {
-        [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection devices);
         [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
         [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice device);
         [PreserveSig] int RegisterEndpointNotificationCallback(IntPtr client);
         [PreserveSig] int UnregisterEndpointNotificationCallback(IntPtr client);
+    }
+
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection
+    {
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int Item(uint index, out IMMDevice device);
     }
 
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

@@ -20,8 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val CardColor = Color(0xFF1C1C1E)
-private val MutedColor = Color(0xFF8E8E93)
+private val CardColor = Color(0xFF1E1E21)
+private val MutedColor = Color(0xFF9B9BA3)
 
 private class Entry(val kind: Pill.Kind, val label: String, val note: String = "")
 
@@ -55,7 +55,7 @@ fun IslandFilterCard() {
     val context = LocalContext.current
     LaunchedEffect(Unit) { IslandFilter.load(context) }
     val off by IslandFilter.off.collectAsState()
-    Column(Modifier.fillMaxWidth().background(CardColor, RoundedCornerShape(18.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().background(CardColor, RoundedCornerShape(24.dp)).padding(16.dp)) {
         Text("Avisos da ilha", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Text("Escolha o que aparece na ilha deste celular. Vale só aqui; a ilha do PC não muda.", color = MutedColor, fontSize = 13.sp)
         groups.forEach { (title, entries) ->
@@ -65,7 +65,7 @@ fun IslandFilterCard() {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text(e.label, color = Color.White, fontSize = 13.5.sp)
-                        if (e.note.isNotEmpty() && e.kind in off) Text(e.note, color = Color(0xFFFF9F0A), fontSize = 12.sp)
+                        if (e.note.isNotEmpty() && e.kind in off) Text(e.note, color = Color(0xFFF5B544), fontSize = 12.sp)
                     }
                     Switch(checked = e.kind !in off, onCheckedChange = { IslandFilter.set(context, e.kind, it) },
                         modifier = Modifier.padding(start = 12.dp))
