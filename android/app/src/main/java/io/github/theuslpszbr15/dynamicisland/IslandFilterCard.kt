@@ -36,6 +36,11 @@ private val groups: List<Pair<String, List<Entry>>> = listOf(
         Entry(Pill.Kind.Claude, "Avisos do app do Claude"),
         Entry(Pill.Kind.Notification, "Notificações de todos os apps", "A ilha não acende quando chega uma notificação."),
         Entry(Pill.Kind.Pending, "Pendências dos agentes (esperando você)"),
+        Entry(Pill.Kind.Ring, "Ligações e chamadas perdidas"),
+        Entry(Pill.Kind.Live, "Progresso ao vivo (entregas, corridas, downloads)"),
+        Entry(Pill.Kind.Timer, "Temporizador e cronômetro na pílula"),
+        Entry(Pill.Kind.Battery, "Carregando, bateria baixa e cheia"),
+        Entry(Pill.Kind.Recording, "Câmera ou microfone em uso (ponto vermelho)"),
         Entry(Pill.Kind.Transfer, "Transferências (andamento e fim)"),
     ),
     "Discord" to listOf(

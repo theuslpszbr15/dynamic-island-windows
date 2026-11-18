@@ -21,6 +21,11 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- answer and decline from the island (asked the first time a button needs it) -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <!-- the "Hoje" page: next events and the weather where you are (each asked for from its own button) -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- to open the Claude app from the island when its notification has nothing to open -->
     <queries>
@@ -101,6 +106,25 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- asks for a permission the island needs, then closes -->
+        <activity
+            android:name=".PermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- answers a message notification from the island -->
+        <activity
+            android:name=".ReplyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:windowSoftInputMode="adjustResize"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- the quick tile reads the clipboard through this (Android only lets an app in front read it) -->

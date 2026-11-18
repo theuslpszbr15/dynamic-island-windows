@@ -50,13 +50,15 @@ fun IslandSettingsCard() {
     val context = LocalContext.current
     // Android's settings change behind the app's back: look again every second while this is on screen
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { IslandLook.load(context); while (true) { delay(1_000); tick++ } }
+    LaunchedEffect(Unit) { Focus.load(context); IslandLook.load(context); while (true) { delay(1_000); tick++ } }
     val on = remember(tick) { IslandOverlay.isOn(context) }
     val canDraw = remember(tick) { IslandOverlay.canShow(context) }
     val above = remember(tick) { IslandOverlay.isAbove() }
     val aboveOn = remember(tick) { IslandAccessibility.enabled(context) }
     val access = remember(tick) { DiscordListener.enabled(context) }
     val look by IslandLook.state.collectAsState()
+    val focus by Focus.state.collectAsState()
+    val seen by Focus.seen.collectAsState()
     var showSeen by remember { mutableStateOf(false) }
     fun change(l: Look) = IslandLook.set(context, l)
 
@@ -148,6 +150,38 @@ fun IslandSettingsCard() {
             }
             Switch(checked = look.dock, onCheckedChange = { change(look.copy(dock = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
+
+        Section("Foco")
+        Text("Silencia só as notificações de outros apps na ilha. Ligações, temporizador, agentes e o resto continuam. " +
+            "Para silenciar um app, toque em \"Silenciar\" na notificação dele, no cartão Notificações.", color = MutedColor, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            Text("Foco ligado agora", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
+            Switch(checked = focus.manual, onCheckedChange = { Focus.setManual(context, it) })
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Horário silencioso: ${Focus.clock(focus.fromMin)} às ${Focus.clock(focus.toMin)}", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
+            Switch(checked = focus.quiet, onCheckedChange = { Focus.setQuiet(context, it) })
+        }
+        if (focus.quiet) {
+            Setting("Começa às", Focus.clock(focus.fromMin), focus.fromMin.toFloat(), 0f..1410f) { Focus.setHours(context, (it / 30).roundToInt() * 30, focus.toMin) }
+            Setting("Termina às", Focus.clock(focus.toMin), focus.toMin.toFloat(), 0f..1410f) { Focus.setHours(context, focus.fromMin, (it / 30).roundToInt() * 30) }
+        }
+        val apps = (focus.muted + seen.keys).distinct().sortedBy { (seen[it] ?: it).lowercase() }
+        if (apps.isNotEmpty()) {
+            Text("Apps", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.padding(top = 8.dp))
+            apps.forEach { pkg ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(seen[pkg] ?: pkg, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                    Switch(checked = pkg !in focus.muted, onCheckedChange = { Focus.toggleMute(context, pkg) })
+                }
+            }
+        }
+
+        Section("Ligações")
+        Text(if (PhoneRings.canSee(context)) "A ilha mostra quem está ligando e as chamadas perdidas." + (if (PhoneRings.canControl(context)) " Atender e recusar estão liberados." else " Para atender e recusar, ela pede a permissão na primeira vez.")
+            else "Para mostrar ligações na ilha, permita o acesso ao telefone. O nome vem dos seus contatos e nada sai do celular.",
+            color = MutedColor, fontSize = 13.sp)
+        if (!PhoneRings.canSee(context)) TextButton(onClick = { PermissionActivity.ask(context, PhoneRings.permissions) }) { Text("Permitir") }
 
         // a build without the listener declared (see AndroidManifest) has nothing to switch on here
         if (DiscordListener.available(context)) {

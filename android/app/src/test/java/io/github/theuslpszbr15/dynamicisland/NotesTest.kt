@@ -110,4 +110,15 @@ class NotesTest {
         val off = setOf(Pill.Kind.Notification, Pill.Kind.Pending)
         assertEquals(off, IslandFilter.parse(IslandFilter.names(off)))
     }
+
+    @Test fun swipingMovesBetweenPagesAndWrapsRound() {
+        val pages = Island.hubPages(hasMedia = true)
+        assertEquals(listOf(Pill.Kind.Notification, Pill.Kind.Pending, Pill.Kind.Timer, Pill.Kind.Today, Pill.Kind.Media), pages)
+        assertEquals(listOf(Pill.Kind.Notification, Pill.Kind.Pending, Pill.Kind.Timer, Pill.Kind.Today), Island.hubPages(hasMedia = false))
+        assertEquals(Pill.Kind.Pending, Island.hubStep(pages, Pill.Kind.Notification, 1))
+        assertEquals(Pill.Kind.Media, Island.hubStep(pages, Pill.Kind.Notification, -1))
+        assertEquals(Pill.Kind.Timer, Island.hubStep(pages, Pill.Kind.Pending, 1))
+        assertEquals(Pill.Kind.Notification, Island.hubStep(pages, Pill.Kind.Media, 1))
+        assertEquals(Pill.Kind.Notification, Island.hubStep(pages, Pill.Kind.Offer, 1))
+    }
 }

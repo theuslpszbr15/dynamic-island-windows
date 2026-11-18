@@ -69,7 +69,12 @@ data class AppNote(
     val text: String,
     val at: Long,
     val category: String = "",
+    /** The notification has a reply field (a message): the island can answer it without opening the app. */
+    val canReply: Boolean = false,
 )
+
+/** An app's live notification (a delivery, a ride, a download): [percent] -1 when it has no bar. */
+data class LiveNote(val key: String, val pkg: String, val app: String, val title: String, val text: String, val percent: Int, val at: Long)
 
 /** How a notification arrives on the island: each one moves its own way, picked from what it is (not random). */
 enum class NoteStyle {
@@ -131,7 +136,7 @@ data class LiveTransfer(
 
 /** What the pill says right now: one short line and, under it, what a tap does (or a detail). */
 data class Pill(val kind: Kind, val text: String, val hint: String = "", val count: Int = 0) {
-    enum class Kind { Idle, Approval, Claude, Offer, Transfer, Discord, Media, Call, Outgoing, Notification, Pending }
+    enum class Kind { Idle, Approval, Claude, Offer, Transfer, Discord, Media, Call, Outgoing, Notification, Pending, Timer, Battery, Recording, Ring, Live, Today }
 }
 
 /** The song playing in any app (Spotify, YouTube Music…), from its media session. Plain data, tested off the phone. */
@@ -193,9 +198,33 @@ object Island {
 
     fun note(n: AppNote) = _notes.update { with(it, n) }
 
-    fun noteGone(key: String) = _notes.update { list -> list.filterNot { it.key == key } }
+    /** It left the shade. A pinned one stays on the island until the person dismisses it. */
+    fun noteGone(key: String) = _notes.update { list -> list.filterNot { it.key == key && key !in _pinned.value } }
 
-    fun clearNotes() { _notes.value = emptyList() }
+    private val _pinned = MutableStateFlow<Set<String>>(emptySet())
+    val pinned: StateFlow<Set<String>> = _pinned
+
+    /** Long press: pinned notices stay at the top and survive "Limpar" and the shade. */
+    fun togglePin(key: String) = _pinned.update { if (key in it) it - key else it + key }
+
+    /** The person's own dismissal: off the island for good (and unpinned). */
+    fun dismissNote(key: String) { _pinned.update { it - key }; noteGone(key) }
+
+    /** Pinned first, each group newest first. */
+    fun ordered(list: List<AppNote>, pinned: Set<String>): List<AppNote> = list.sortedByDescending { it.key in pinned }
+
+    private val _live = MutableStateFlow<List<LiveNote>>(emptyList())
+    val live: StateFlow<List<LiveNote>> = _live
+
+    /** A live notification arrives or moves on (the same key replaces; no bar -1). */
+    fun live(n: LiveNote) = _live.update { list -> (listOf(n) + list.filterNot { it.key == n.key }).take(6) }
+
+    fun liveGone(key: String) = _live.update { list -> list.filterNot { it.key == key } }
+
+    fun clearLive() { _live.value = emptyList() }
+
+
+    fun clearNotes() { _notes.value = emptyList(); _pinned.value = emptySet() }
 
     /** Newest first. The same key replaces (an app updating its notification); the same words from the same app, right after, are one. */
     fun with(list: List<AppNote>, n: AppNote): List<AppNote> {
@@ -204,6 +233,16 @@ object Island {
         val rest = list.filterNot { it.key == n.key }
         val twin = rest.firstOrNull { it.pkg == n.pkg && it.title == n.title && it.text == n.text && n.at - it.at in 0..DUPLICATE_MS }
         return if (twin != null) list else (listOf(n) + rest).take(MAX_NOTES)
+    }
+
+    /** The pages of the opened island, in swipe order: always Notificações and Esperando você, and the player while a song is around. */
+    fun hubPages(hasMedia: Boolean): List<Pill.Kind> =
+        listOf(Pill.Kind.Notification, Pill.Kind.Pending, Pill.Kind.Timer, Pill.Kind.Today) + if (hasMedia) listOf(Pill.Kind.Media) else emptyList()
+
+    /** The page [dir] (+1 or -1) from [from], wrapping round like the PC's. A page that is not in the list starts at the first. */
+    fun hubStep(pages: List<Pill.Kind>, from: Pill.Kind, dir: Int): Pill.Kind {
+        val i = pages.indexOf(from)
+        return if (i < 0) pages.first() else pages[((i + dir) % pages.size + pages.size) % pages.size]
     }
 
     /** Agent alerts the person already dealt with on the phone: session id to the update they dealt with. */
@@ -275,11 +314,25 @@ object Island {
         off: Set<Pill.Kind> = emptySet(),
         notes: List<AppNote> = emptyList(),
         pending: List<Session> = emptyList(),
+        timer: TimerState = TimerState(),
+        battery: BatteryInfo? = null,
+        recording: Recording = Recording(),
+        ring: PhoneRing? = null,
+        live: List<LiveNote> = emptyList(),
     ): Pill {
         if (approvals > 0 && Pill.Kind.Approval !in off) return Pill(Pill.Kind.Approval,
             if (approvals == 1) "Agente pedindo permissão" else "$approvals pedidos de permissão", "Toque para responder", approvals)
+        ring?.takeIf { Pill.Kind.Ring !in off && it.state == PhoneRing.State.Ringing }?.let {
+            return Pill(Pill.Kind.Ring, it.who, "Ligação · toque para atender")
+        }
+        ring?.takeIf { Pill.Kind.Ring !in off && it.state == PhoneRing.State.Missed && now - it.at in 0..PhoneRing.MISSED_MS }?.let {
+            return Pill(Pill.Kind.Ring, "Chamada perdida", it.who)
+        }
         claude?.takeIf { Pill.Kind.Claude !in off && now - it.at in 0..CLAUDE_MS }?.let {
             return Pill(Pill.Kind.Claude, it.title.ifEmpty { "Claude" }, it.text.ifEmpty { "Toque para abrir no Claude" })
+        }
+        recording.takeIf { Pill.Kind.Recording !in off && it.any && now - it.since in 0..FLASH_MS }?.let {
+            return Pill(Pill.Kind.Recording, it.text, "Algum app está gravando")
         }
         notes.firstOrNull()?.takeIf { Pill.Kind.Notification !in off && now - it.at in 0..NOTE_MS }?.let {
             return Pill(Pill.Kind.Notification, it.title.ifEmpty { it.app }, it.text.ifEmpty { it.app })
@@ -294,6 +347,20 @@ object Island {
         }
         transfers.firstOrNull()?.takeIf { Pill.Kind.Transfer !in off && now - it.at in 0..FLASH_MS }?.let {
             return Pill(Pill.Kind.Transfer, it.title, if (it.state == LiveTransfer.State.Done) "Pronto" else "Falhou")
+        }
+        battery?.takeIf { Pill.Kind.Battery !in off && it.event != BatteryInfo.Event.None && now - it.at in 0..BatteryWatcher.FLASH_MS }?.let {
+            return when (it.event) {
+                BatteryInfo.Event.Plugged -> Pill(Pill.Kind.Battery, "Carregando · ${it.percent}%", "Carregador conectado")
+                BatteryInfo.Event.Unplugged -> Pill(Pill.Kind.Battery, "Desconectado · ${it.percent}%", "Carregador removido")
+                BatteryInfo.Event.Full -> Pill(Pill.Kind.Battery, "Bateria cheia", "100%")
+                BatteryInfo.Event.Critical -> Pill(Pill.Kind.Battery, "Bateria em ${it.percent}%", "Conecte o carregador")
+                else -> Pill(Pill.Kind.Battery, "Bateria baixa · ${it.percent}%", "Conecte o carregador")
+            }
+        }
+        if (timer.active && Pill.Kind.Timer !in off) return if (timer.finishedAt > 0) Pill(Pill.Kind.Timer, "Acabou!", "Temporizador")
+            else Pill(Pill.Kind.Timer, timer.text(now), if (timer.mode == TimerState.Mode.Countdown) (if (timer.paused) "Pausado" else "Temporizador") else (if (timer.paused) "Pausado" else "Cronômetro"))
+        live.firstOrNull()?.takeIf { Pill.Kind.Live !in off }?.let {
+            return Pill(Pill.Kind.Live, it.title.ifEmpty { it.app }, if (it.percent >= 0) "${it.percent}%" + (if (it.text.isNotEmpty()) " · ${it.text}" else "") else it.text.ifEmpty { it.app }, live.size)
         }
         if (media != null && media.playing && Pill.Kind.Media !in off) return Pill(Pill.Kind.Media, media.title, media.artist)
         if (pending.isNotEmpty() && Pill.Kind.Pending !in off) return Pill(Pill.Kind.Pending,
