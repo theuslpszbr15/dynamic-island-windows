@@ -38,11 +38,12 @@ public sealed partial class SettingsWindow : DarkWindow
     bool _downloadQr;
 
     IslandSettings S => _app.Settings;
-    protected override bool GlowOn => _app.Settings.GlowLook;
+    protected override bool GlowOn => _app?.Settings.GlowLook ?? true; // runs from the base constructor, before _app is set
 
     public SettingsWindow(App app) : base("Configurações — Dynamic Island", "Configurações", Sections)
     {
         _app = app;
+        ApplyGlow();
         SetUpTransfers();
         _app.Island.Discord.StatusChanged += OnDiscordStatus;
         Closed += (_, _) => _app.Island.Discord.StatusChanged -= OnDiscordStatus;
