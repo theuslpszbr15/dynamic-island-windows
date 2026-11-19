@@ -132,10 +132,11 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
 
 private val Black = Color(0xFF000000)
-private val Chip = Color(0xFF2B2B2F)
-private val Card = Color(0xFF1E1E21)
-private val Muted = Color(0xFF9B9BA3)
-private val Blue = Color(0xFFF2F2F4)
+private val Chip = Color(0xFF242423)
+private val ClaudeOrange = Color(0xFFD97757)
+private val Card = Color(0xFF202020)
+private val Muted = Color(0xFFA19F9A)
+private val Blue = Color(0xFFF0EFEC)
 private val Orange = Color(0xFFF5B544)
 private val Green = Color(0xFF4ADE80)
 private val Red = Color(0xFFF26B63)
@@ -735,6 +736,7 @@ private fun NoteIcon(note: AppNote, size: Dp) {
 /** Colour says a status, not a kind: amber for a request, red for the camera, the agent's own orange; the rest is plain. */
 private fun colorOf(kind: Pill.Kind) = when (kind) {
     Pill.Kind.Approval -> Orange
+    Pill.Kind.Claude -> ClaudeOrange
     Pill.Kind.Recording -> Red
     else -> Blue
 }
@@ -781,7 +783,7 @@ private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
 /** A count on the right of a notice: off-white, dark number. */
 @Composable
 private fun Badge(n: Int, color: Color) =
-    Box(Modifier.size(20.dp).background(Color(0xFFF2F2F4), CircleShape), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(20.dp).background(Color(0xFFF0EFEC), CircleShape), contentAlignment = Alignment.Center) {
         Text("$n", color = Color(0xFF141416), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 
@@ -872,7 +874,7 @@ private fun OpenCard(
                 Title(c.title.ifEmpty { "Claude" }, c.text)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button("Dispensar", Card, Modifier.weight(1f)) { DiscordListener.dismissClaude(); close() }
-                    Button("Abrir no Claude", Blue, Modifier.weight(1f), color = Black) { DiscordListener.openClaude(context); close() }
+                    Button("Abrir no Claude", ClaudeOrange, Modifier.weight(1f)) { DiscordListener.openClaude(context); close() }
                 }
             }
         } ?: Gone(close)

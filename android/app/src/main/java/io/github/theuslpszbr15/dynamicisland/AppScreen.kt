@@ -197,7 +197,7 @@ private fun LocalScreen(onConnect: () -> Unit, onSettings: () -> Unit) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             UiStat("Ilha", if (on) "Ligada" else "Desligada", Modifier.fillMaxWidth(),
-                note = if (missing == 0) "Permissões em dia" else "Faltam $missing permissões", icon = R.drawable.ic_agent)
+                note = if (missing == 0) "Permissões em dia" else "Faltam $missing permissões", icon = R.drawable.ic_tab_agents)
             UiCard {
                 UiRow("Ajustes da ilha", note = "Formato, posição, foco e avisos", icon = R.drawable.ic_gear, onClick = onSettings) {
                     Icon(painterResource(R.drawable.ic_chevron), null, tint = Ui.Faint, modifier = Modifier.size(18.dp))
@@ -335,7 +335,7 @@ private fun HomeScreen(
 @Composable
 private fun NavPill(tab: Int, approvals: Int, onTab: (Int) -> Unit) {
     val items = listOf(
-        Triple(0, "Agentes", R.drawable.ic_agent),
+        Triple(0, "Agentes", R.drawable.ic_tab_agents),
         Triple(2, "Enviar", R.drawable.ic_tab_send),
         Triple(3, "Histórico", R.drawable.ic_tab_history),
         Triple(1, "PC", R.drawable.ic_pc),

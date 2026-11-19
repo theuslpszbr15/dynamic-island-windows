@@ -26,9 +26,9 @@ fun AppUpdateCard() {
     val version = remember(context) {
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() } catch (_: Exception) { "" }
     }
-    Column(Modifier.fillMaxWidth().background(Color(0xFF1E1E21), RoundedCornerShape(24.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().background(Color(0xFF202020), RoundedCornerShape(24.dp)).padding(16.dp)) {
         Text("Atualização do app", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Text("Versão instalada: $version (${AppUpdate.installed(context)})", color = Color(0xFF9B9BA3), fontSize = 13.sp)
+        Text("Versão instalada: $version (${AppUpdate.installed(context)})", color = Color(0xFFA19F9A), fontSize = 13.sp)
         val (text, warn) = when (val s = state) {
             UpdateState.Idle -> "" to false
             UpdateState.Checking -> "Verificando…" to false

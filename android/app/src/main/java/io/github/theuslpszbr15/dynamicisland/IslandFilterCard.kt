@@ -20,8 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val CardColor = Color(0xFF1E1E21)
-private val MutedColor = Color(0xFF9B9BA3)
+private val CardColor = Color(0xFF202020)
+private val MutedColor = Color(0xFFA19F9A)
 
 private class Entry(val kind: Pill.Kind, val label: String, val note: String = "")
 

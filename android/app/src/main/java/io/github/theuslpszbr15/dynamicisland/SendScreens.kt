@@ -57,10 +57,10 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-private val SCard = Color(0xFF1E1E21)
-private val STile = Color(0xFF2B2B2F)
-private val SMuted = Color(0xFF9B9BA3)
-private val SBlue = Color(0xFFF2F2F4)
+private val SCard = Color(0xFF202020)
+private val STile = Color(0xFF2C2C2B)
+private val SMuted = Color(0xFFA19F9A)
+private val SBlue = Color(0xFFF0EFEC)
 private val SGreen = Color(0xFF4ADE80)
 private val SOrange = Color(0xFFF5B544)
 private val SRed = Color(0xFFF26B63)

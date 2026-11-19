@@ -40,9 +40,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val CardColor = Color(0xFF1E1E21)
-private val MutedColor = Color(0xFF9B9BA3)
-private val BlueColor = Color(0xFFF2F2F4)
+private val CardColor = Color(0xFF202020)
+private val MutedColor = Color(0xFFA19F9A)
+private val BlueColor = Color(0xFFF0EFEC)
 
 /** The island's switch, Android's permissions, its size and place (live) and the music / Discord reading. */
 @Composable
@@ -85,7 +85,7 @@ fun IslandSettingsCard() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Look.presets.forEach { (name, apply) ->
                 Text(name, color = Color.White, fontSize = 12.5.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2B2B2F))
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2C2C2B))
                         .clickable { change(apply(look)) }.padding(horizontal = 12.dp, vertical = 7.dp))
             }
         }

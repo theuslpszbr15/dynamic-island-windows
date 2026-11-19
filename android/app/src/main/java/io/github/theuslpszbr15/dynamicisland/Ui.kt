@@ -27,17 +27,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The app's look, in one place: dark neutral greys, one off-white for what is active, and green / amber / red only to say
- * a status. One typeface, the system sans.
+ * The app's look, in one place: warm dark greys, one off-white for what is active, and green / amber / red only to say
+ * a status. Titles are serif; everything else is the system sans.
  */
 object Ui {
-    val Bg = Color(0xFF111113)
-    val Card = Color(0xFF1E1E21)
-    val Raised = Color(0xFF2B2B2F)
-    val Line = Color(0xFF36363B)
-    val Text = Color(0xFFF2F2F4)
-    val Muted = Color(0xFF9B9BA3)
-    val Faint = Color(0xFF6A6A72)
+    val Bg = Color(0xFF151515)
+    val Card = Color(0xFF202020)
+    val Raised = Color(0xFF2C2C2B)
+    val Line = Color(0xFF363635)
+    val Text = Color(0xFFF0EFEC)
+    val Muted = Color(0xFFA19F9A)
+    val Faint = Color(0xFF6F6D69)
     val OnAction = Color(0xFF141416)
     val Ok = Color(0xFF4ADE80)
     val Warn = Color(0xFFF5B544)
@@ -46,14 +46,14 @@ object Ui {
     val CardShape = RoundedCornerShape(24.dp)
     val ButtonShape = RoundedCornerShape(16.dp)
     val ChipShape = RoundedCornerShape(12.dp)
-    val Display = FontFamily.Default
+    val Serif = FontFamily.Serif
 }
 
 enum class Tone { Neutral, Ok, Warn, Bad }
 
 @Composable
 fun UiTitle(text: String, modifier: Modifier = Modifier, size: Int = 26) =
-    Text(text, color = Ui.Text, fontFamily = Ui.Display, fontWeight = FontWeight.SemiBold, fontSize = size.sp, modifier = modifier)
+    Text(text, color = Ui.Text, fontFamily = Ui.Serif, fontWeight = FontWeight.Medium, fontSize = size.sp, modifier = modifier)
 
 @Composable
 fun UiSection(text: String, modifier: Modifier = Modifier) =
@@ -66,7 +66,7 @@ fun UiCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() ->
 @Composable
 fun UiCardTitle(text: String, note: String? = null) {
     Column {
-        Text(text, color = Ui.Text, fontFamily = Ui.Display, fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
+        Text(text, color = Ui.Text, fontFamily = Ui.Serif, fontWeight = FontWeight.Medium, fontSize = 20.sp)
         if (note != null) Text(note, color = Ui.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
     }
 }

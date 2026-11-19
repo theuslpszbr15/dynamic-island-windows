@@ -75,10 +75,10 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-private val MCard = Color(0xFF1E1E21)
-private val MTile = Color(0xFF2B2B2F)
-private val MMuted = Color(0xFF9B9BA3)
-private val MBlue = Color(0xFFF2F2F4)
+private val MCard = Color(0xFF202020)
+private val MTile = Color(0xFF2C2C2B)
+private val MMuted = Color(0xFFA19F9A)
+private val MBlue = Color(0xFFF0EFEC)
 private val MOrange = Color(0xFFF5B544)
 private val MRed = Color(0xFFF26B63)
 
