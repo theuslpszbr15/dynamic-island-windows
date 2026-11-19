@@ -269,8 +269,15 @@
                     <Border Margin="-4.5" Background="#10000000" />
                     <Border Margin="-2" Background="#14000000" />
                 </Grid>
+                <!-- Soft orange glow while Claude asks for permission (option "Brilho laranja"); stacked outlines like the shadow -->
+                <Grid x:Name="GlowLayers" IsHitTestVisible="False" Visibility="Collapsed">
+                    <Border Margin="-9" Background="#0AD97757" />
+                    <Border Margin="-6" Background="#10D97757" />
+                    <Border Margin="-3" Background="#1CD97757" />
+                </Grid>
                 <Border x:Name="GlassFill" Visibility="Collapsed" />
                 <Border x:Name="IslandBg" Background="Black" CornerRadius="17" />
+                <Border x:Name="GlowRim" IsHitTestVisible="False" Visibility="Collapsed" BorderBrush="#66D97757" BorderThickness="1" />
 
                 <!-- Aurora look: optional animated glowing gradient rim around the island -->
                 <Border x:Name="AuroraRim" Visibility="Collapsed" BorderThickness="1.6" IsHitTestVisible="False">
@@ -404,7 +411,7 @@
 
                         <!-- quiet permission request: a pill that opens into ApprovalPanel on hover or click -->
                         <Grid x:Name="ApprovalPill" Height="40" VerticalAlignment="Top" Margin="16,0,18,0" Visibility="Collapsed">
-                            <Ellipse x:Name="ApprovalPillOrb" Width="10" Height="10" Fill="#FFFF9F0A" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            <Ellipse x:Name="ApprovalPillOrb" Width="10" Height="10" Fill="#FFD97757" HorizontalAlignment="Left" VerticalAlignment="Center"
                                      RenderTransformOrigin="0.5,0.5">
                                 <Ellipse.RenderTransform>
                                     <ScaleTransform />
@@ -427,8 +434,8 @@
                             </Viewbox>
                             <StackPanel Margin="52,0,0,0" VerticalAlignment="Center">
                                 <TextBlock FontSize="13.5" TextTrimming="CharacterEllipsis">
-                                    <Run x:Name="ApprovalAgent" FontWeight="SemiBold" />
-                                    <Run Text=" esperando seu OK" Foreground="#FFFF9F0A" FontWeight="SemiBold" />
+                                    <Run x:Name="ApprovalAgent" FontFamily="Newsreader, Georgia, Cambria" FontSize="16" />
+                                    <Run Text=" esperando seu OK" Foreground="#FFD97757" FontWeight="SemiBold" />
                                     <Run x:Name="ApprovalElapsed" Foreground="{DynamicResource Muted}" FontSize="12" />
                                 </TextBlock>
                                 <!-- the exact command being allowed, wrapped: up to 3 lines, never cut silently (see IslandCanAllow) -->
@@ -441,13 +448,13 @@
                                     <ColumnDefinition Width="10" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Button Style="{StaticResource Chip}" Margin="0" Background="#FF5A1D1D" Click="ApprovalDeny_Click">
+                                <Button Style="{StaticResource Chip}" Margin="0" Background="#FF242423" Foreground="#FFF26B63" Click="ApprovalDeny_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE711;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <TextBlock Text="Negar" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="ApprovalAllow" Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FF30D158" Foreground="Black" Click="ApprovalAllow_Click">
+                                <Button x:Name="ApprovalAllow" Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FFF0EFEC" Foreground="#FF141416" Click="ApprovalAllow_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <TextBlock x:Name="ApprovalAllowText" Text="Permitir" />

@@ -96,6 +96,8 @@ class LinkClient(
         fun onPcState(state: PcState) {}
         /** The app version built with the PC's island, and where to download it. */
         fun onAppVersion(code: Int, name: String, url: String) {}
+        /** Which notices are switched off on the islands (kind names), and when that changed (Unix ms). */
+        fun onFilter(off: List<String>, at: Long) {}
     }
 
     private val writeLock = Any()
@@ -172,6 +174,9 @@ class LinkClient(
                     listener.onSendAnswer(o.optString("id"), o.optString("type") == "sendAccept")
                 "sendPending" -> if (FileOffer.isId(o.optString("id"))) listener.onSendPending(o.optString("id"))
                 "discord" -> DiscordEvent.parse(o)?.let(listener::onDiscord)
+                "filter" -> o.optJSONArray("off")?.takeIf { o.optLong("at") > 0 && it.length() <= MAX_FILTER }?.let { list ->
+                    listener.onFilter((0 until list.length()).map { list.optString(it) }, o.optLong("at"))
+                }
                 "clip" -> o.optString("text").takeIf { it.isNotEmpty() && it.length <= MAX_CLIP }?.let(listener::onClip)
                 "pc" -> listener.onPcState(PcState(
                     o.optString("title").take(120), o.optString("artist").take(120), o.optBoolean("playing"),
@@ -352,6 +357,10 @@ class LinkClient(
     fun call(state: String, name: String, number: String) =
         send(JSONObject().put("type", "call").put("state", state).put("name", name.take(64)).put("number", number.take(32)))
 
+    /** Which notices are switched off on the island (kind names) and when that last changed; the newest change wins. */
+    fun filter(off: List<String>, at: Long) =
+        send(JSONObject().put("type", "filter").put("off", org.json.JSONArray(off)).put("at", at))
+
     fun declineFile(id: String) = send(JSONObject().put("type", "fileDecline").put("id", id))
 
     /** Tells the PC whether the files arrived whole (saved) or not. */
@@ -413,6 +422,8 @@ class LinkClient(
 
         fun pingEvery(route: Route) = if (route == Route.Relay) RELAY_PING_EVERY_MS else PING_EVERY_MS
         const val MAX_COMMAND = 500
+        /** More names than there are kinds is not our list. */
+        const val MAX_FILTER = 32
         /** Same limit as the PC's PhoneLink.MaxClipChars. */
         const val MAX_CLIP = 16_000
 

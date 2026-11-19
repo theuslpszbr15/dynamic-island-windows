@@ -26,9 +26,9 @@ fun AppUpdateCard() {
     val version = remember(context) {
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() } catch (_: Exception) { "" }
     }
-    Column(Modifier.fillMaxWidth().background(Color(0xFF1C1C1E), RoundedCornerShape(18.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().background(Color(0xFF202020), RoundedCornerShape(24.dp)).padding(16.dp)) {
         Text("Atualização do app", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Text("Versão instalada: $version (${AppUpdate.installed(context)})", color = Color(0xFF8E8E93), fontSize = 13.sp)
+        Text("Versão instalada: $version (${AppUpdate.installed(context)})", color = Color(0xFFA19F9A), fontSize = 13.sp)
         val (text, warn) = when (val s = state) {
             UpdateState.Idle -> "" to false
             UpdateState.Checking -> "Verificando…" to false
@@ -40,7 +40,7 @@ fun AppUpdateCard() {
                     "para o Dynamic Island; permita, volte e toque em Instalar.") to false
             is UpdateState.Error -> s.message to true
         }
-        if (text.isNotEmpty()) Text(text, color = if (warn) Color(0xFFFF9F0A) else Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        if (text.isNotEmpty()) Text(text, color = if (warn) Color(0xFFF5B544) else Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
         val busy = state is UpdateState.Checking || state is UpdateState.Downloading
         if (state is UpdateState.Ready) {
             Button(onClick = { AppUpdater.install(context) }, modifier = Modifier.padding(top = 10.dp), shape = RoundedCornerShape(14.dp)) { Text("Instalar") }

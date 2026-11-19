@@ -79,6 +79,13 @@ public partial class IslandWindow : Window
         _media = new MediaService(Dispatcher, settings);
         _volume = new VolumeService(Dispatcher);
         _spotifyVolume = new AppVolumeService(Dispatcher);
+        JarvisBrain.SpotifyVolume = a => a switch
+        {
+            "aumentar" => Dispatcher.Invoke(() => _spotifyVolume.Nudge(0.10f)),
+            "diminuir" => Dispatcher.Invoke(() => _spotifyVolume.Nudge(-0.10f)),
+            "mudo" => Dispatcher.Invoke(() => _spotifyVolume.ToggleMute()),
+            _ => false
+        };
         _battery = new BatteryService(Dispatcher);
         _hub = new AgentHub(Dispatcher);
         _notifications = new NotificationService(Dispatcher);
@@ -363,9 +370,14 @@ public partial class IslandWindow : Window
         clip.Rect = flatTop ? new Rect(0, -r, w, h + r) : new Rect(0, 0, w, h);
         clip.RadiusX = clip.RadiusY = r;
         IslandContent.Clip = clip;
-        GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = IslandBg.CornerRadius;
+        GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = GlowRim.CornerRadius = IslandBg.CornerRadius;
         _glow.CornerRadius = r;
         foreach (Border layer in ShadowLayers.Children)
+        {
+            var spread = -layer.Margin.Left;
+            layer.CornerRadius = flatTop ? new CornerRadius(0, 0, r + spread, r + spread) : new CornerRadius(r + spread);
+        }
+        foreach (Border layer in GlowLayers.Children)
         {
             var spread = -layer.Margin.Left;
             layer.CornerRadius = flatTop ? new CornerRadius(0, 0, r + spread, r + spread) : new CornerRadius(r + spread);
@@ -394,6 +406,7 @@ public partial class IslandWindow : Window
         var approval = _transient == Transient.Approval;
         ApprovalPanel.Visibility = Vis(approval && !ApprovalQuiet);
         ApprovalPill.Visibility = Vis(approval && ApprovalQuiet);
+        GlowLayers.Visibility = GlowRim.Visibility = Vis(approval && _settings.GlowLook);
         if ((approval && ApprovalQuiet) != _pillPulsing)
         {
             _pillPulsing = approval && ApprovalQuiet;
@@ -683,7 +696,9 @@ public partial class IslandWindow : Window
     {
         if (!_expanded && _transient == Transient.Volume)
         {
-            _volume.Nudge(e.Delta > 0 ? 0.02f : -0.02f);
+            // Wheel on the volume pill adjusts Spotify only; with no Spotify session it falls back to the master volume.
+            if (!_spotifyVolume.Nudge(e.Delta > 0 ? 0.02f : -0.02f))
+                _volume.Nudge(e.Delta > 0 ? 0.02f : -0.02f);
             e.Handled = true;
             return;
         }

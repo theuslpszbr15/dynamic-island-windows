@@ -40,9 +40,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val CardColor = Color(0xFF1C1C1E)
-private val MutedColor = Color(0xFF8E8E93)
-private val BlueColor = Color(0xFF0A84FF)
+private val CardColor = Color(0xFF202020)
+private val MutedColor = Color(0xFFA19F9A)
+private val BlueColor = Color(0xFFF0EFEC)
 
 /** The island's switch, Android's permissions, its size and place (live) and the music / Discord reading. */
 @Composable
@@ -50,17 +50,19 @@ fun IslandSettingsCard() {
     val context = LocalContext.current
     // Android's settings change behind the app's back: look again every second while this is on screen
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { IslandLook.load(context); while (true) { delay(1_000); tick++ } }
+    LaunchedEffect(Unit) { Focus.load(context); IslandLook.load(context); while (true) { delay(1_000); tick++ } }
     val on = remember(tick) { IslandOverlay.isOn(context) }
     val canDraw = remember(tick) { IslandOverlay.canShow(context) }
     val above = remember(tick) { IslandOverlay.isAbove() }
     val aboveOn = remember(tick) { IslandAccessibility.enabled(context) }
     val access = remember(tick) { DiscordListener.enabled(context) }
     val look by IslandLook.state.collectAsState()
+    val focus by Focus.state.collectAsState()
+    val seen by Focus.seen.collectAsState()
     var showSeen by remember { mutableStateOf(false) }
     fun change(l: Look) = IslandLook.set(context, l)
 
-    Column(Modifier.fillMaxWidth().background(CardColor, RoundedCornerShape(18.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().background(CardColor, RoundedCornerShape(24.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Ilha", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
@@ -74,7 +76,7 @@ fun IslandSettingsCard() {
             }, modifier = Modifier.padding(start = 12.dp))
         }
         if (on && !canDraw) {
-            Text("Falta permitir \"Sobrepor a outros apps\" para o Dynamic Island.", color = Color(0xFFFF9F0A), fontSize = 13.sp,
+            Text("Falta permitir \"Sobrepor a outros apps\" para o Dynamic Island.", color = Color(0xFFF5B544), fontSize = 13.sp,
                 modifier = Modifier.padding(top = 8.dp))
             TextButton(onClick = { context.startActivity(IslandOverlay.permissionIntent(context)) }) { Text("Permitir") }
         }
@@ -83,7 +85,7 @@ fun IslandSettingsCard() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Look.presets.forEach { (name, apply) ->
                 Text(name, color = Color.White, fontSize = 12.5.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2C2C2E))
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2C2C2B))
                         .clickable { change(apply(look)) }.padding(horizontal = 12.dp, vertical = 7.dp))
             }
         }
@@ -119,7 +121,15 @@ fun IslandSettingsCard() {
             }
             Switch(checked = look.hide, onCheckedChange = { change(look.copy(hide = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
-        TextButton(onClick = { change(Look(media = look.media, hide = look.hide, dock = look.dock)) }) { Text("Voltar ao padrão") }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Rolagem na ilha", color = Color.White, fontSize = 13.5.sp)
+                Text("Textos longos deslizam na pílula e as listas dos cartões rolam com o dedo. Desligado, o que não cabe é cortado.",
+                    color = MutedColor, fontSize = 12.sp)
+            }
+            Switch(checked = look.scroll, onCheckedChange = { change(look.copy(scroll = it)) }, modifier = Modifier.padding(start = 12.dp))
+        }
+        TextButton(onClick = { change(Look(media = look.media, hide = look.hide, dock = look.dock, scroll = look.scroll)) }) { Text("Voltar ao padrão") }
 
         Section("Por cima da barra de notificações")
         Text(
@@ -140,6 +150,38 @@ fun IslandSettingsCard() {
             }
             Switch(checked = look.dock, onCheckedChange = { change(look.copy(dock = it)) }, modifier = Modifier.padding(start = 12.dp))
         }
+
+        Section("Foco")
+        Text("Silencia só as notificações de outros apps na ilha. Ligações, temporizador, agentes e o resto continuam. " +
+            "Para silenciar um app, toque em \"Silenciar\" na notificação dele, no cartão Notificações.", color = MutedColor, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            Text("Foco ligado agora", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
+            Switch(checked = focus.manual, onCheckedChange = { Focus.setManual(context, it) })
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Horário silencioso: ${Focus.clock(focus.fromMin)} às ${Focus.clock(focus.toMin)}", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
+            Switch(checked = focus.quiet, onCheckedChange = { Focus.setQuiet(context, it) })
+        }
+        if (focus.quiet) {
+            Setting("Começa às", Focus.clock(focus.fromMin), focus.fromMin.toFloat(), 0f..1410f) { Focus.setHours(context, (it / 30).roundToInt() * 30, focus.toMin) }
+            Setting("Termina às", Focus.clock(focus.toMin), focus.toMin.toFloat(), 0f..1410f) { Focus.setHours(context, focus.fromMin, (it / 30).roundToInt() * 30) }
+        }
+        val apps = (focus.muted + seen.keys).distinct().sortedBy { (seen[it] ?: it).lowercase() }
+        if (apps.isNotEmpty()) {
+            Text("Apps", color = Color.White, fontSize = 13.5.sp, modifier = Modifier.padding(top = 8.dp))
+            apps.forEach { pkg ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(seen[pkg] ?: pkg, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                    Switch(checked = pkg !in focus.muted, onCheckedChange = { Focus.toggleMute(context, pkg) })
+                }
+            }
+        }
+
+        Section("Ligações")
+        Text(if (PhoneRings.canSee(context)) "A ilha mostra quem está ligando e as chamadas perdidas." + (if (PhoneRings.canControl(context)) " Atender e recusar estão liberados." else " Para atender e recusar, ela pede a permissão na primeira vez.")
+            else "Para mostrar ligações na ilha, permita o acesso ao telefone. O nome vem dos seus contatos e nada sai do celular.",
+            color = MutedColor, fontSize = 13.sp)
+        if (!PhoneRings.canSee(context)) TextButton(onClick = { PermissionActivity.ask(context, PhoneRings.permissions) }) { Text("Permitir") }
 
         // a build without the listener declared (see AndroidManifest) has nothing to switch on here
         if (DiscordListener.available(context)) {

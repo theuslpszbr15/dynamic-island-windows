@@ -44,6 +44,7 @@ public partial class IslandWindow
             _phone.Clip += OnPhoneClip;
             _phone.Remote += OnPhoneRemote;
             _phone.Call += OnPhoneCall;
+            _phone.FilterFromPhone += OnPhoneFilter;
             _phone.PhonesChanged += PublishPhonePc;
             _phone.History = History;
         }
@@ -57,6 +58,7 @@ public partial class IslandWindow
             ShowInfo("\uE8EA", "Ligação com o celular não iniciou", ex.Message, glyphColor: Meter.Red, seconds: 5);
             return;
         }
+        if (_settings.IslandOffAt > 0) _phone.PublishFilter(_settings.IslandOffKinds, _settings.IslandOffAt);
         PublishPhoneSessions();
         PublishPhoneTray();
         foreach (var approval in _approvals) PublishApproval(approval);
@@ -440,4 +442,35 @@ public partial class IslandWindow
 
     static string SizeText(long bytes) =>
         bytes < 1024 * 1024 ? $"{Math.Max(1, bytes / 1024)} KB" : $"{bytes / (1024.0 * 1024.0):0.#} MB";
+
+    /// <summary>A phone's "Avisos da ilha" changed (or it just connected). The newest change wins and goes to every phone;
+    /// an older one is answered with what the PC has, so the phone catches up.</summary>
+    void OnPhoneFilter(IReadOnlyList<string> off, long at)
+    {
+        if (PhoneLink.FilterIsNewer(_settings.IslandOffAt, at))
+        {
+            _settings.IslandOffKinds = off.ToList();
+            _settings.IslandOffAt = at;
+            _settings.Save();
+            _phone?.PublishFilter(off, at);
+        }
+        else if (_settings.IslandOffAt > at)
+            _phone?.PublishFilter(_settings.IslandOffKinds, _settings.IslandOffAt);
+    }
+
+    /// <summary>Turns one notice on or off on the phone's island from the PC's settings; goes to every phone.</summary>
+    public void SetNoticeShown(string kind, bool shown)
+    {
+        var next = _settings.IslandOffKinds.Where(k => k != kind).ToList();
+        if (!shown) next.Add(kind);
+        if (next.Count == _settings.IslandOffKinds.Count && next.All(_settings.IslandOffKinds.Contains)) return;
+        _settings.IslandOffKinds = next;
+        _settings.IslandOffAt = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), _settings.IslandOffAt + 1);
+        _settings.Save();
+        _phone?.PublishFilter(next, _settings.IslandOffAt);
+    }
+
+    public bool NoticeShown(string kind) => !NoticeOff(kind);
+
+    bool NoticeOff(string kind) => _settings.IslandOffKinds.Contains(kind);
 }

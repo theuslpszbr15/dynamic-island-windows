@@ -65,6 +65,8 @@ public sealed class IslandSettings
             Save();
         }
     }
+    /// <summary>The soft orange glow behind the settings page and around the open island.</summary>
+    public bool GlowLook { get; set; } = true;
     /// <summary>Animated aurora light rim and glow around the island.</summary>
     public bool AuroraLook { get; set; }
     /// <summary>Hides the island when the focused window's top bar sits right under it (e.g. maximized browser tabs).</summary>
@@ -128,6 +130,10 @@ public sealed class IslandSettings
     public bool DiscordLeaves { get; set; } = true;
     /// <summary>Who joins and leaves also goes to the paired phone's floating island (over the same pinned link).</summary>
     public bool DiscordToPhone { get; set; } = true;
+    /// <summary>Notices switched off on the phone's island ("Avisos da ilha"), shared with the phone over the link.</summary>
+    public List<string> IslandOffKinds { get; set; } = [];
+    /// <summary>When that list last changed (Unix ms, 0 = never): the newest side wins when PC and phone disagree.</summary>
+    public long IslandOffAt { get; set; }
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
     public FullscreenMode Fullscreen { get; set; } = FullscreenMode.Alerts;
     public bool CheckUpdates { get; set; } = true;

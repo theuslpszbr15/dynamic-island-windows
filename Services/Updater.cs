@@ -95,7 +95,10 @@ public static class Updater
         var bytes = await Http.GetByteArrayAsync(info.Url);
         var actual = Convert.ToHexString(SHA256.HashData(bytes));
         if (!actual.Equals(info.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Warn("Updater", $"digest mismatch for {info.Url}: expected {info.Sha256}, got {actual} ({bytes.Length} bytes)");
             throw new InvalidDataException("O arquivo baixado não confere com o da release.");
+        }
 
         var folder = Path.Combine(Path.GetTempPath(), "DynamicIsland-update-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(folder);

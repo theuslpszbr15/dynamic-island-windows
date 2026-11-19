@@ -21,12 +21,15 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
@@ -34,13 +37,28 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.core.snap
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,7 +70,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -60,12 +82,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -76,7 +101,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -84,6 +113,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -103,14 +133,15 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.delay
 
 private val Black = Color(0xFF000000)
-private val Card = Color(0xFF1C1C1E)
-private val Muted = Color(0xFF9A9AA0)
-private val Blue = Color(0xFF0A84FF)
-private val Orange = Color(0xFFFF9F0A)
-private val Green = Color(0xFF30D158)
-private val Red = Color(0xFFFF453A)
-private val DiscordBlue = Color(0xFF5865F2)
+private val Chip = Color(0xFF242423)
 private val ClaudeOrange = Color(0xFFD97757)
+private val Card = Color(0xFF202020)
+private val Muted = Color(0xFFA19F9A)
+private val Blue = Color(0xFFF0EFEC)
+private val Orange = Color(0xFFF5B544)
+private val Green = Color(0xFF4ADE80)
+private val Red = Color(0xFFF26B63)
+private val DiscordBlue = Color(0xFF5865F2)
 
 /**
  * The island: a black pill at the top of the screen, over any app, sized and placed as the person set it
@@ -169,7 +200,8 @@ object IslandOverlay {
     fun refresh(context: Context) {
         val app = context.applicationContext
         main.post {
-            IslandLook.load(app); IslandFilter.load(app)
+            IslandLook.load(app); IslandFilter.load(app); Timers.load(app)
+            BatteryWatcher.start(app); RecordingWatcher.start(app); PhoneRings.start(app); Focus.load(app)
             val host = above
             val want = isOn(app) && (host != null || canDraw(app))
             // the accessibility service came or went: the window moves to (or from) above the status bar
@@ -440,6 +472,15 @@ private fun IslandUi(
     val discord by Island.discord.collectAsState()
     val call by Island.call.collectAsState()
     val claude by Island.claude.collectAsState()
+    val notes by Island.notes.collectAsState()
+    val handled by Island.handled.collectAsState()
+    val pending = remember(link.sessions, handled) { Island.pending(link.sessions, handled) }
+    val timer by Timers.state.collectAsState()
+    val battery by BatteryWatcher.state.collectAsState()
+    val recording by RecordingWatcher.state.collectAsState()
+    val ring by PhoneRings.ring.collectAsState()
+    val live by Island.live.collectAsState()
+    val pinned by Island.pinned.collectAsState()
     val mediaState by Island.media.collectAsState()
     val art by MediaWatcher.art.collectAsState()
     val look by IslandLook.state.collectAsState()
@@ -453,15 +494,17 @@ private fun IslandUi(
     val needsClock = open != null ||
         call != null ||
         claude?.let { wall - it.at in 0..Island.CLAUDE_MS } == true ||
+        notes.any { wall - it.at in 0..Island.NOTE_MS } ||
+        timer.running || (battery?.let { wall - it.at in 0..BatteryWatcher.FLASH_MS } == true) || (recording.any && wall - recording.since in 0..Island.FLASH_MS) ||
         discord.any { wall - it.at in 0..Island.FLASH_MS } ||
         transfers.any { it.state == LiveTransfer.State.Running || wall - it.at in 0..Island.FLASH_MS }
     LaunchedEffect(needsClock) {
         if (!needsClock) return@LaunchedEffect
-        while (true) { delay(500); now = System.currentTimeMillis() }
+        while (true) { delay(500); now = System.currentTimeMillis(); Timers.tick(context, now) }
     }
 
     val media = if (look.media) mediaState else null
-    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude, off)
+    val pill = Island.pill(link.approvals.size, link.files.size, outgoing.size, transfers, discord, call, media, now, claude, off = off, notes = notes, pending = pending, timer = timer, battery = battery, recording = recording, ring = ring, live = live)
     val screen = LocalConfiguration.current.screenWidthDp.dp
 
     // What shows: an open card, a short notice, the song (cover and bars beside the camera) or the resting pill;
@@ -469,13 +512,17 @@ private fun IslandUi(
     val shown: Any = open ?: when (pill.kind) {
         Pill.Kind.Idle -> "rest"
         Pill.Kind.Media -> "media"
-        else -> "pill"
+        // each new notice is its own content, so it animates in (slides down, the old one slides out)
+        else -> "pill:${pill.kind}:${if (pill.kind == Pill.Kind.Timer || pill.kind == Pill.Kind.Live) "" else pill.text}"
     }
     var hidden by remember { mutableStateOf(false) }
     LaunchedEffect(shown, look.hide) {
         hidden = false
         if (look.hide && shown == "rest") { delay(HIDE_AFTER_MS); hidden = true }
     }
+    // the notice sliding out keeps its own words (the pill already says the next one)
+    val seen = remember { HashMap<String, Triple<Pill, AppNote?, DiscordEvent?>>() }
+    if (shown is String && shown.startsWith("pill:")) { if (seen.size > 6) seen.clear(); seen[shown] = Triple(pill, if (pill.kind == Pill.Kind.Live) live.firstOrNull()?.let { AppNote(it.key, it.pkg, it.app, it.title, it.text, it.at, "progress") } else notes.firstOrNull(), discord.firstOrNull()) }
     val target: Any = if (hidden && shown == "rest") "hidden" else shown
     LaunchedEffect(target, pill.kind) { stage() }
 
@@ -493,7 +540,8 @@ private fun IslandUi(
     val tapKind = when {
         pill.kind != Pill.Kind.Idle -> pill.kind
         media != null -> Pill.Kind.Media
-        else -> null
+        // resting: the hub opens too, so Notificações and Esperando você are always reachable (swipe sideways from there)
+        else -> Pill.Kind.Notification
     }
     Box(
         Modifier
@@ -514,7 +562,26 @@ private fun IslandUi(
         AnimatedContent(
             targetState = target,
             transitionSpec = {
-                (fadeIn(tween(150, delayMillis = 50)) togetherWith fadeOut(tween(50))) using SizeTransform(clip = true) { from, to ->
+                val pages = Island.hubPages(media != null)
+                val before = (initialState as? Pill.Kind)?.let(pages::indexOf) ?: -1
+                val after = (targetState as? Pill.Kind)?.let(pages::indexOf) ?: -1
+                val notice = { s: Any -> s is String && s.startsWith("pill:") }
+                val change = when {
+                    // page to page: the new one slides in from the side the finger went, the old one leaves the other way
+                    before >= 0 && after >= 0 && before != after -> {
+                        val dir = if (after > before) 1 else -1
+                        (slideInHorizontally(spring(0.85f, 380f)) { it * dir / 3 } + fadeIn(tween(220, delayMillis = 40))) togetherWith
+                            (slideOutHorizontally(tween(200, easing = FastOutLinearInEasing)) { -it * dir / 3 } + fadeOut(tween(120)))
+                    }
+                    // one notice replacing another: drops in from the top, the old one lifts away
+                    notice(initialState) && notice(targetState) ->
+                        (slideInVertically(spring(0.75f, 420f)) { -it / 2 } + fadeIn(tween(200, delayMillis = 40)) + scaleIn(spring(0.8f, 420f), 0.9f)) togetherWith
+                            (slideOutVertically(tween(160)) { it / 3 } + fadeOut(tween(110)))
+                    // opening or closing: the content swells in with a little spring while the island grows around it
+                    else -> (fadeIn(tween(200, delayMillis = 60)) + scaleIn(spring(0.8f, 380f), 0.92f)) togetherWith
+                        (fadeOut(tween(90)) + scaleOut(tween(120), 0.96f))
+                }
+                change using SizeTransform(clip = true) { from, to ->
                     when {
                         // docked: it goes back up into the edge, and comes down out of it
                         docked && to == IntSize.Zero -> tween(360, easing = FastOutSlowInEasing)
@@ -539,13 +606,20 @@ private fun IslandUi(
         ) { which ->
             when (which) {
                 "hidden" -> Box(Modifier.size(0.dp))
-                "rest" -> Box(Modifier.size(look.width.dp, look.height.dp))
-                "media" -> MediaPill(look, art, media)
-                "pill" -> Notice(pill, look, art, discord, screen)
+                "rest" -> Box(Modifier.size(look.width.dp, look.height.dp)) {
+                    // the red dot: the microphone or a camera is in use (Android shows its own too, this one is on the island)
+                    if (recording.any && Pill.Kind.Recording !in off) RecordDot(Modifier.align(Alignment.CenterEnd).padding(end = look.height.dp / 3))
+                }
+                "media" -> MediaPill(look, art, media, context)
+                is String -> seen[which]?.let { (p, n, d) -> Notice(p, look, art, listOfNotNull(d), n, screen) }
                 is Pill.Kind -> Box(Modifier.width(minOf(screen - 16.dp, 380.dp)).padding(14.dp)) {
+                    val card: @Composable () -> Unit = {
                     OpenCard(which, context, link, outgoing, transfers,
                         // one card holds the PC's people and the phone's own call: each half follows its own switch
-                        if (Pill.Kind.Discord in off) emptyList() else discord, if (Pill.Kind.Call in off) null else call, claude, media, art, now, onOpen)
+                        if (Pill.Kind.Discord in off) emptyList() else discord, if (Pill.Kind.Call in off) null else call, claude, media, art, now,
+                        notes, pending, look.scroll, timer, battery, recording, ring, live, pinned, onOpen)
+                    }
+                    if (which in Island.hubPages(media != null)) Hub(which, media != null, onOpen, card) else card()
                 }
                 else -> {}
             }
@@ -584,16 +658,17 @@ private class DockShape(val radius: Dp, val shoulder: Dp) : Shape {
  * wider than at rest. Its size follows the person's choices, never the song's name (that is in the player).
  */
 @Composable
-private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?) {
+private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?, context: Context) {
     val h = look.height.dp
     val icon = (h - 8.dp).coerceAtLeast(14.dp)
     Row(
         Modifier.size(look.width.dp + h * 2, h).padding(horizontal = (h - icon) / 2 + 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (art != null) Cover(art, icon, icon * 0.28f)
-        else Box(Modifier.size(icon).background(Green, CircleShape), contentAlignment = Alignment.Center) {
-            Text("♪", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        // a tap on the cover opens the song's screen in its app (Spotify…); anywhere else on the pill opens the player card
+        Box(Modifier.clip(RoundedCornerShape(icon * 0.28f)).clickable { MediaWatcher.openApp(context) }) {
+            if (art != null) Cover(art, icon, icon * 0.28f)
+            else IconChip(R.drawable.ic_music, icon)
         }
         Spacer(Modifier.weight(1f))
         Wave(media?.playing == true)
@@ -602,36 +677,95 @@ private fun MediaPill(look: Look, art: Bitmap?, media: NowPlaying?) {
 
 /** The grown pill: an icon, one line and what a tap does. Always the same width: a long text is cut, never stretches it. */
 @Composable
-private fun Notice(pill: Pill, look: Look, art: Bitmap?, discord: List<DiscordEvent>, screen: Dp) {
-    val height = maxOf(look.height.dp, if (pill.hint.isNotEmpty()) 44.dp else 0.dp)
+@OptIn(ExperimentalFoundationApi::class)
+private fun Notice(pill: Pill, look: Look, art: Bitmap?, discord: List<DiscordEvent>, note: AppNote?, screen: Dp) {
+    val height = maxOf(look.height.dp, if (pill.kind == Pill.Kind.Notification) 50.dp else if (pill.hint.isNotEmpty()) 44.dp else 0.dp)
     val width = minOf(screen - 16.dp, maxOf(look.width.dp + 120.dp, 250.dp))
+    // with "Rolagem" on, a line too long for the pill slides by instead of being cut
+    val slide = if (look.scroll) Modifier.basicMarquee(iterations = 2, initialDelayMillis = 900) else Modifier
+    val overflow = if (look.scroll) TextOverflow.Clip else TextOverflow.Ellipsis
     Row(
         Modifier.size(width, height).padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Leading(pill, art, discord.firstOrNull(), size = (height - 12.dp).coerceIn(20.dp, 32.dp))
+        val size = (height - 12.dp).coerceIn(20.dp, 32.dp)
+        if ((pill.kind == Pill.Kind.Notification || pill.kind == Pill.Kind.Live) && note != null) NoteIcon(note, size)
+        else Leading(pill, art, discord.firstOrNull(), size = size)
         Column(Modifier.padding(horizontal = 8.dp).weight(1f)) {
+            // the notification's own app is the first words: the logo says it too, but not every logo is known
+            if ((pill.kind == Pill.Kind.Notification || pill.kind == Pill.Kind.Live) && note != null && note.title.isNotEmpty())
+                Text(note.app, color = Muted, fontSize = 9.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(pill.text, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+                overflow = overflow, modifier = slide)
             if (pill.hint.isNotEmpty())
-                Text(pill.hint, color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(pill.hint, color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = overflow, modifier = slide)
         }
         when (pill.kind) {
-            Pill.Kind.Offer, Pill.Kind.Approval, Pill.Kind.Outgoing -> if (pill.count > 1) Badge(pill.count, colorOf(pill.kind))
+            Pill.Kind.Offer, Pill.Kind.Approval, Pill.Kind.Outgoing, Pill.Kind.Pending -> if (pill.count > 1) Badge(pill.count, colorOf(pill.kind))
             else -> {}
         }
     }
 }
 
+/** The app's logo, arriving its own way ([NoteStyle], from the kind of notification) each time a new one comes. */
+@Composable
+private fun NoteIcon(note: AppNote, size: Dp) {
+    val icons by AppIcons.icons.collectAsState()
+    val icon = icons[note.pkg]
+    val style = NoteStyle.of(note.category, note.pkg)
+    val progress = remember(note.key, note.at) { Animatable(0f) }
+    LaunchedEffect(note.key, note.at) { progress.animateTo(1f, tween(900, easing = LinearEasing)) }
+    val f = style.frame(progress.value)
+    val wide = with(LocalDensity.current) { size.toPx() }
+    Box(
+        Modifier.size(size).graphicsLayer {
+            scaleX = f.scale; scaleY = f.scale
+            rotationZ = f.rotation
+            translationX = f.dx * wide
+            alpha = f.alpha
+            if (f.swingFromTop) transformOrigin = TransformOrigin(0.5f, 0f)
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (icon != null) Image(icon.asImageBitmap(), null, modifier = Modifier.size(size).clip(RoundedCornerShape(size * 0.24f)))
+        else Box(Modifier.size(size).background(Muted, CircleShape), contentAlignment = Alignment.Center) {
+            Text(note.app.take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** Colour says a status, not a kind: amber for a request, red for the camera, the agent's own orange; the rest is plain. */
 private fun colorOf(kind: Pill.Kind) = when (kind) {
     Pill.Kind.Approval -> Orange
     Pill.Kind.Claude -> ClaudeOrange
-    Pill.Kind.Offer -> Green
-    Pill.Kind.Transfer, Pill.Kind.Outgoing -> Blue
-    Pill.Kind.Discord, Pill.Kind.Call -> DiscordBlue
-    Pill.Kind.Media -> Green
-    Pill.Kind.Idle -> Muted
+    Pill.Kind.Recording -> Red
+    else -> Blue
 }
+
+private fun iconOf(kind: Pill.Kind): Int = when (kind) {
+    Pill.Kind.Approval, Pill.Kind.Claude -> R.drawable.ic_agent
+    Pill.Kind.Offer -> R.drawable.ic_download
+    Pill.Kind.Transfer -> R.drawable.ic_swap
+    Pill.Kind.Outgoing -> R.drawable.ic_upload
+    Pill.Kind.Discord, Pill.Kind.Call -> R.drawable.ic_chat
+    Pill.Kind.Media -> R.drawable.ic_music
+    Pill.Kind.Notification -> R.drawable.ic_bell
+    Pill.Kind.Pending -> R.drawable.ic_dots
+    Pill.Kind.Timer -> R.drawable.ic_timer
+    Pill.Kind.Battery -> R.drawable.ic_battery
+    Pill.Kind.Recording -> R.drawable.ic_mic
+    Pill.Kind.Ring -> R.drawable.ic_phone
+    Pill.Kind.Live -> R.drawable.ic_chevron
+    Pill.Kind.Today -> R.drawable.ic_sun
+    Pill.Kind.Idle -> R.drawable.ic_dots
+}
+
+/** A small square holding the icon of what this is about (warm grey, so it sits inside the black pill). */
+@Composable
+private fun IconChip(icon: Int, size: Dp, tint: Color = Color.White) =
+    Box(Modifier.size(size).background(Chip, RoundedCornerShape(size * 0.3f)), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(icon), null, tint = tint, modifier = Modifier.size(size * 0.56f))
+    }
 
 @Composable
 private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
@@ -639,28 +773,19 @@ private fun Leading(pill: Pill, art: Bitmap?, event: DiscordEvent?, size: Dp) {
     when {
         pill.kind == Pill.Kind.Media && art != null -> Cover(art, size, 7.dp)
         avatar != null -> Avatar(event!!, size)
-        else -> {
-            val glyph = when (pill.kind) {
-                Pill.Kind.Approval -> "!"
-                Pill.Kind.Claude -> "✳"
-                Pill.Kind.Offer -> "↓"
-                Pill.Kind.Transfer -> "⇅"
-                Pill.Kind.Outgoing -> "↑"
-                Pill.Kind.Discord, Pill.Kind.Call -> event?.name?.take(1)?.uppercase() ?: "☏"
-                Pill.Kind.Media -> "♪"
-                Pill.Kind.Idle -> ""
+        (pill.kind == Pill.Kind.Discord || pill.kind == Pill.Kind.Call) && event?.name?.isNotEmpty() == true ->
+            Box(Modifier.size(size).background(Chip, CircleShape), contentAlignment = Alignment.Center) {
+                Text(event.name.take(1).uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
-            Box(Modifier.size(size).background(colorOf(pill.kind), CircleShape), contentAlignment = Alignment.Center) {
-                Text(glyph, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        else -> IconChip(iconOf(pill.kind), size, tint = colorOf(pill.kind).let { if (it == Blue) Color.White else it })
     }
 }
 
+/** A count on the right of a notice: off-white, dark number. */
 @Composable
 private fun Badge(n: Int, color: Color) =
-    Box(Modifier.size(20.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
-        Text("$n", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    Box(Modifier.size(20.dp).background(Color(0xFFF0EFEC), CircleShape), contentAlignment = Alignment.Center) {
+        Text("$n", color = Color(0xFF141416), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 
 /** Four bars bouncing while the song plays (still when paused). */
@@ -674,7 +799,7 @@ private fun Wave(playing: Boolean) {
         val w = size.width / 7
         phases.forEachIndexed { i, p ->
             val h = size.height * (if (playing) p.value else 0.25f)
-            drawRoundRect(Green, Offset(i * 2 * w, (size.height - h) / 2), Size(w, h), CornerRadius(w / 2))
+            drawRoundRect(Blue, Offset(i * 2 * w, (size.height - h) / 2), Size(w, h), CornerRadius(w / 2))
         }
     }
 }
@@ -707,6 +832,15 @@ private fun OpenCard(
     media: NowPlaying?,
     art: Bitmap?,
     now: Long,
+    notes: List<AppNote>,
+    pending: List<Session>,
+    scroll: Boolean,
+    timer: TimerState,
+    battery: BatteryInfo?,
+    recording: Recording,
+    ring: PhoneRing?,
+    live: List<LiveNote>,
+    pinned: Set<String>,
     onOpen: (Pill.Kind?) -> Unit,
 ) {
     val close = { onOpen(null) }
@@ -714,6 +848,7 @@ private fun OpenCard(
         Pill.Kind.Media -> if (media != null) Player(context, media, art, now) else Gone(close)
         Pill.Kind.Offer -> link.files.firstOrNull()?.let { offer ->
             Ask(
+                icon = R.drawable.ic_download,
                 title = "O PC quer mandar ${if (offer.isText) "um texto" else offer.label}",
                 detail = Notifications.sizeText(offer.totalBytes) + if (link.files.size > 1) " · mais ${link.files.size - 1} esperando" else "",
                 no = "Rejeitar" to { Link.declineFile(context, offer.id); if (link.files.size <= 1) close() },
@@ -722,6 +857,7 @@ private fun OpenCard(
         } ?: Gone(close)
         Pill.Kind.Approval -> link.approvals.firstOrNull()?.let { a ->
             Ask(
+                icon = R.drawable.ic_agent, tint = Orange, mono = true,
                 title = "${a.agent}${if (a.project.isBlank()) "" else " · ${a.project}"} quer rodar",
                 detail = a.command,
                 no = "Negar" to { Link.decide(context, a.fingerprint, allow = false); if (link.approvals.size <= 1) close() },
@@ -780,8 +916,246 @@ private fun OpenCard(
                     }
                 }
             }
+        Pill.Kind.Notification -> if (notes.isEmpty()) Column {
+            Text("Nenhuma notificação agora.", color = Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
+        } else Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Deslize para dispensar · segure para fixar", color = Muted, fontSize = 10.5.sp)
+                }
+                // "Limpar" keeps what the person pinned
+                val focus by Focus.state.collectAsState()
+                Text(if (focus.manual) "Foco ligado" else "Foco", color = if (focus.manual) Orange else Muted, fontSize = 12.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable { Focus.setManual(context, !focus.manual) }.padding(horizontal = 10.dp, vertical = 4.dp))
+                Text("Limpar", color = Muted, fontSize = 12.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable { notes.filter { it.key !in pinned }.forEach { DiscordListener.dismissNote(it.key) }; if (pinned.isEmpty()) close() }
+                        .padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+            Column(Modifier.padding(top = 8.dp).heightIn(max = 300.dp).then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val shown = Island.ordered(notes, pinned)
+                (if (scroll) shown else shown.take(4)).forEach { n -> NoteRow(context, n, n.key in pinned, now, scroll, close) }
+            }
+        }
+        Pill.Kind.Ring -> if (ring == null) Gone(close) else Column {
+            Title(if (ring.state == PhoneRing.State.Ringing) ring.who else "Chamada perdida", if (ring.state == PhoneRing.State.Ringing) "Ligando para você" else ring.who)
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (ring.state == PhoneRing.State.Ringing) {
+                    Button("Recusar", Card, Modifier.weight(1f), color = Red) {
+                        if (PhoneRings.canControl(context)) PhoneRings.decline(context) else PermissionActivity.ask(context, PhoneRings.permissions)
+                    }
+                    Button("Atender", Green, Modifier.weight(1f), color = Black) {
+                        if (PhoneRings.canControl(context)) PhoneRings.answer(context) else PermissionActivity.ask(context, PhoneRings.permissions)
+                    }
+                } else {
+                    Button("Dispensar", Card, Modifier.weight(1f)) { PhoneRings.dismissMissed(); close() }
+                    if (ring.number.isNotEmpty()) Button("Ligar de volta", Green, Modifier.weight(1f), color = Black) { PhoneRings.callBack(context, ring.number); PhoneRings.dismissMissed(); close() }
+                }
+            }
+        }
+        Pill.Kind.Live -> if (live.isEmpty()) Gone(close) else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            live.take(4).forEach { l ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { DiscordListener.openNote(context, l.key); close() }, verticalAlignment = Alignment.Top) {
+                    NoteIcon(AppNote(l.key, l.pkg, l.app, l.title, l.text, l.at, "progress"), 34.dp)
+                    Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                        Text(l.app, color = Muted, fontSize = 10.5.sp, maxLines = 1)
+                        if (l.title.isNotEmpty()) Text(l.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (l.text.isNotEmpty()) Text(l.text, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (l.percent >= 0) Box(Modifier.padding(top = 6.dp)) { Bar(l.percent / 100f, Blue) }
+                    }
+                }
+            }
+        }
+        // what the agents still wait for; "Dispensar" also clears the same alert in the shade, so it is not told twice
+        Pill.Kind.Pending -> if (pending.isEmpty()) Column {
+            Text("Nenhum agente esperando.", color = Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
+        } else Column {
+            Column(Modifier.padding(top = 8.dp).heightIn(max = 300.dp).then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                (if (scroll) pending else pending.take(3)).forEach { s ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.agent + if (s.project.isBlank()) "" else " · ${s.project}", color = Color.White, fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(s.detail.ifEmpty { "Precisa da sua resposta no PC." }, color = Muted, fontSize = 12.sp,
+                                maxLines = if (scroll) 4 else 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        Button("Dispensar", Card, Modifier.padding(start = 8.dp)) {
+                            Island.handle(s)
+                            Notifications.cancelSessionAlert(context, s.id)
+                            if (pending.size <= 1) close()
+                        }
+                    }
+                }
+            }
+        }
+        Pill.Kind.Timer -> TimerPage(context, timer, now)
+        Pill.Kind.Today -> TodayPage(context)
+        Pill.Kind.Battery -> Title(battery?.let { (if (it.charging) "Carregando · " else "Bateria · ") + it.percent + "%" } ?: "Bateria",
+            if (battery?.charging == true) "Ligada no carregador." else "Usando a bateria.")
+        Pill.Kind.Recording -> Title(if (recording.any) recording.text else "Nada em uso agora",
+            "Algum app está usando " + (if (recording.camera && !recording.mic) "a câmera" else if (recording.mic && !recording.camera) "o microfone" else "a câmera e o microfone") + ". O Android não diz qual; veja em Configurações › Privacidade. Gravação de tela não aparece aqui.")
         Pill.Kind.Idle -> Gone(close)
     }
+}
+
+/**
+ * One notification in the card: a tap opens it, a long press pins it (it stays at the top and survives "Limpar"), a
+ * swipe to either side dismisses it, and "Responder" answers a message without opening its app.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NoteRow(context: Context, n: AppNote, pinned: Boolean, now: Long, scroll: Boolean, close: () -> Unit) {
+    val focus by Focus.state.collectAsState()
+    val muted = n.pkg in focus.muted
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val width = with(LocalDensity.current) { 340.dp.toPx() }
+    var raw by remember(n.key) { mutableFloatStateOf(0f) }
+    var dragging by remember(n.key) { mutableStateOf(false) }
+    val x by animateFloatAsState(raw, if (dragging) snap() else spring(dampingRatio = 0.7f, stiffness = 500f), label = "swipe")
+    Row(
+        Modifier.fillMaxWidth()
+            .graphicsLayer { translationX = x; alpha = (1f - kotlin.math.abs(x) / width).coerceIn(0f, 1f) }
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (pinned) Card else Color.Transparent)
+            .pointerInput(n.key) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragging = true },
+                    onDragCancel = { dragging = false; raw = 0f },
+                    onDragEnd = {
+                        dragging = false
+                        if (kotlin.math.abs(raw) > 90.dp.toPx()) {
+                            raw = if (raw > 0) width else -width
+                            scope.launch { delay(180); DiscordListener.dismissNote(n.key) }
+                        } else raw = 0f
+                    },
+                ) { _, d -> raw += d }
+            }
+            .combinedClickable(onClick = { DiscordListener.openNote(context, n.key); close() },
+                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); Island.togglePin(n.key) })
+            .padding(if (pinned) 8.dp else 0.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        NoteIcon(n, 34.dp)
+        Column(Modifier.padding(start = 10.dp).weight(1f)) {
+            Text((if (pinned) "Fixada · " else "") + n.app + " · " + ago(now - n.at), color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (n.title.isNotEmpty()) Text(n.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (n.text.isNotEmpty()) Text(n.text, color = Muted, fontSize = 12.sp, maxLines = if (scroll) 6 else 2, overflow = TextOverflow.Ellipsis)
+            Text(if (muted) "Voltar a avisar ${n.app}" else "Silenciar ${n.app}", color = Muted, fontSize = 11.sp,
+                modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(50)).clickable { Focus.toggleMute(context, n.pkg); if (!muted) DiscordListener.dismissNote(n.key) }.padding(vertical = 3.dp, horizontal = 2.dp))
+            if (n.canReply) Text("Responder", color = Blue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50)).clickable { ReplyActivity.open(context, n); close() }.padding(vertical = 3.dp, horizontal = 2.dp))
+        }
+    }
+}
+
+/** "Hoje": the weather and the next events. Each part asks for its own permission the first time, from a button. */
+@Composable
+private fun TodayPage(context: Context) {
+    val weather by Today.weather.collectAsState()
+    val events by Today.events.collectAsState()
+    var tick by remember { mutableIntStateOf(0) }
+    // the permission dialog comes back to this page: look again every few seconds while it is open
+    LaunchedEffect(tick) { Today.refresh(context); delay(4_000); tick++ }
+    val now = System.currentTimeMillis()
+    val calendar = Today.canReadCalendar(context)
+    val located = Today.canLocate(context)
+    Column {
+        if (located) {
+            weather?.let { w ->
+                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconChip(R.drawable.ic_sun, 40.dp)
+                    Column(Modifier.padding(start = 10.dp)) {
+                        Text("${w.temp}° · ${w.label}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text("mín ${w.min}° · máx ${w.max}°", color = Muted, fontSize = 12.sp)
+                    }
+                }
+            } ?: Text("Buscando o clima…", color = Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 8.dp))
+        } else Button("Ver o clima (localização aproximada)", Card, Modifier.padding(top = 8.dp)) {
+            PermissionActivity.ask(context, arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+        if (calendar) {
+            if (events.isEmpty()) Text("Nada na agenda até amanhã.", color = Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 10.dp))
+            Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                events.take(4).forEach { e ->
+                    Row {
+                        Text(e.whenText(now), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(92.dp), maxLines = 1)
+                        Text(e.title + if (e.place.isNotEmpty()) " · ${e.place}" else "", color = Color.White, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        } else Button("Ver a agenda", Card, Modifier.padding(top = 10.dp)) {
+            PermissionActivity.ask(context, arrayOf(android.Manifest.permission.READ_CALENDAR))
+        }
+    }
+}
+
+/** The timer page: presets while idle, then the count with pause and reset. */
+@Composable
+private fun TimerPage(context: Context, t: TimerState, now: Long) = Column {
+    if (!t.active) {
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(1, 5, 10, 25).forEach { m -> Button("$m min", Card, Modifier.weight(1f)) { Timers.countdown(context, m) } }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp)) { Button("Iniciar cronômetro", Blue, Modifier.fillMaxWidth()) { Timers.stopwatch(context) } }
+    } else {
+        Text(if (t.finishedAt > 0) "Acabou!" else t.text(now), color = if (t.finishedAt > 0) Orange else Color.White, fontSize = 38.sp,
+            fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+        if (t.mode == TimerState.Mode.Countdown && t.durationMs > 0) Bar(1f - t.remaining(now).toFloat() / t.durationMs, Orange)
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (t.finishedAt == 0L) Button(if (t.paused) "Continuar" else "Pausar", Card, Modifier.weight(1f)) { Timers.pauseOrResume(context) }
+            Button(if (t.finishedAt > 0) "Fechar" else "Zerar", if (t.finishedAt > 0) Orange else Card, Modifier.weight(1f), color = if (t.finishedAt > 0) Black else Red) { Timers.reset(context) }
+        }
+    }
+}
+
+@Composable
+private fun RecordDot(modifier: Modifier) {
+    val pulse = rememberInfiniteTransition(label = "rec").animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "recDot")
+    Box(modifier.size(7.dp).graphicsLayer { alpha = pulse.value }.background(Red, CircleShape))
+}
+
+/** A tap that answers the finger: it shrinks a little while pressed and springs back. */
+private fun Modifier.pressable(onClick: () -> Unit): Modifier = composed {
+    val source = remember { MutableInteractionSource() }
+    val down by source.collectIsPressedAsState()
+    val s by animateFloatAsState(if (down) 0.92f else 1f, spring(dampingRatio = 0.45f, stiffness = 700f), label = "press")
+    this.graphicsLayer { scaleX = s; scaleY = s }.clickable(source, indication = null, onClick = onClick)
+}
+
+/** The pages of the opened island (like the PC's): a sideways swipe, or a tap on a dot, goes to the next one, wrapping round. */
+@Composable
+private fun Hub(kind: Pill.Kind, hasMedia: Boolean, onOpen: (Pill.Kind?) -> Unit, content: @Composable () -> Unit) {
+    val pages = Island.hubPages(hasMedia)
+    var drag by remember { mutableFloatStateOf(0f) }
+    Column(Modifier.pointerInput(kind, hasMedia) {
+        val threshold = 56.dp.toPx()
+        detectHorizontalDragGestures(
+            onDragStart = { drag = 0f },
+            onDragCancel = { drag = 0f },
+            onDragEnd = { if (kotlin.math.abs(drag) > threshold) onOpen(Island.hubStep(pages, kind, if (drag < 0) 1 else -1)); drag = 0f },
+        ) { _, d -> drag += d }
+    }) {
+        // where you are among the pages: tabs on top, the current one lit
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            pages.forEach { p ->
+                Text(pageName(p), color = if (p == kind) Color.White else Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(if (p == kind) Color.White.copy(alpha = 0.16f) else Chip)
+                        .clickable { onOpen(p) }.padding(horizontal = 9.dp, vertical = 6.dp))
+            }
+        }
+        content()
+    }
+}
+
+private fun pageName(kind: Pill.Kind) = when (kind) {
+    Pill.Kind.Notification -> "Avisos"
+    Pill.Kind.Pending -> "Espera"
+    Pill.Kind.Timer -> "Timer"
+    Pill.Kind.Today -> "Hoje"
+    Pill.Kind.Media -> "Música"
+    else -> kind.name
 }
 
 /** What the card was about is gone (answered elsewhere): back to the pill. */
@@ -792,25 +1166,37 @@ private fun Gone(close: () -> Unit) {
 }
 
 @Composable
-private fun Title(title: String, detail: String) = Column {
-    Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    if (detail.isNotEmpty()) Text(detail, color = Muted, fontSize = 12.5.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
-}
-
-@Composable
-private fun Ask(title: String, detail: String, no: Pair<String, () -> Unit>, yes: Pair<String, () -> Unit>?) = Column {
-    Title(title, detail)
-    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(no.first, Card, Modifier.weight(1f), color = Red, onClick = no.second)
-        if (yes != null) Button(yes.first, Green, Modifier.weight(1f), color = Black, onClick = yes.second)
+private fun Title(title: String, detail: String, icon: Int? = null, tint: Color = Color.White, mono: Boolean = false) = Column {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) { IconChip(icon, 36.dp, tint); Spacer(Modifier.width(10.dp)) }
+        Text(title, color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, fontWeight = FontWeight.Medium,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+    if (detail.isNotEmpty()) {
+        // a command is shown as one: in its own box, in monospace
+        if (mono) Text(detail, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp, maxLines = 6, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 10.dp).fillMaxWidth().background(Color(0xFF1A1A19), RoundedCornerShape(12.dp)).padding(12.dp))
+        else Text(detail, color = Muted, fontSize = 12.5.sp, maxLines = 4, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 4.dp))
     }
 }
 
 @Composable
-private fun Button(label: String, background: Color, modifier: Modifier = Modifier, color: Color = Color.White, onClick: () -> Unit) =
-    Box(modifier.clip(RoundedCornerShape(50)).background(background).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
+private fun Ask(title: String, detail: String, no: Pair<String, () -> Unit>, yes: Pair<String, () -> Unit>?,
+                icon: Int? = null, tint: Color = Color.White, mono: Boolean = false) = Column {
+    Title(title, detail, icon, tint, mono)
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(no.first, Card, Modifier.weight(1f), color = Red, onClick = no.second)
+        if (yes != null) Button(yes.first, Blue, Modifier.weight(1f), color = Black, onClick = yes.second)
+    }
+}
+
+@Composable
+private fun Button(label: String, background: Color, modifier: Modifier = Modifier, color: Color = Color.Unspecified, onClick: () -> Unit) =
+    Box(modifier.pressable(onClick).clip(RoundedCornerShape(16.dp)).background(background).padding(horizontal = 14.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center) {
-        Text(label, color = color, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, color = if (color != Color.Unspecified) color else if (background.luminance() > 0.5f) Black else Color.White,
+            fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 
 @Composable
@@ -824,9 +1210,7 @@ private fun Player(context: Context, m: NowPlaying, art: Bitmap?, now: Long) = C
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.clickable { MediaWatcher.openApp(context) }) {
             if (art != null) Cover(art, 56.dp, 12.dp)
-            else Box(Modifier.size(56.dp).background(Card, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                Text("♪", color = Muted, fontSize = 22.sp)
-            }
+            else IconChip(R.drawable.ic_music, 56.dp, tint = Muted)
         }
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text(m.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -846,27 +1230,27 @@ private fun Player(context: Context, m: NowPlaying, art: Bitmap?, now: Long) = C
     }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
         Control({ MediaWatcher.previous() }) { Skip(forward = false) }
-        Control({ MediaWatcher.playPause() }, big = true) { if (m.playing) Pause() else Play() }
+        Control({ MediaWatcher.playPause() }, big = true, background = Color.White) { if (m.playing) Pause(Black) else Play(Black) }
         Control({ MediaWatcher.next() }) { Skip(forward = true) }
     }
 }
 
 @Composable
-private fun Control(onClick: () -> Unit, big: Boolean = false, icon: @Composable () -> Unit) =
-    Box(Modifier.size(if (big) 52.dp else 44.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+private fun Control(onClick: () -> Unit, big: Boolean = false, background: Color = Color.Transparent, icon: @Composable () -> Unit) =
+    Box(Modifier.size(if (big) 52.dp else 44.dp).pressable(onClick).clip(CircleShape).background(background), contentAlignment = Alignment.Center) {
         Box(Modifier.size(if (big) 26.dp else 20.dp)) { icon() }
     }
 
 @Composable
-private fun Play() = Canvas(Modifier.size(26.dp)) {
-    drawPath(Path().apply { moveTo(size.width * 0.18f, 0f); lineTo(size.width, size.height / 2); lineTo(size.width * 0.18f, size.height); close() }, Color.White)
+private fun Play(tint: Color = Color.White) = Canvas(Modifier.size(26.dp)) {
+    drawPath(Path().apply { moveTo(size.width * 0.18f, 0f); lineTo(size.width, size.height / 2); lineTo(size.width * 0.18f, size.height); close() }, tint)
 }
 
 @Composable
-private fun Pause() = Canvas(Modifier.size(26.dp)) {
+private fun Pause(tint: Color = Color.White) = Canvas(Modifier.size(26.dp)) {
     val w = size.width * 0.3f
-    drawRoundRect(Color.White, Offset(size.width * 0.1f, 0f), Size(w, size.height), CornerRadius(w / 4))
-    drawRoundRect(Color.White, Offset(size.width * 0.6f, 0f), Size(w, size.height), CornerRadius(w / 4))
+    drawRoundRect(tint, Offset(size.width * 0.1f, 0f), Size(w, size.height), CornerRadius(w / 4))
+    drawRoundRect(tint, Offset(size.width * 0.6f, 0f), Size(w, size.height), CornerRadius(w / 4))
 }
 
 @Composable
@@ -905,5 +1289,46 @@ private fun ago(ms: Long): String {
         s < 60 -> "agora"
         s < 3600 -> "há ${s / 60} min"
         else -> "há ${s / 3600} h"
+    }
+}
+
+
+/**
+ * The island's pieces with plain sample data, for the screenshot test (app/build/screens): what each state looks like
+ * without a phone. Nothing in the app calls it.
+ */
+@Composable
+internal fun IslandSample(which: String) {
+    val context = LocalContext.current
+    val look = Look()
+    val now = System.currentTimeMillis()
+    val song = NowPlaying("Spotify", "Blinding Lights", "The Weeknd", true, 72_000, 200_000, now)
+    val notes = listOf(
+        AppNote("a", "com.whatsapp", "WhatsApp", "Ana", "chego em 10 minutos", now - 20_000, "msg"),
+        AppNote("b", "com.google.android.calendar", "Calendário", "Reunião de produto", "às 10:30", now - 300_000, "event"),
+    )
+    val shape = RoundedCornerShape(26.dp)
+    when (which) {
+        "rest" -> Box(Modifier.size(look.width.dp, look.height.dp).clip(RoundedCornerShape(16.dp)).background(Black))
+        "media" -> Box(Modifier.clip(RoundedCornerShape(17.dp)).background(Black)) { MediaPill(look, null, song, context) }
+        "approval" -> Box(Modifier.clip(shape).background(Black)) {
+            Notice(Pill(Pill.Kind.Approval, "Claude Code pede permissão", "Toque para responder", 2), look, null, emptyList(), null, 360.dp)
+        }
+        "note" -> Box(Modifier.clip(shape).background(Black)) {
+            Notice(Pill(Pill.Kind.Notification, "Ana: chego em 10 minutos"), look, null, emptyList(), notes.first(), 360.dp)
+        }
+        "timer" -> Box(Modifier.clip(shape).background(Black)) {
+            Notice(Pill(Pill.Kind.Timer, "04:32"), look, null, emptyList(), null, 360.dp)
+        }
+        else -> Box(Modifier.width(344.dp).clip(RoundedCornerShape(30.dp)).background(Black).padding(14.dp)) {
+            val link = LinkUi(approvals = listOf(Approval("f".repeat(64), "Claude Code", "dynamic-island",
+                "git push origin release/1.8.6 --force-with-lease", false, now)))
+            val kind = when (which) { "open-approval" -> Pill.Kind.Approval; "open-player" -> Pill.Kind.Media; else -> Pill.Kind.Notification }
+            val card: @Composable () -> Unit = {
+                OpenCard(kind, context, link, emptyList(), emptyList(), emptyList(), null, null, song, null, now, notes, emptyList(),
+                    false, TimerState(), null, Recording(), null, emptyList(), emptySet(), {})
+            }
+            if (kind == Pill.Kind.Notification) Hub(kind, true, {}, card) else card()
+        }
     }
 }

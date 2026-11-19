@@ -5,9 +5,9 @@
     <Application.Resources>
         <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <!-- recoloured by the light theme (IslandWindow.ApplyLook) -->
-        <SolidColorBrush x:Key="Muted" Color="#FF8E8E93" />
+        <SolidColorBrush x:Key="Muted" Color="#FFA19F9A" />
         <SolidColorBrush x:Key="Track" Color="#2EFFFFFF" />
-        <SolidColorBrush x:Key="Ink" Color="White" />
+        <SolidColorBrush x:Key="Ink" Color="#FFF0EFEC" />
         <SolidColorBrush x:Key="Card" Color="#1CFFFFFF" />
         <SolidColorBrush x:Key="CardHover" Color="#33FFFFFF" />
         <SolidColorBrush x:Key="Faint" Color="#66FFFFFF" />
@@ -19,7 +19,7 @@
         <SolidColorBrush x:Key="MenuMuted" Color="#FF98989F" />
         <SolidColorBrush x:Key="MenuLine" Color="#1FFFFFFF" />
         <SolidColorBrush x:Key="MenuBorder" Color="#2EFFFFFF" />
-        <SolidColorBrush x:Key="MenuAccent" Color="#FF0A84FF" />
+        <SolidColorBrush x:Key="MenuAccent" Color="#FFD97757" />
 
         <!-- the menu surface; a separate shadow layer keeps the text out of the effect (sharp ClearType) -->
         <ControlTemplate x:Key="MenuPanel" TargetType="ContentControl">

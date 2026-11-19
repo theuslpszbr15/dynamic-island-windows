@@ -303,7 +303,18 @@ public partial class App : Application
 
     public async void InstallUpdate()
     {
-        if (Update is not { } update) return;
+        if (Update is null) return;
+        // Ask GitHub again first: the version found earlier may have been replaced by a newer one (or removed), and the
+        // cached digest would then be stale. Discard the old result and work with what the release says now.
+        try
+        {
+            var fresh = await Updater.CheckAsync();
+            if (fresh == null) { Update = null; _tray.Balloon("Tudo em dia", $"Você já tem a versão mais recente ({Updater.Current.ToString(3)})."); return; }
+            Update = fresh;
+        }
+        catch { }
+        var update = Update;
+        if (update == null) return;
         if (!DarkDialog.Ask(null, "Atualizar Dynamic Island",
                 $"Baixar e instalar a versão {update.Version.ToString(3)} agora? A ilha reinicia sozinha.", "Atualizar")) return;
         try
@@ -315,6 +326,8 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            // Back to the initial state so the next click searches again instead of retrying a stale result.
+            Update = null;
             _tray.Balloon("Não foi possível atualizar", ex.Message);
         }
     }

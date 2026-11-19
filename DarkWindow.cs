@@ -14,8 +14,18 @@ namespace DynamicIsland;
 /// and a flat title bar of our own. Subclasses fill each page in <see cref="Fill"/> and call <see cref="Render"/>.</summary>
 public abstract class DarkWindow : Window
 {
-    protected static readonly Brush Ground = Frozen(0xFF141416), Panel = Frozen(0xFF1C1C1F), CardBg = Frozen(0xFF222226),
-        Line = Frozen(0xFF2E2E33), Muted = Frozen(0xFF9A9AA0), Accent = Frozen(0xFF0A84FF), Hover = Frozen(0xFF2A2A2F);
+    protected static readonly Brush Ground = Frozen(0xFF151515), Panel = Frozen(0xFF101010), CardBg = Frozen(0xFF202020),
+        Line = Frozen(0xFF363635), Muted = Frozen(0xFFA19F9A), Accent = Frozen(0xFFD97757), Hover = Frozen(0xFF2C2C2B), Text = Frozen(0xFFF0EFEC);
+    /// <summary>Serif for page titles (Newsreader in the mockups; Georgia ships with Windows).</summary>
+    protected static readonly FontFamily Serif = new("Newsreader, Georgia, Cambria");
+    /// <summary>The soft orange glow in the corner of the page; off when the setting is off.</summary>
+    protected virtual bool GlowOn => true;
+    readonly Border _glow = new() { IsHitTestVisible = false };
+    protected void ApplyGlow() => _glow.Background = GlowOn ? new RadialGradientBrush
+    {
+        Center = new Point(0.92, 0.0), GradientOrigin = new Point(0.92, 0.0), RadiusX = 0.75, RadiusY = 0.7,
+        GradientStops = { new GradientStop(Color.FromArgb(0x3A, 0xD9, 0x77, 0x57), 0), new GradientStop(Color.FromArgb(0x00, 0xD9, 0x77, 0x57), 1) },
+    } : Brushes.Transparent;
 
     readonly (string Id, string Glyph, string Title)[] _sections;
     readonly StackPanel _nav = new() { Margin = new Thickness(10, 4, 10, 10) };
@@ -35,7 +45,7 @@ public abstract class DarkWindow : Window
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Background = Ground;
-        Foreground = Brushes.White;
+        Foreground = Text;
         FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
         FontSize = 14;
         Icon = BitmapFrame.Create(typeof(SettingsWindow).Assembly.GetManifestResourceStream("DynamicIsland.ico")!);
@@ -54,9 +64,11 @@ public abstract class DarkWindow : Window
 
         var sidebar = new DockPanel { Background = Panel };
         var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 18, 16, 16) };
-        header.Children.Add(new Viewbox { Width = 38, Height = 38, Child = new PetView { FixedSpecies = PetSpecies.Bit, BaseMood = PetView.Mood.Happy } });
+        var logo = new Border { Width = 34, Height = 20, CornerRadius = new CornerRadius(10), Background = Brushes.Black, BorderBrush = Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+        logo.Child = new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = Accent, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(5, 0, 0, 0) };
+        header.Children.Add(logo);
         var name = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        name.Children.Add(new TextBlock { Text = "Dynamic Island", FontSize = 16, FontWeight = FontWeights.SemiBold });
+        name.Children.Add(new TextBlock { Text = "Dynamic Island", FontSize = 20, FontFamily = Serif });
         name.Children.Add(new TextBlock { Text = "versão " + Updater.Current.ToString(3), FontSize = 12, Foreground = Muted });
         header.Children.Add(name);
         DockPanel.SetDock(header, Dock.Top);
@@ -146,6 +158,10 @@ public abstract class DarkWindow : Window
         bar.Child = barContent;
         Grid.SetColumn(bar, 1);
         root.Children.Add(bar);
+        ApplyGlow();
+        Grid.SetColumn(_glow, 1);
+        Grid.SetRow(_glow, 1);
+        root.Children.Add(_glow);
         Grid.SetColumn(_scroll, 1);
         Grid.SetRow(_scroll, 1);
         root.Children.Add(_scroll);
@@ -156,7 +172,7 @@ public abstract class DarkWindow : Window
         Content = frame;
         // Whatever DWM still draws (the 1 px frame, the caption while snapping or on Windows 10) goes dark too,
         // instead of taking the Windows accent colour when "show accent colour on title bars" is on.
-        SourceInitialized += (_, _) => DarkFrame.Apply(this, 0xFF1C1C1F, 0xFF2E2E33);
+        SourceInitialized += (_, _) => DarkFrame.Apply(this, 0xFF101010, 0xFF363635);
         void Fit()
         {
             frame.BorderThickness = WindowState == WindowState.Maximized ? new Thickness(0) : new Thickness(1);
@@ -244,7 +260,7 @@ public abstract class DarkWindow : Window
         var page = new StackPanel { MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
         if (searching)
         {
-            page.Children.Add(new TextBlock { Text = $"Resultados para \"{_searchQuery}\"", FontSize = 24, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 18) });
+            page.Children.Add(new TextBlock { Text = $"Resultados para \"{_searchQuery}\"", FontSize = 28, FontFamily = Serif, Margin = new Thickness(0, 0, 0, 18) });
             var matched = 0;
             foreach (var (id, _, secTitle) in _sections)
             {
@@ -267,7 +283,7 @@ public abstract class DarkWindow : Window
             return;
         }
         var (_, _, title) = _sections.First(s => s.Id == _page);
-        page.Children.Add(new TextBlock { Text = title, FontSize = 28, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 18) });
+        page.Children.Add(new TextBlock { Text = title, FontSize = 36, FontFamily = Serif, Margin = new Thickness(0, 0, 0, 20) });
         Fill(_page, page);
         _scroll.Content = page;
         _scroll.ScrollToVerticalOffset(offset);
@@ -308,7 +324,7 @@ public abstract class DarkWindow : Window
     protected Border Card(string title, params UIElement[] rows)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
+        stack.Children.Add(new TextBlock { Text = title, FontSize = 20, FontFamily = Serif, Margin = new Thickness(0, 0, 0, 10) });
         for (var i = 0; i < rows.Length; i++)
         {
             if (i > 0 && rows[i] is Grid { Tag: "row" } && rows[i - 1] is Grid { Tag: "row" })
@@ -317,8 +333,8 @@ public abstract class DarkWindow : Window
         }
         return new Border
         {
-            Background = CardBg, CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 16, 20, 16),
-            Margin = new Thickness(0, 0, 0, 14), BorderBrush = Line, BorderThickness = new Thickness(1), Child = stack,
+            Background = CardBg, CornerRadius = new CornerRadius(20), Padding = new Thickness(22, 18, 22, 16),
+            Margin = new Thickness(0, 0, 0, 14), Child = stack,
         };
     }
 
@@ -395,14 +411,14 @@ public abstract class DarkWindow : Window
               <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                   <Grid Width="44" Height="24" Background="Transparent">
-                    <Border x:Name="Track" CornerRadius="12" Background="#FF3A3A3F" BorderBrush="#FF55555C" BorderThickness="1" />
-                    <Ellipse x:Name="Thumb" Width="16" Height="16" Fill="#FFDADADF" HorizontalAlignment="Left" Margin="4,0,0,0" />
+                    <Border x:Name="Track" CornerRadius="12" Background="#FF2C2C2B" BorderBrush="#FF363635" BorderThickness="1" />
+                    <Ellipse x:Name="Thumb" Width="16" Height="16" Fill="#FFA19F9A" HorizontalAlignment="Left" Margin="4,0,0,0" />
                   </Grid>
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsChecked" Value="True">
-                      <Setter TargetName="Track" Property="Background" Value="#FF0A84FF" />
-                      <Setter TargetName="Track" Property="BorderBrush" Value="#FF0A84FF" />
-                      <Setter TargetName="Thumb" Property="Fill" Value="White" />
+                      <Setter TargetName="Track" Property="Background" Value="#FFF0EFEC" />
+                      <Setter TargetName="Track" Property="BorderBrush" Value="#FFF0EFEC" />
+                      <Setter TargetName="Thumb" Property="Fill" Value="#FF141416" />
                       <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
                       <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0" />
                     </Trigger>
@@ -416,24 +432,24 @@ public abstract class DarkWindow : Window
           </Style>
 
           <Style x:Key="Nav" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#FFE5E5EA" />
+            <Setter Property="Foreground" Value="#FFA19F9A" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
               <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                  <Border x:Name="Bd" CornerRadius="8" Padding="12,9" Margin="0,1" Background="Transparent">
+                  <Border x:Name="Bd" CornerRadius="10" Padding="12,9" Margin="0,1" Background="Transparent">
                     <Grid>
-                      <Border x:Name="Bar" Width="3" Height="16" CornerRadius="1.5" Background="#FF0A84FF" HorizontalAlignment="Left" Margin="-10,0,0,0" Visibility="Hidden" />
+                      <Border x:Name="Bar" Width="3" Height="16" CornerRadius="1.5" Background="#FFD97757" HorizontalAlignment="Left" Margin="-10,0,0,0" Visibility="Collapsed" />
                       <ContentPresenter />
                     </Grid>
                   </Border>
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="#FF26262B" />
+                      <Setter TargetName="Bd" Property="Background" Value="#FF1A1A1A" />
                     </Trigger>
                     <Trigger Property="IsChecked" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="#FF2C2C32" />
-                      <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                      <Setter TargetName="Bd" Property="Background" Value="#FF202020" />
+                      <Setter Property="Foreground" Value="#FFF0EFEC" />
                     </Trigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -447,15 +463,15 @@ public abstract class DarkWindow : Window
             <Setter Property="Template">
               <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                  <Border x:Name="Bd" CornerRadius="8" Padding="14,7" Background="#FF34343A" BorderBrush="#FF44444B" BorderThickness="1">
+                  <Border x:Name="Bd" CornerRadius="12" Padding="16,8" Background="#FF2C2C2B" BorderBrush="#FF363635" BorderThickness="1">
                     <ContentPresenter HorizontalAlignment="Center" />
                   </Border>
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="#FF404047" />
+                      <Setter TargetName="Bd" Property="Background" Value="#FF3A3A38" />
                     </Trigger>
                     <Trigger Property="IsPressed" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="#FF2A2A30" />
+                      <Setter TargetName="Bd" Property="Background" Value="#FF242423" />
                     </Trigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -473,10 +489,10 @@ public abstract class DarkWindow : Window
                   </Border>
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsHighlighted" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="#FF34343A" />
+                      <Setter TargetName="Bd" Property="Background" Value="#FF2C2C2B" />
                     </Trigger>
                     <Trigger Property="IsSelected" Value="True">
-                      <Setter TargetName="Bd" Property="Background" Value="#FF0A84FF" />
+                      <Setter TargetName="Bd" Property="Background" Value="#FF3A3A38" />
                     </Trigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -494,13 +510,13 @@ public abstract class DarkWindow : Window
                     <ToggleButton IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Focusable="False" ClickMode="Press">
                       <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
-                          <Border x:Name="Bd" CornerRadius="8" Background="#FF34343A" BorderBrush="#FF44444B" BorderThickness="1">
-                            <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Foreground="#FFB0B0B8"
+                          <Border x:Name="Bd" CornerRadius="8" Background="#FF2C2C2B" BorderBrush="#FF363635" BorderThickness="1">
+                            <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Foreground="#FFA19F9A"
                                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
                           </Border>
                           <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                              <Setter TargetName="Bd" Property="Background" Value="#FF404047" />
+                              <Setter TargetName="Bd" Property="Background" Value="#FF3A3A38" />
                             </Trigger>
                           </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -509,7 +525,7 @@ public abstract class DarkWindow : Window
                     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" IsHitTestVisible="False"
                                       Margin="12,7,32,7" VerticalAlignment="Center" />
                     <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-                      <Border Background="#FF26262B" BorderBrush="#FF44444B" BorderThickness="1" CornerRadius="10" Padding="0,4"
+                      <Border Background="#FF202020" BorderBrush="#FF363635" BorderThickness="1" CornerRadius="10" Padding="0,4"
                               MinWidth="{TemplateBinding ActualWidth}" MaxHeight="320" Margin="0,4,0,0">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                           <ItemsPresenter />
@@ -526,9 +542,9 @@ public abstract class DarkWindow : Window
             <Setter Property="Template">
               <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                  <Border x:Name="T" CornerRadius="3" Background="#3A3A40" />
+                  <Border x:Name="T" CornerRadius="3" Background="#363635" />
                   <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="T" Property="Background" Value="#55555C" /></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="T" Property="Background" Value="#4A4A48" /></Trigger>
                     <Trigger Property="IsDragging" Value="True"><Setter TargetName="T" Property="Background" Value="#6A6A72" /></Trigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>

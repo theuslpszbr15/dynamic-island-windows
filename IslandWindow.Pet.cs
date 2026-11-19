@@ -25,6 +25,7 @@ public partial class IslandWindow
         ApplyGlass();
         ApplyAurora();
         ApplyGlowLook();
+        GlowLayers.Visibility = GlowRim.Visibility = Vis(_transient == Transient.Approval && _settings.GlowLook);
         ApplyInk(IslandThemes.IsLight(_settings.Theme));
         MenuPalette.For(_settings.Theme).ApplyToResources();
 
@@ -52,8 +53,8 @@ public partial class IslandWindow
             if (resources[key] is SolidColorBrush { IsFrozen: false } brush) brush.Color = color;
             else resources[key] = new SolidColorBrush(color);
         }
-        Set("Ink", light ? 0xFF1C1C1E : 0xFFFFFFFF);
-        Set("Muted", light ? 0xFF6E6E73 : 0xFF8E8E93);
+        Set("Ink", light ? 0xFF1C1C1E : 0xFFF0EFEC);
+        Set("Muted", light ? 0xFF6E6E73 : 0xFFA19F9A);
         Set("Track", light ? 0x1F000000 : 0x2EFFFFFF);
         Set("Card", light ? 0x0F000000 : 0x1CFFFFFF);
         Set("CardHover", light ? 0x1F000000 : 0x33FFFFFF);

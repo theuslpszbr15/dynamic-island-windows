@@ -38,10 +38,12 @@ public sealed partial class SettingsWindow : DarkWindow
     bool _downloadQr;
 
     IslandSettings S => _app.Settings;
+    protected override bool GlowOn => _app?.Settings.GlowLook ?? true; // runs from the base constructor, before _app is set
 
     public SettingsWindow(App app) : base("Configurações — Dynamic Island", "Configurações", Sections)
     {
         _app = app;
+        ApplyGlow();
         SetUpTransfers();
         _app.Island.Discord.StatusChanged += OnDiscordStatus;
         Closed += (_, _) => _app.Island.Discord.StatusChanged -= OnDiscordStatus;
@@ -140,11 +142,11 @@ public sealed partial class SettingsWindow : DarkWindow
         {
             var card = new Border
             {
-                Background = Hover, CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10),
-                Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand, BorderBrush = Line, BorderThickness = new Thickness(1),
+                Background = Hover, CornerRadius = new CornerRadius(16), Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand,
             };
             var col = new StackPanel();
-            col.Children.Add(new TextBlock { Text = value, FontSize = 16, FontWeight = FontWeights.Bold });
+            col.Children.Add(new TextBlock { Text = value, FontSize = 18, FontWeight = FontWeights.SemiBold });
             col.Children.Add(new TextBlock { Text = label, Foreground = Muted, FontSize = 12, Margin = new Thickness(0, 2, 0, 0) });
             card.Child = col;
             card.MouseLeftButtonUp += (_, _) => Navigate(go);
@@ -293,7 +295,9 @@ public sealed partial class SettingsWindow : DarkWindow
         }
         page.Children.Add(Card("Tema", Note("A cor da ilha. Vidro desfoca o que está atrás dela (e some de prints e do compartilhamento de tela)."), themes,
             Toggle("Visual Aurora (borda de luz animada)", "Adiciona uma borda iluminada com gradiente animado e brilho suave ao redor da ilha.",
-                S.AuroraLook, v => { S.AuroraLook = v; S.Save(); _app.Island.ApplyLook(); })));
+                S.AuroraLook, v => { S.AuroraLook = v; S.Save(); _app.Island.ApplyLook(); }),
+            Toggle("Brilho laranja", "Um brilho suave atrás desta janela e em volta da ilha aberta. Desligue se preferir tudo liso.",
+                S.GlowLook, v => { S.GlowLook = v; S.Save(); ApplyGlow(); _app.Island.ApplyLook(); })));
 
         var mascots = new WrapPanel();
         foreach (var (species, label) in App.Mascots)
@@ -1166,7 +1170,26 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.PhoneCalls, v => { S.PhoneCalls = v; S.Save(); }),
             Row("Enviar e receber", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
             Row("Página de Releases", "Todas as versões do app e da ilha.", download)));
+        page.Children.Add(NoticesCard());
         page.Children.Add(WakeCard());
+    }
+
+    /// <summary>"Avisos da ilha do celular": the same switches as the app's screen, kept in sync over the link.</summary>
+    Border NoticesCard()
+    {
+        var isl = _app.Island;
+        (string Kind, string Title, string? Note)[] rows =
+        [
+            ("Approval", "Pedidos de permissão dos agentes", "Segurança: desligado, a ilha do celular não avisa quando um agente espera sua resposta."),
+            ("Offer", "Solicitações de envio recebidas", null),
+            ("Outgoing", "Esperando o PC aceitar um envio", null),
+            ("Claude", "Avisos do app do Claude", null),
+            ("Transfer", "Transferências (andamento e fim)", null),
+            ("Discord", "Quem entra e sai da call", "Vale também para a ilha do PC."),
+            ("Call", "Estou numa call", null),
+        ];
+        return Card("Avisos da ilha do celular", rows.Select(r =>
+            Toggle(r.Title, r.Note ?? "Muda aqui e no celular ao mesmo tempo.", isl.NoticeShown(r.Kind), v => isl.SetNoticeShown(r.Kind, v))).ToArray());
     }
 
     bool? _wakeArmed;

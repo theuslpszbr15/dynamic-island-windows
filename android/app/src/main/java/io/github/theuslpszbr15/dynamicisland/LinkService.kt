@@ -183,6 +183,7 @@ class LinkService : Service() {
             }, OFFERS_AGAIN_MS, TimeUnit.MILLISECONDS)
             // and what the phone still wants to send is offered again
             Link.client?.let(FileSender::announce)
+            Link.client?.let(IslandFilter::announce)
         }
 
         override fun onRelay(relay: String?, relayKey: String?) {
@@ -196,6 +197,7 @@ class LinkService : Service() {
         override fun onSessions(sessions: List<Session>) {
             val before = Link.state.value.sessions
             Link.update { it.copy(sessions = sessions) }
+            Island.forget(sessions)
             SessionAlerts.settled(before, sessions).forEach { Notifications.cancelSessionAlert(this@LinkService, it) }
             SessionAlerts.changes(before, sessions).forEach { Notifications.showSessionAlert(this@LinkService, it) }
         }
@@ -220,6 +222,10 @@ class LinkService : Service() {
         override fun onFileCancel(id: String) = dropOffer(id)
 
         override fun onDiscord(event: DiscordEvent) = Island.discordEvent(event)
+
+        override fun onFilter(off: List<String>, at: Long) {
+            if (IslandFilter.fromPc(this@LinkService, off, at)) IslandOverlay.refresh(this@LinkService)
+        }
 
         override fun onClip(text: String) = ClipSync.fromPc(this@LinkService, text)
 

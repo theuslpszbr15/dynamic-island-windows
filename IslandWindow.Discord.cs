@@ -58,7 +58,7 @@ public partial class IslandWindow
 
     void OnDiscordVoice(DiscordVoiceEvent e)
     {
-        if (!_settings.DiscordCalls) return;
+        if (!_settings.DiscordCalls || NoticeOff("Discord")) return;
         if (_settings.DiscordToPhone && _phone?.Running == true && _phone.ConnectedPhones > 0)
             _phone.PublishDiscord(e.Joined, e.Name, e.Channel, e.Count, SmallPng(e.Avatar));
         // The name as shown in the call, plus the @username (unique, so a nickname can't pass for someone else).

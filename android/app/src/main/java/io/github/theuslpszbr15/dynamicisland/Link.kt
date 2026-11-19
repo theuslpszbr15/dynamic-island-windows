@@ -134,6 +134,13 @@ object Link {
         }
     }
 
+    fun sendFilter(off: List<String>, at: Long) {
+        val c = client ?: return
+        io.execute {
+            try { c.filter(off, at) } catch (_: Exception) {}
+        }
+    }
+
     fun sendClip(text: String) {
         val c = client ?: return
         io.execute {
