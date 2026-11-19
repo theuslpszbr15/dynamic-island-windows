@@ -309,6 +309,8 @@ public partial class App : Application
         try
         {
             _tray.Balloon("Baixando atualização", $"Versão {update.Version.ToString(3)}…");
+            // The release may have been replaced since the last check (the cached digest would be stale): ask again just before downloading.
+            try { if (await Updater.CheckAsync() is { } fresh) update = Update = fresh; } catch { }
             var exe = await Updater.DownloadAsync(update);
             Process.Start(new ProcessStartInfo(exe, "--update") { UseShellExecute = true });
             Quit();
