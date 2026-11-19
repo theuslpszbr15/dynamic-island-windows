@@ -113,6 +113,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -847,6 +848,7 @@ private fun OpenCard(
         Pill.Kind.Media -> if (media != null) Player(context, media, art, now) else Gone(close)
         Pill.Kind.Offer -> link.files.firstOrNull()?.let { offer ->
             Ask(
+                icon = R.drawable.ic_download,
                 title = "O PC quer mandar ${if (offer.isText) "um texto" else offer.label}",
                 detail = Notifications.sizeText(offer.totalBytes) + if (link.files.size > 1) " · mais ${link.files.size - 1} esperando" else "",
                 no = "Rejeitar" to { Link.declineFile(context, offer.id); if (link.files.size <= 1) close() },
@@ -855,6 +857,7 @@ private fun OpenCard(
         } ?: Gone(close)
         Pill.Kind.Approval -> link.approvals.firstOrNull()?.let { a ->
             Ask(
+                icon = R.drawable.ic_agent, tint = Orange, mono = true,
                 title = "${a.agent}${if (a.project.isBlank()) "" else " · ${a.project}"} quer rodar",
                 detail = a.command,
                 no = "Negar" to { Link.decide(context, a.fingerprint, allow = false); if (link.approvals.size <= 1) close() },
@@ -914,12 +917,10 @@ private fun OpenCard(
                 }
             }
         Pill.Kind.Notification -> if (notes.isEmpty()) Column {
-            Text("Notificações", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text("Nenhuma notificação agora.", color = Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
         } else Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Notificações", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text("Deslize para dispensar · segure para fixar", color = Muted, fontSize = 10.5.sp)
                 }
                 // "Limpar" keeps what the person pinned
@@ -967,10 +968,8 @@ private fun OpenCard(
         }
         // what the agents still wait for; "Dispensar" also clears the same alert in the shade, so it is not told twice
         Pill.Kind.Pending -> if (pending.isEmpty()) Column {
-            Text("Esperando você", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text("Nenhum agente esperando.", color = Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 4.dp))
         } else Column {
-            Text("Esperando você", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Column(Modifier.padding(top = 8.dp).heightIn(max = 300.dp).then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 (if (scroll) pending else pending.take(3)).forEach { s ->
@@ -1040,7 +1039,7 @@ private fun NoteRow(context: Context, n: AppNote, pinned: Boolean, now: Long, sc
     ) {
         NoteIcon(n, 34.dp)
         Column(Modifier.padding(start = 10.dp).weight(1f)) {
-            Text((if (pinned) "★ " else "") + n.app + " · " + ago(now - n.at), color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text((if (pinned) "Fixada · " else "") + n.app + " · " + ago(now - n.at), color = Muted, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (n.title.isNotEmpty()) Text(n.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (n.text.isNotEmpty()) Text(n.text, color = Muted, fontSize = 12.sp, maxLines = if (scroll) 6 else 2, overflow = TextOverflow.Ellipsis)
             Text(if (muted) "Voltar a avisar ${n.app}" else "Silenciar ${n.app}", color = Muted, fontSize = 11.sp,
@@ -1063,11 +1062,10 @@ private fun TodayPage(context: Context) {
     val calendar = Today.canReadCalendar(context)
     val located = Today.canLocate(context)
     Column {
-        Text("Hoje", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         if (located) {
             weather?.let { w ->
                 Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(w.glyph, fontSize = 30.sp, color = Color.White)
+                    IconChip(R.drawable.ic_sun, 40.dp)
                     Column(Modifier.padding(start = 10.dp)) {
                         Text("${w.temp}° · ${w.label}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Text("mín ${w.min}° · máx ${w.max}°", color = Muted, fontSize = 12.sp)
@@ -1082,7 +1080,7 @@ private fun TodayPage(context: Context) {
             Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 events.take(4).forEach { e ->
                     Row {
-                        Text(e.whenText(now), color = Orange, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(92.dp), maxLines = 1)
+                        Text(e.whenText(now), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(92.dp), maxLines = 1)
                         Text(e.title + if (e.place.isNotEmpty()) " · ${e.place}" else "", color = Color.White, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -1096,7 +1094,6 @@ private fun TodayPage(context: Context) {
 /** The timer page: presets while idle, then the count with pause and reset. */
 @Composable
 private fun TimerPage(context: Context, t: TimerState, now: Long) = Column {
-    Text("Temporizador e cronômetro", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     if (!t.active) {
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(1, 5, 10, 25).forEach { m -> Button("$m min", Card, Modifier.weight(1f)) { Timers.countdown(context, m) } }
@@ -1140,15 +1137,25 @@ private fun Hub(kind: Pill.Kind, hasMedia: Boolean, onOpen: (Pill.Kind?) -> Unit
             onDragEnd = { if (kotlin.math.abs(drag) > threshold) onOpen(Island.hubStep(pages, kind, if (drag < 0) 1 else -1)); drag = 0f },
         ) { _, d -> drag += d }
     }) {
-        content()
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        // where you are among the pages: tabs on top, the current one lit
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             pages.forEach { p ->
-                Box(Modifier.clip(CircleShape).clickable { onOpen(p) }.padding(horizontal = 4.dp, vertical = 6.dp)) {
-                    Box(Modifier.height(5.dp).width(if (p == kind) 16.dp else 5.dp).clip(CircleShape).background(if (p == kind) Color.White else Muted))
-                }
+                Text(pageName(p), color = if (p == kind) Color.White else Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(if (p == kind) Color.White.copy(alpha = 0.16f) else Chip)
+                        .clickable { onOpen(p) }.padding(horizontal = 9.dp, vertical = 6.dp))
             }
         }
+        content()
     }
+}
+
+private fun pageName(kind: Pill.Kind) = when (kind) {
+    Pill.Kind.Notification -> "Avisos"
+    Pill.Kind.Pending -> "Espera"
+    Pill.Kind.Timer -> "Timer"
+    Pill.Kind.Today -> "Hoje"
+    Pill.Kind.Media -> "Música"
+    else -> kind.name
 }
 
 /** What the card was about is gone (answered elsewhere): back to the pill. */
@@ -1159,14 +1166,25 @@ private fun Gone(close: () -> Unit) {
 }
 
 @Composable
-private fun Title(title: String, detail: String) = Column {
-    Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    if (detail.isNotEmpty()) Text(detail, color = Muted, fontSize = 12.5.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+private fun Title(title: String, detail: String, icon: Int? = null, tint: Color = Color.White, mono: Boolean = false) = Column {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) { IconChip(icon, 36.dp, tint); Spacer(Modifier.width(10.dp)) }
+        Text(title, color = Color.White, fontFamily = FontFamily.Serif, fontSize = 17.sp, fontWeight = FontWeight.Medium,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+    if (detail.isNotEmpty()) {
+        // a command is shown as one: in its own box, in monospace
+        if (mono) Text(detail, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp, maxLines = 6, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 10.dp).fillMaxWidth().background(Color(0xFF1A1A19), RoundedCornerShape(12.dp)).padding(12.dp))
+        else Text(detail, color = Muted, fontSize = 12.5.sp, maxLines = 4, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 4.dp))
+    }
 }
 
 @Composable
-private fun Ask(title: String, detail: String, no: Pair<String, () -> Unit>, yes: Pair<String, () -> Unit>?) = Column {
-    Title(title, detail)
+private fun Ask(title: String, detail: String, no: Pair<String, () -> Unit>, yes: Pair<String, () -> Unit>?,
+                icon: Int? = null, tint: Color = Color.White, mono: Boolean = false) = Column {
+    Title(title, detail, icon, tint, mono)
     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(no.first, Card, Modifier.weight(1f), color = Red, onClick = no.second)
         if (yes != null) Button(yes.first, Blue, Modifier.weight(1f), color = Black, onClick = yes.second)
@@ -1175,7 +1193,7 @@ private fun Ask(title: String, detail: String, no: Pair<String, () -> Unit>, yes
 
 @Composable
 private fun Button(label: String, background: Color, modifier: Modifier = Modifier, color: Color = Color.Unspecified, onClick: () -> Unit) =
-    Box(modifier.pressable(onClick).clip(RoundedCornerShape(50)).background(background).padding(horizontal = 14.dp, vertical = 9.dp),
+    Box(modifier.pressable(onClick).clip(RoundedCornerShape(16.dp)).background(background).padding(horizontal = 14.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center) {
         Text(label, color = if (color != Color.Unspecified) color else if (background.luminance() > 0.5f) Black else Color.White,
             fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -1192,9 +1210,7 @@ private fun Player(context: Context, m: NowPlaying, art: Bitmap?, now: Long) = C
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.clickable { MediaWatcher.openApp(context) }) {
             if (art != null) Cover(art, 56.dp, 12.dp)
-            else Box(Modifier.size(56.dp).background(Card, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                Text("♪", color = Muted, fontSize = 22.sp)
-            }
+            else IconChip(R.drawable.ic_music, 56.dp, tint = Muted)
         }
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text(m.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1214,27 +1230,27 @@ private fun Player(context: Context, m: NowPlaying, art: Bitmap?, now: Long) = C
     }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
         Control({ MediaWatcher.previous() }) { Skip(forward = false) }
-        Control({ MediaWatcher.playPause() }, big = true) { if (m.playing) Pause() else Play() }
+        Control({ MediaWatcher.playPause() }, big = true, background = Color.White) { if (m.playing) Pause(Black) else Play(Black) }
         Control({ MediaWatcher.next() }) { Skip(forward = true) }
     }
 }
 
 @Composable
-private fun Control(onClick: () -> Unit, big: Boolean = false, icon: @Composable () -> Unit) =
-    Box(Modifier.size(if (big) 52.dp else 44.dp).pressable(onClick).clip(CircleShape), contentAlignment = Alignment.Center) {
+private fun Control(onClick: () -> Unit, big: Boolean = false, background: Color = Color.Transparent, icon: @Composable () -> Unit) =
+    Box(Modifier.size(if (big) 52.dp else 44.dp).pressable(onClick).clip(CircleShape).background(background), contentAlignment = Alignment.Center) {
         Box(Modifier.size(if (big) 26.dp else 20.dp)) { icon() }
     }
 
 @Composable
-private fun Play() = Canvas(Modifier.size(26.dp)) {
-    drawPath(Path().apply { moveTo(size.width * 0.18f, 0f); lineTo(size.width, size.height / 2); lineTo(size.width * 0.18f, size.height); close() }, Color.White)
+private fun Play(tint: Color = Color.White) = Canvas(Modifier.size(26.dp)) {
+    drawPath(Path().apply { moveTo(size.width * 0.18f, 0f); lineTo(size.width, size.height / 2); lineTo(size.width * 0.18f, size.height); close() }, tint)
 }
 
 @Composable
-private fun Pause() = Canvas(Modifier.size(26.dp)) {
+private fun Pause(tint: Color = Color.White) = Canvas(Modifier.size(26.dp)) {
     val w = size.width * 0.3f
-    drawRoundRect(Color.White, Offset(size.width * 0.1f, 0f), Size(w, size.height), CornerRadius(w / 4))
-    drawRoundRect(Color.White, Offset(size.width * 0.6f, 0f), Size(w, size.height), CornerRadius(w / 4))
+    drawRoundRect(tint, Offset(size.width * 0.1f, 0f), Size(w, size.height), CornerRadius(w / 4))
+    drawRoundRect(tint, Offset(size.width * 0.6f, 0f), Size(w, size.height), CornerRadius(w / 4))
 }
 
 @Composable
@@ -1273,5 +1289,46 @@ private fun ago(ms: Long): String {
         s < 60 -> "agora"
         s < 3600 -> "há ${s / 60} min"
         else -> "há ${s / 3600} h"
+    }
+}
+
+
+/**
+ * The island's pieces with plain sample data, for the screenshot test (app/build/screens): what each state looks like
+ * without a phone. Nothing in the app calls it.
+ */
+@Composable
+internal fun IslandSample(which: String) {
+    val context = LocalContext.current
+    val look = Look()
+    val now = System.currentTimeMillis()
+    val song = NowPlaying("Spotify", "Blinding Lights", "The Weeknd", true, 72_000, 200_000, now)
+    val notes = listOf(
+        AppNote("a", "com.whatsapp", "WhatsApp", "Ana", "chego em 10 minutos", now - 20_000, "msg"),
+        AppNote("b", "com.google.android.calendar", "Calendário", "Reunião de produto", "às 10:30", now - 300_000, "event"),
+    )
+    val shape = RoundedCornerShape(26.dp)
+    when (which) {
+        "rest" -> Box(Modifier.size(look.width.dp, look.height.dp).clip(RoundedCornerShape(16.dp)).background(Black))
+        "media" -> Box(Modifier.clip(RoundedCornerShape(17.dp)).background(Black)) { MediaPill(look, null, song, context) }
+        "approval" -> Box(Modifier.clip(shape).background(Black)) {
+            Notice(Pill(Pill.Kind.Approval, "Claude Code pede permissão", "Toque para responder", 2), look, null, emptyList(), null, 360.dp)
+        }
+        "note" -> Box(Modifier.clip(shape).background(Black)) {
+            Notice(Pill(Pill.Kind.Notification, "Ana: chego em 10 minutos"), look, null, emptyList(), notes.first(), 360.dp)
+        }
+        "timer" -> Box(Modifier.clip(shape).background(Black)) {
+            Notice(Pill(Pill.Kind.Timer, "04:32"), look, null, emptyList(), null, 360.dp)
+        }
+        else -> Box(Modifier.width(344.dp).clip(RoundedCornerShape(30.dp)).background(Black).padding(14.dp)) {
+            val link = LinkUi(approvals = listOf(Approval("f".repeat(64), "Claude Code", "dynamic-island",
+                "git push origin release/1.8.6 --force-with-lease", false, now)))
+            val kind = when (which) { "open-approval" -> Pill.Kind.Approval; "open-player" -> Pill.Kind.Media; else -> Pill.Kind.Notification }
+            val card: @Composable () -> Unit = {
+                OpenCard(kind, context, link, emptyList(), emptyList(), emptyList(), null, null, song, null, now, notes, emptyList(),
+                    false, TimerState(), null, Recording(), null, emptyList(), emptySet(), {})
+            }
+            if (kind == Pill.Kind.Notification) Hub(kind, true, {}, card) else card()
+        }
     }
 }
