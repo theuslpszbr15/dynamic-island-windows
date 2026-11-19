@@ -370,9 +370,14 @@ public partial class IslandWindow : Window
         clip.Rect = flatTop ? new Rect(0, -r, w, h + r) : new Rect(0, 0, w, h);
         clip.RadiusX = clip.RadiusY = r;
         IslandContent.Clip = clip;
-        GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = IslandBg.CornerRadius;
+        GlassFill.CornerRadius = GlassRim.CornerRadius = AuroraRim.CornerRadius = GlowRim.CornerRadius = IslandBg.CornerRadius;
         _glow.CornerRadius = r;
         foreach (Border layer in ShadowLayers.Children)
+        {
+            var spread = -layer.Margin.Left;
+            layer.CornerRadius = flatTop ? new CornerRadius(0, 0, r + spread, r + spread) : new CornerRadius(r + spread);
+        }
+        foreach (Border layer in GlowLayers.Children)
         {
             var spread = -layer.Margin.Left;
             layer.CornerRadius = flatTop ? new CornerRadius(0, 0, r + spread, r + spread) : new CornerRadius(r + spread);
@@ -401,6 +406,7 @@ public partial class IslandWindow : Window
         var approval = _transient == Transient.Approval;
         ApprovalPanel.Visibility = Vis(approval && !ApprovalQuiet);
         ApprovalPill.Visibility = Vis(approval && ApprovalQuiet);
+        GlowLayers.Visibility = GlowRim.Visibility = Vis(approval && _settings.GlowLook);
         if ((approval && ApprovalQuiet) != _pillPulsing)
         {
             _pillPulsing = approval && ApprovalQuiet;

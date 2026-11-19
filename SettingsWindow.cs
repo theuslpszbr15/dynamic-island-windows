@@ -38,6 +38,7 @@ public sealed partial class SettingsWindow : DarkWindow
     bool _downloadQr;
 
     IslandSettings S => _app.Settings;
+    protected override bool GlowOn => _app.Settings.GlowLook;
 
     public SettingsWindow(App app) : base("Configurações — Dynamic Island", "Configurações", Sections)
     {
@@ -140,11 +141,11 @@ public sealed partial class SettingsWindow : DarkWindow
         {
             var card = new Border
             {
-                Background = Hover, CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10),
-                Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand, BorderBrush = Line, BorderThickness = new Thickness(1),
+                Background = Hover, CornerRadius = new CornerRadius(16), Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand,
             };
             var col = new StackPanel();
-            col.Children.Add(new TextBlock { Text = value, FontSize = 16, FontWeight = FontWeights.Bold });
+            col.Children.Add(new TextBlock { Text = value, FontSize = 18, FontWeight = FontWeights.SemiBold });
             col.Children.Add(new TextBlock { Text = label, Foreground = Muted, FontSize = 12, Margin = new Thickness(0, 2, 0, 0) });
             card.Child = col;
             card.MouseLeftButtonUp += (_, _) => Navigate(go);
@@ -293,7 +294,9 @@ public sealed partial class SettingsWindow : DarkWindow
         }
         page.Children.Add(Card("Tema", Note("A cor da ilha. Vidro desfoca o que está atrás dela (e some de prints e do compartilhamento de tela)."), themes,
             Toggle("Visual Aurora (borda de luz animada)", "Adiciona uma borda iluminada com gradiente animado e brilho suave ao redor da ilha.",
-                S.AuroraLook, v => { S.AuroraLook = v; S.Save(); _app.Island.ApplyLook(); })));
+                S.AuroraLook, v => { S.AuroraLook = v; S.Save(); _app.Island.ApplyLook(); }),
+            Toggle("Brilho laranja", "Um brilho suave atrás desta janela e em volta da ilha aberta. Desligue se preferir tudo liso.",
+                S.GlowLook, v => { S.GlowLook = v; S.Save(); ApplyGlow(); _app.Island.ApplyLook(); })));
 
         var mascots = new WrapPanel();
         foreach (var (species, label) in App.Mascots)

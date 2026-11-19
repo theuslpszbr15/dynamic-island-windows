@@ -65,6 +65,8 @@ public sealed class IslandSettings
             Save();
         }
     }
+    /// <summary>The soft orange glow behind the settings page and around the open island.</summary>
+    public bool GlowLook { get; set; } = true;
     /// <summary>Animated aurora light rim and glow around the island.</summary>
     public bool AuroraLook { get; set; }
     /// <summary>Hides the island when the focused window's top bar sits right under it (e.g. maximized browser tabs).</summary>
