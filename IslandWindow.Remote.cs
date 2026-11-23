@@ -101,7 +101,7 @@ public partial class IslandWindow
     /// <summary>The phone's remote shows what is playing, the volume and a pending shutdown.</summary>
     void PublishPhonePc()
     {
-        if (_phone?.Running != true) return;
+        if (_phone?.Running != true || _demo) return;
         if (_shutdownAt is { } at && at < DateTime.Now) _shutdownAt = null;
         var m = _mediaSnap;
         _phone.PublishPcState(m?.Title ?? "", m?.Artist ?? "", m?.IsPlaying == true, (int)Math.Round(_volumeLevel * 100), _volumeMuted,

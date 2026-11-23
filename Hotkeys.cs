@@ -22,6 +22,8 @@ public static class Hotkeys
         new(5, "calendar", "Ctrl+Alt+C", "abrir a agenda"),
         new(6, "tasks", "Ctrl+Alt+K", "abrir tarefas, água e notas"),
         new(7, "jarvis", "Ctrl+Alt+J", "Jarvis (segure para falar, toque para escrever)"),
+        new(8, "dictate", "Ctrl+Alt+F", "ditado (segure, fale e solte: o texto é colado)"),
+        new(9, "translate", "Ctrl+Alt+L", "traduzir o texto selecionado"),
     ];
 
     public static Shortcut? ById(int id) => All.FirstOrDefault(a => a.Id == id);

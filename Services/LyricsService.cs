@@ -74,14 +74,14 @@ public static partial class LyricsService
     }
 
     /// <summary>The line being sung at <paramref name="position"/>, or null before the first one.</summary>
-    public static string? LineAt(IReadOnlyList<LyricLine> lines, TimeSpan position)
+    public static string? LineAt(IReadOnlyList<LyricLine> lines, TimeSpan position) =>
+        IndexAt(lines, position) is >= 0 and var i ? lines[i].Text : null;
+
+    /// <summary>Index of the line being sung at <paramref name="position"/>; -1 before the first one.</summary>
+    public static int IndexAt(IReadOnlyList<LyricLine> lines, TimeSpan position)
     {
-        string? current = null;
-        foreach (var line in lines)
-        {
-            if (line.At > position) break;
-            current = line.Text;
-        }
+        var current = -1;
+        for (var i = 0; i < lines.Count && lines[i].At <= position; i++) current = i;
         return current;
     }
 }

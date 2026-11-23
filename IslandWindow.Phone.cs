@@ -156,7 +156,7 @@ public partial class IslandWindow
 
     void PublishPhoneSessions()
     {
-        if (_phone?.Running != true) return;
+        if (_phone?.Running != true || _demo) return;
         _phone.PublishSessions(Agents.Select(s => new PhoneSession(
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s.Key)))[..16].ToLowerInvariant(),
             s.Agent, s.Project,

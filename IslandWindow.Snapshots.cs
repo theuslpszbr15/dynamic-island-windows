@@ -260,10 +260,14 @@ public partial class IslandWindow
         OnMedia(new MediaSnapshot("Blinding Lights", "The Weeknd", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
             TimeSpan.FromSeconds(74), TimeSpan.FromSeconds(200), DateTimeOffset.Now, "Spotify"));
         _transient = Transient.None;
-        _lyrics = LyricsService.Parse("[00:58.00]I've been on my own for long enough\n[01:12.00]I said, ooh, I'm blinded by the lights\n[01:20.00]No, I can't sleep until I feel your touch");
+        _lyrics = LyricsService.Parse(DemoLyrics);
         Retarget();
         await Shot("31-compact-lyrics");
+        SetExpanded(true, PageMedia);
+        await Shot("31b-expanded-lyrics");
+        SetExpanded(false);
         _lyrics = null;
+        UpdateLyric();
 
         SetExpanded(true, PageSystem);
         BrightnessRow.Visibility = Visibility.Visible;
@@ -400,6 +404,71 @@ public partial class IslandWindow
         SetJarvisState("Pronto");
         _glow.Source = () => _mic?.Read() ?? Jarvis.SpeechLevel();
 
+        // quick translation, plan usage and the karaoke screen (made-up song and lines)
+        ShowTranslation(new Translation("Inglês", "Português",
+            "Oi! Podemos remarcar a reunião para quinta às 15h? Vou mandar o relatório antes, assim você já chega sabendo dos números."));
+        await Shot("50-translation");
+        TransientEnded();
+        ShowGitHub(new GitHubEvent("ci-failed", "theuslpszbr15/dynamic-island-windows", "CI · release/1.8.6", "O CI falhou",
+            "https://github.com/theuslpszbr15/dynamic-island-windows/actions"));
+        await Shot("53-github-ci");
+        TransientEnded();
+        _plans =
+        [
+            new PlanUse("Copilot", PlanUsage.CopilotColor, 52, "mês", DateTimeOffset.Now.AddDays(8)),
+            new PlanUse("Claude", PlanUsage.ClaudeColor, 23, "5 h", DateTimeOffset.Now.AddHours(3)),
+            new PlanUse("Codex", PlanUsage.CodexColor, 91, "semana", DateTimeOffset.Now.AddDays(2)),
+        ];
+        _mediaSnap = null;
+        Agents.Clear();
+        Retarget();
+        await Shot("51-plan-usage");
+        _plans = [];
+        Retarget();
+        _lyricsKey = "Luzes da Cidade|Banda Demo";
+        _lyrics = LyricsService.Parse(DemoLyrics);
+        OnMedia(new MediaSnapshot("Luzes da Cidade", "Banda Demo", DemoArt(), Color.FromRgb(0xFF, 0x6B, 0x8A), true,
+            TimeSpan.FromSeconds(49), TimeSpan.FromSeconds(196), DateTimeOffset.Now, "Spotify"));
+        _transient = Transient.None;
+        var karaoke = new KaraokeWindow(this, fullScreen: false) { Width = 1280, Height = 720, Left = -4000, Top = 0, ShowActivated = false };
+        karaoke.Show();
+        await Task.Delay(1200);
+        karaoke.Refresh();
+        await Task.Delay(500);
+        {
+            var image = new RenderTargetBitmap(1280, 720, 96, 96, PixelFormats.Pbgra32);
+            image.Render((Visual)karaoke.Content);
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(image));
+            await using var file = File.Create(System.IO.Path.Combine(folder, "52-karaoke.png"));
+            png.Save(file);
+        }
+        karaoke.Close();
+        _lyrics = null;
+        OnMedia(null);
+        _transient = Transient.None;
+        Retarget();
+
+        // the demo, caught at its main moments
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        async Task At(double seconds, string name)
+        {
+            var wait = seconds - 1.1 - clock.Elapsed.TotalSeconds;
+            if (wait > 0) await Task.Delay(TimeSpan.FromSeconds(wait));
+            await Shot(name);
+        }
+        var demo = RunDemoAsync();
+        await At(1.6, "60-demo-start");
+        await At(4.5, "61-demo-song");
+        await At(9, "62-demo-lyrics");
+        await At(15, "63-demo-media");
+        await At(23.5, "64-demo-agents");
+        await At(29.5, "65-demo-jarvis");
+        await At(34.8, "66-demo-answer");
+        await At(38.5, "67-demo-message");
+        await demo;
+        await At(clock.Elapsed.TotalSeconds + 1.2, "68-demo-end");
+
         var info = GC.GetGCMemoryInfo();
         File.WriteAllText(System.IO.Path.Combine(folder, "memory.txt"),
             $"managed={GC.GetTotalMemory(true) / 1048576.0:0.0}MB heap={info.HeapSizeBytes / 1048576.0:0.0}MB " +
@@ -509,6 +578,13 @@ public partial class IslandWindow
         }
         return log.ToString();
     }
+
+    /// <summary>Made-up lines for the demo song (screenshots and the demo).</summary>
+    const string DemoLyrics =
+        "[00:40.00]Uma ilha no topo da tela\n[00:44.00]mostra o que está tocando agora\n[00:48.00]o volume, o timer e os agentes\n" +
+        "[00:52.00]sem tirar você do que está fazendo\n[00:56.00]passe o mouse para abrir\n[01:00.00]e role para ver as outras páginas\n" +
+        "[01:04.00]a letra aparece aqui embaixo\n[01:08.00]no ritmo da música\n[01:12.00]segure o atalho e fale\n" +
+        "[01:16.00]solte e o texto aparece\n[01:20.00]a ilha cuida do resto\n[01:24.00]♪";
 
     static BitmapSource DemoArt()
     {

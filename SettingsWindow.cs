@@ -171,7 +171,9 @@ public sealed partial class SettingsWindow : DarkWindow
             Row("Produtividade na ilha", "Tarefas rápidas, meta de água (💧) e textos rápidos (PIX, e-mail, links) com 1 clique.",
                 QuickBtn("Abrir tarefas", () => Navigate("productivity"))),
             Row("Jarvis (sua IA pessoal)", "Pergunte pela ilha: segure " + Hotkeys.Keys(S, "jarvis") + " para falar ou toque para escrever.",
-                QuickBtn("Abrir Jarvis", () => Navigate("jarvis")))));
+                QuickBtn("Abrir Jarvis", () => Navigate("jarvis"))),
+            Row("Demonstração", "Um passeio de 40 segundos pelo que a ilha faz, com dados de exemplo. Nada é salvo.",
+                QuickBtn("Ver demo", () => _ = _app.Island.RunDemoAsync()))));
     }
 
     void General(Panel page)
@@ -757,6 +759,32 @@ public sealed partial class SettingsWindow : DarkWindow
 
         page.Children.Add(BrainCard());
 
+        var dictate = Hotkeys.Keys(S, "dictate");
+        page.Children.Add(Card("Ditado em qualquer lugar",
+            Note($"Segure {dictate} em qualquer app, fale e solte: o texto é colado onde você está digitando. Um toque rápido liga o " +
+                 "modo mãos livres (toque de novo para colar) e Esc cancela. Usa o Whisper da Groq com a chave, ou o microfone local. " +
+                 "O que estava na sua área de transferência volta depois."),
+            Toggle("Ditado", $"Atalho {dictate} (troque em Geral › Atalhos).", S.Dictation, v =>
+            {
+                S.Dictation = v;
+                S.Save();
+                _app.Island.RegisterHotkeys();
+            }),
+            Choice("Como colar o texto", JarvisBrain.HasKey ? "A Groq arruma o texto antes de colar (leva meio segundo)." : "Corrigido e Formal precisam da chave da Groq.",
+                Dictation.Styles, S.DictationStyle, v => { S.DictationStyle = v; S.Save(); })));
+
+        var translate = Hotkeys.Keys(S, "translate");
+        page.Children.Add(Card("Tradução rápida",
+            Note($"Selecione um texto em qualquer app e aperte {translate}: a tradução aparece na ilha, com Copiar e Trocar o texto " +
+                 "(cola a tradução no lugar do que estava selecionado). Português vira inglês; qualquer outro idioma vira português. " +
+                 "Usa a chave da Groq; o texto selecionado vai para a Groq."),
+            Toggle("Tradução rápida", $"Atalho {translate} (troque em Geral › Atalhos).", S.QuickTranslate, v =>
+            {
+                S.QuickTranslate = v;
+                S.Save();
+                _app.Island.RegisterHotkeys();
+            })));
+
         page.Children.Add(Card("Motores locais",
             Note("Os mesmos do app JARVIS. Se o JARVIS já baixou algum, a ilha usa o dele. Cada arquivo é conferido (SHA-256) antes de rodar. " +
                  "Sem a IA, o Jarvis já responde hora, data, contas e pesquisas."),
@@ -950,6 +978,9 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.QuietApprovals, _ => _app.ToggleQuietApprovals()),
             Row("Qualquer script", "DynamicIsland.exe agent --name \"Build\" --state working --text \"dotnet build\"", null)));
 
+        page.Children.Add(PlansCard());
+        page.Children.Add(GitHubCard());
+
         var week = AgentStats.LastWeek();
         var work = TimeSpan.FromSeconds(week.WorkSeconds);
         var open = new Button { Content = "Abrir resumo", Style = (Style)Resources["Action"] };
@@ -967,6 +998,75 @@ public sealed partial class SettingsWindow : DarkWindow
             numbers.Children.Add(cell);
         }
         page.Children.Add(Card("Semana passada", numbers, Row("Resumo da semana", "Toda segunda a ilha oferece o resumo; dá para salvar como imagem. Fica só no seu PC.", open)));
+    }
+
+    /// <summary>GitHub on the island: which repositories, and which news (CI, pull requests, releases).</summary>
+    Border GitHubCard()
+    {
+        var island = _app.Island;
+        var repos = new TextBox
+        {
+            Text = string.Join(", ", S.GitHubRepos), Width = 300, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover,
+            Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line,
+            ToolTip = "dono/repositório, separados por vírgula (ou links do GitHub)",
+        };
+        repos.LostFocus += (_, _) =>
+        {
+            var list = repos.Text.Split([',', ';', ' ', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(GitHubWatch.Normalize).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (list.SequenceEqual(S.GitHubRepos)) return;
+            S.GitHubRepos = list;
+            S.Save();
+            repos.Text = string.Join(", ", list);
+            _ = island.CheckGitHubAsync();
+        };
+        void Changed() { S.Save(); island.ApplyGitHub(); }
+        return Card("GitHub na ilha",
+            Note("A ilha avisa quando o CI (os testes que o GitHub roda sozinho a cada envio) falha ou volta a passar, quando alguém " +
+                 "abre um PR (um pedido de mudança no código) e quando sai uma versão nova. Clique no aviso para abrir no GitHub. " +
+                 "Com o GitHub CLI logado ele usa a sua conta (vale para repositórios privados); sem ele, só os públicos."),
+            Toggle("Avisos do GitHub", "Confere a cada 5 minutos.", S.GitHubWatch, v => { S.GitHubWatch = v; Changed(); Render(); }),
+            Row("Repositórios", "Ex.: theuslpszbr15/dynamic-island-windows", repos),
+            Toggle("CI falhou / voltou a passar", "", S.GitHubCi, v => { S.GitHubCi = v; Changed(); }, enabled: S.GitHubWatch),
+            Toggle("PRs novos", "", S.GitHubPulls, v => { S.GitHubPulls = v; Changed(); }, enabled: S.GitHubWatch),
+            Toggle("Versões novas", "", S.GitHubReleases, v => { S.GitHubReleases = v; Changed(); }, enabled: S.GitHubWatch));
+    }
+
+    /// <summary>Copilot, Claude and Codex plan usage on the island: what was found and what is missing.</summary>
+    Border PlansCard()
+    {
+        var island = _app.Island;
+        var refresh = new Button { Content = "Atualizar", Style = (Style)Resources["Action"], IsEnabled = S.PlanUsage };
+        refresh.Click += async (_, _) =>
+        {
+            refresh.IsEnabled = false;
+            await island.RefreshPlansAsync();
+            Render();
+        };
+        var rows = new List<UIElement>
+        {
+            Note("Ao lado do relógio da ilha: quanto do plano de cada IA você já usou (o limite que está mais perto de acabar). " +
+                 "O Copilot é lido com o login do GitHub CLI, o Claude com o login do Claude Code e o Codex pelos registros dele. " +
+                 "Os logins só são usados para perguntar ao próprio serviço; nada é guardado."),
+            Toggle("Uso do plano das IAs", "Atualiza a cada 5 minutos.", S.PlanUsage, v =>
+            {
+                S.PlanUsage = v;
+                S.Save();
+                island.ApplyPlanUsage();
+                Render();
+            }, refresh),
+        };
+        if (S.PlanUsage)
+        {
+            foreach (var plan in island.Plans)
+            {
+                var value = Note($"{Math.Round(plan.UsedPercent)}% usado");
+                value.Foreground = new SolidColorBrush(plan.Color);
+                rows.Add(Row(plan.Name, $"Limite de {plan.Window}" + (PlanUsage.Renews(plan.ResetsAt) is { Length: > 0 } r ? $" · {r}" : ""), value));
+            }
+            foreach (var note in island.PlanNotes) rows.Add(Note(note));
+        }
+        return Card("Uso do plano das IAs", [.. rows]);
     }
 
     /// <summary>How the phone reaches the PC away from home (public relay, own relay or none), and whether the PC is in

@@ -18,7 +18,7 @@ namespace DynamicIsland;
 
 public partial class IslandWindow : Window
 {
-    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info }
+    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info, Translation }
     enum CompactKind { Clock, Media, Timer, Agent }
 
     const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7, PageJarvis = 8;
@@ -181,12 +181,15 @@ public partial class IslandWindow : Window
         _battery.Start();
         _hub.Start();
         StartExtras();
+        ApplyPlanUsage();
+        ApplyGitHub();
         ApplyDiscord();
         await _media.StartAsync();
         if (_settings.ShowNotifications) await _notifications.StartAsync();
 
         await Task.Delay(1500);
         _ready = true;
+        OfferDemo();
     }
 
     void OnDisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(PositionWindow);
@@ -294,6 +297,7 @@ public partial class IslandWindow : Window
             case Transient.Notification: return new(400, 78);
             case Transient.Approval: return ApprovalQuiet ? new(310, 40) : new(440, 128);
             case Transient.Info: return new(340, 40);
+            case Transient.Translation: return TranslationSize();
         }
         if (IsHandle) return new(110, 8);
         var h = CompactHeight;
@@ -304,12 +308,13 @@ public partial class IslandWindow : Window
             CompactKind.Agent => new(290 + extra, h),
             CompactKind.Media => new((LyricsOn ? 360 : 220) + extra, h),
             CompactKind.Timer => new(150 + extra + PetExtraWidth(kind), h),
-            _ => new(132 + extra + PetExtraWidth(kind), h),
+            _ => new(132 + extra + PetExtraWidth(kind) + PlansWidth, h),
         };
     }
 
-    static Size ExpandedFor(int page) => page switch
+    Size ExpandedFor(int page) => page switch
     {
+        PageMedia when MediaLyricsOn => new(ExpandedSize.Width, ExpandedSize.Height + 48),
         PageAgents => new(560, 236),
         PageCalendar => new(520, 236),
         PagePending => new(520, 236),
@@ -413,9 +418,11 @@ public partial class IslandWindow : Window
             Pulse((ScaleTransform)ApprovalPillOrb.RenderTransform, _pillPulsing);
         }
         InfoPanel.Visibility = Vis(_transient == Transient.Info);
+        TranslatePanel.Visibility = Vis(_transient == Transient.Translation);
 
         var kind = Kind();
         CompactClock.Visibility = Vis(kind == CompactKind.Clock);
+        UpdatePlanChips(kind == CompactKind.Clock);
         CompactMedia.Visibility = Vis(kind == CompactKind.Media);
         if (kind == CompactKind.Media) UpdateLyric();
         CompactAgent.Visibility = Vis(kind == CompactKind.Agent);
@@ -590,6 +597,7 @@ public partial class IslandWindow : Window
         var interactive = over && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
                                    || (_transient == Transient.Info && _infoAction != null)
                                    || (_transient == Transient.Notification && _notifyAction != null)
+                                   || _transient == Transient.Translation
                                    || (!_settings.DiscreetIdle && !IsHandle));
         SetClickThrough(!interactive);
         AdjustPollRate(bounds, local, over || button);
@@ -622,7 +630,7 @@ public partial class IslandWindow : Window
     void CloseTick()
     {
         _hoverTimer.Stop();
-        if (_hover || _dragOver || _draggingOut || _menuOpen) return;
+        if (_demo || _hover || _dragOver || _draggingOut || _menuOpen) return;
         // Jarvis's page stays while it listens, thinks or speaks
         if (_expanded && _page == PageJarvis && JarvisState != "Pronto")
         {
@@ -812,6 +820,8 @@ public partial class IslandWindow : Window
     {
         var text = DateTime.Now.ToString("ddd, d MMM · HH:mm", CultureInfo.CurrentCulture);
         if (_battery.HasBattery) text += $" · {_battery.Percent}%";
+        if (_page == PageAgents && PlanChipsOn)
+            text = string.Join(" · ", _plans.Select(p => $"{p.Name} {Math.Round(p.UsedPercent)}%")) + " · " + text;
         HeaderInfo.Text = text;
     }
 
@@ -899,6 +909,11 @@ public partial class IslandWindow : Window
 
     void OnMedia(MediaSnapshot? snapshot)
     {
+        if (_demo && !ReferenceEquals(snapshot, _demoSong))
+        {
+            _demoRealMedia = snapshot; // shown once the demo ends
+            return;
+        }
         Touch();
         _mediaSnap = snapshot;
         var key = snapshot == null ? null : $"{snapshot.Title}|{snapshot.Artist}";

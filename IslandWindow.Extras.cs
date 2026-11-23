@@ -132,6 +132,8 @@ public partial class IslandWindow
         foreach (var action in Hotkeys.All)
         {
             UnregisterHotKey(_hwnd, action.Id);
+            if (action.Key == "dictate" && !_settings.Dictation) continue;
+            if (action.Key == "translate" && !_settings.QuickTranslate) continue;
             var keys = Hotkeys.Keys(_settings, action.Key);
             if (Hotkeys.Parse(keys) is not { } parsed) continue;
             if (!RegisterHotKey(_hwnd, action.Id, parsed.Modifiers | MOD_NOREPEAT, parsed.Key))
@@ -154,6 +156,17 @@ public partial class IslandWindow
     {
         var action = Hotkeys.ById(id)?.Key;
         if (action == null) return;
+        // dictation types into the app in front: it doesn't open or move the island
+        if (action == "dictate")
+        {
+            TriggerDictation();
+            return;
+        }
+        if (action == "translate")
+        {
+            TranslateSelection();
+            return;
+        }
         if (action == "hide")
         {
             // Over a full-screen app the island is already out of the way: the key shows it until pressed again.
@@ -221,6 +234,8 @@ public partial class IslandWindow
     void OnClipboard()
     {
         if (!_ready) return;
+        // the clipboard put back after a dictation was the person's already
+        if (DateTime.Now < TextPaster.IgnoreUntil) return;
         var show = _settings.ShowClipboard && !_userHidden;
         try
         {
@@ -411,7 +426,33 @@ public partial class IslandWindow
 
     // ───────────────────────── lyrics ─────────────────────────
 
+    public MediaSnapshot? Song => _mediaSnap;
+    public IReadOnlyList<LyricLine>? LyricLines => _lyrics;
+    public System.Drawing.Rectangle ScreenBounds => (_screen ?? System.Windows.Forms.Screen.PrimaryScreen!).Bounds;
+    KaraokeWindow? _karaoke;
+
+    void MediaLyrics_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        OpenKaraoke();
+    }
+
+    public void OpenKaraoke()
+    {
+        if (_karaoke != null)
+        {
+            _karaoke.Activate();
+            return;
+        }
+        SetExpanded(false);
+        _karaoke = new KaraokeWindow(this);
+        _karaoke.Closed += (_, _) => _karaoke = null;
+        _karaoke.Show();
+    }
+
     bool LyricsOn => _settings.ShowLyrics && _lyrics is { Count: > 0 } && _mediaSnap?.IsPlaying == true;
+    // the media page keeps its lyrics while paused, so it doesn't jump in size
+    bool MediaLyricsOn => _settings.ShowLyrics && _lyrics is { Count: > 0 } && _mediaSnap != null;
 
     async void LoadLyrics(MediaSnapshot? m)
     {
@@ -444,6 +485,7 @@ public partial class IslandWindow
 
     void UpdateLyric()
     {
+        UpdateMediaLyrics();
         string? line = null;
         if (LyricsOn) line = LyricsService.LineAt(_lyrics!, _mediaSnap!.PositionNow()) ?? "";
         var show = line != null;
@@ -452,6 +494,34 @@ public partial class IslandWindow
         if (!show || CompactLyric.Text == line) return;
         CompactLyric.Text = line!.Length == 0 ? "♪" : line;
         CompactLyric.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+    }
+
+    void UpdateMediaLyrics()
+    {
+        var on = MediaLyricsOn;
+        if ((MediaLyrics.Visibility == Visibility.Visible) != on)
+        {
+            MediaLyrics.Visibility = Vis(on);
+            if (_page == PageMedia)
+            {
+                var size = ExpandedFor(PageMedia);
+                ExpandedView.Width = size.Width;
+                ExpandedView.Height = size.Height;
+                if (_expanded) Retarget();
+            }
+        }
+        if (!on) return;
+        var i = LyricsService.IndexAt(_lyrics!, _mediaSnap!.PositionNow());
+        static string Show(string text) => text.Length == 0 ? "♪" : text;
+        var now = i >= 0 ? Show(_lyrics![i].Text) : "♪";
+        var next = i + 1 < _lyrics!.Count ? Show(_lyrics[i + 1].Text) : "";
+        if (MediaLyricNow.Text == now) return;
+        MediaLyricNow.Text = now;
+        MediaLyricNext.Text = next;
+        var rise = new TranslateTransform();
+        MediaLyrics.RenderTransform = rise;
+        rise.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        MediaLyrics.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(260)));
     }
 
     // ───────────────────────── players ─────────────────────────

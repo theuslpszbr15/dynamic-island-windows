@@ -295,6 +295,44 @@ public sealed class JarvisBrain
         throw new LimitException(wait);
     }
 
+    /// <summary>One plain answer (no tools, no memory) for a job like fixing a dictation or translating. Null without a
+    /// key, at the free limit or offline: the caller keeps what it had.</summary>
+    public static async Task<string?> CompleteAsync(string system, string user, int maxTokens = 900)
+    {
+        if (LoadKey() is not { } key) return null;
+        foreach (var model in Models)
+        {
+            try
+            {
+                var body = new JsonObject
+                {
+                    ["model"] = model, ["temperature"] = 0.2, ["max_tokens"] = maxTokens,
+                    ["messages"] = new JsonArray
+                    {
+                        new JsonObject { ["role"] = "system", ["content"] = system },
+                        new JsonObject { ["role"] = "user", ["content"] = user },
+                    },
+                };
+                if (model.StartsWith("openai/gpt-oss", StringComparison.Ordinal)) body["reasoning_effort"] = "low";
+                using var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+                using var response = await Http.SendAsync(request);
+                if (response.StatusCode == HttpStatusCode.TooManyRequests) continue;
+                if (!response.IsSuccessStatusCode) return null;
+                var json = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+                var text = json?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(text)) continue;
+                return Regex.Replace(text, "<think>.*?</think>", "", RegexOptions.Singleline).Trim();
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            {
+                Log.Error("Groq", ex);
+                return null;
+            }
+        }
+        return null;
+    }
+
     static string Clean(string text)
     {
         text = Regex.Replace(text, "<think>.*?</think>", "", RegexOptions.Singleline);

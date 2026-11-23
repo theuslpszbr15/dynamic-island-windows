@@ -152,6 +152,20 @@ static class Native
         keybd_event(key, 0, 2, UIntPtr.Zero);
     }
 
+    public static void PressCtrlV() => PressCtrl(0x56);
+
+    public static void PressCtrl(byte key)
+    {
+        const byte control = 0x11;
+        keybd_event(control, 0, 0, UIntPtr.Zero);
+        keybd_event(key, 0, 0, UIntPtr.Zero);
+        keybd_event(key, 0, 2, UIntPtr.Zero);
+        keybd_event(control, 0, 2, UIntPtr.Zero);
+    }
+
+    [DllImport("user32.dll")]
+    public static extern uint GetClipboardSequenceNumber();
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 

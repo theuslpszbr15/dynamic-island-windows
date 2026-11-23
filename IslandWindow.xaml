@@ -330,6 +330,9 @@
                         <local:PetView x:Name="CompactPet" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,1" Panel.ZIndex="1" />
                         <TextBlock x:Name="CompactClock" Text="00:00" FontSize="13.5" FontWeight="SemiBold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- AI plan usage (Copilot, Claude, Codex): a dot in the tool's colour and the share used -->
+                        <StackPanel x:Name="CompactPlans" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Margin="0,0,14,0" Visibility="Collapsed" />
 
                         <Grid x:Name="CompactMedia" Visibility="Collapsed">
                             <Border RenderOptions.BitmapScalingMode="HighQuality" x:Name="CompactArt" Width="22" Height="22" CornerRadius="7" Background="#FF2C2C2E"
@@ -490,6 +493,35 @@
                             <StackPanel x:Name="NowEq" Orientation="Horizontal" Height="16" HorizontalAlignment="Right" VerticalAlignment="Center" />
                         </Grid>
 
+                        <!-- quick translation of the selected text -->
+                        <Grid x:Name="TranslatePanel" VerticalAlignment="Top" Margin="18,12,18,12" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xF2B7;" FontSize="13" Foreground="#FF83D4B4" VerticalAlignment="Center" />
+                                <TextBlock x:Name="TranslateLangs" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock x:Name="TranslateText" Grid.Row="1" FontSize="13.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                       MaxHeight="92" Margin="0,6,0,0" />
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                <Button Style="{StaticResource Chip}" Margin="0" Height="30" Click="TranslateCopy_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8C8;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Text="Copiar" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="TranslateReplace" Style="{StaticResource Chip}" Margin="8,0,0,0" Height="30" Click="TranslateReplace_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8AC;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Text="Trocar o texto" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
                         <Grid x:Name="AlertPanel" Height="78" VerticalAlignment="Top" Margin="16,0,20,0" Visibility="Collapsed">
                             <Viewbox x:Name="AlertPetBox" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed">
                                 <local:PetView x:Name="AlertPet" />
@@ -539,6 +571,20 @@
                                     <Grid.RenderTransform>
                                         <TranslateTransform />
                                     </Grid.RenderTransform>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <!-- synced lyrics: the line being sung and the next one; a click opens them full screen -->
+                                    <Grid x:Name="MediaLyrics" Grid.Row="1" Margin="0,10,0,0" Visibility="Collapsed" Background="Transparent" Cursor="Hand"
+                                          MouseLeftButtonUp="MediaLyrics_Click" ToolTip="Letra em tela cheia">
+                                        <StackPanel Margin="0,0,28,0">
+                                            <TextBlock x:Name="MediaLyricNow" FontSize="14.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="MediaLyricNext" FontSize="12" Foreground="{DynamicResource Faint}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE740;" FontSize="14" Foreground="{DynamicResource Muted}"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
                                     <Grid x:Name="MediaContent">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -638,7 +684,7 @@
                                             </StackPanel>
                                         </Grid>
                                     </Grid>
-                                    <StackPanel x:Name="MediaEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <StackPanel x:Name="MediaEmpty" Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8D6;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
                                         <TextBlock Text="Nada tocando agora" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
                                         <TextBlock Text="Spotify, YouTube e outros players aparecem aqui" FontSize="11.5"

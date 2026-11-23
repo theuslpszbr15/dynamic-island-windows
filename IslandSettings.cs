@@ -98,6 +98,22 @@ public sealed class IslandSettings
     public string JarvisGlow { get; set; } = "colorful";
     /// <summary>How Jarvis calls the person (the Groq brain's prompt); empty = "o usuário".</summary>
     public string JarvisUserName { get; set; } = "";
+    /// <summary>Hold the dictation shortcut, speak, let go: the words are pasted where you type.</summary>
+    public bool Dictation { get; set; } = true;
+    /// <summary>"said", "clean" or "formal" (Dictation.Styles); the last two need the Groq key.</summary>
+    public string DictationStyle { get; set; } = "clean";
+    /// <summary>Select text, press the shortcut: the translation shows on the island (needs the Groq key).</summary>
+    public bool QuickTranslate { get; set; } = true;
+    /// <summary>Copilot, Claude and Codex plan usage next to the clock.</summary>
+    public bool PlanUsage { get; set; } = true;
+    /// <summary>CI failures, pull requests and releases of <see cref="GitHubRepos"/> on the island.</summary>
+    public bool GitHubWatch { get; set; }
+    public List<string> GitHubRepos { get; set; } = [Services.Updater.Repository];
+    public bool GitHubCi { get; set; } = true;
+    public bool GitHubPulls { get; set; } = true;
+    public bool GitHubReleases { get; set; } = true;
+    /// <summary>A new install offers the demo once.</summary>
+    public bool DemoPending { get; set; }
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
     public bool PhoneLink { get; set; }
     /// <summary>How the phone reaches the PC away from home: the built-in public relay (default), the user's own relay
@@ -172,6 +188,7 @@ public sealed class IslandSettings
         }
         if (Services.AtomicFile.ReadAllText(FilePath, json => Parse(json) != null) is { } text)
             settings = Parse(text)!;
+        else settings.DemoPending = true;
         // 2: Coco was only the old default, so files from before Bit move to Bit once.
         // 3: the theme is stored by id instead of its Portuguese name.
         // 4: the public relay is the default for new pairings (see MigrateRelay).
