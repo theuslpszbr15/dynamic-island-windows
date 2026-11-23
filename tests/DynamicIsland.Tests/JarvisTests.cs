@@ -120,6 +120,7 @@ public class JarvisTests
         public void AddTask(string text) => Done.Add("tarefa " + text);
         public void Media(string action) => Done.Add("midia " + action);
         public Task<bool> ConfirmScriptAsync(string description, string code) { Done.Add("script " + code); return Task.FromResult(false); }
+        public Task<string?> ReadScreenAsync() => Task.FromResult<string?>("Erro CS0103: o nome 'contador' não existe no contexto atual");
     }
 
     /// <summary>JARVIS_E2E_GROQ=1 with a Groq key saved (or a Project.Jarvis to import it from): the brain calls its

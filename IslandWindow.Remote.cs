@@ -27,6 +27,13 @@ public partial class IslandWindow
         ShowInfo("\uE8EA", Preview(text), "Copiado do celular", glyphColor: AgentSession.Done);
     }
 
+    /// <summary>Text dictated on the phone: typed where the person is on the PC (pasted, clipboard given back).</summary>
+    async void OnPhoneType(string text)
+    {
+        if (!_settings.PhoneTyping) return;
+        if (await TextPaster.PasteAsync(text)) ShowInfo("\uE8EA", Preview(text), "Ditado do celular", glyphColor: AgentSession.Done);
+    }
+
     /// <summary>Text copied on the PC (password managers already filtered out by OnClipboard).</summary>
     void SendClipToPhone(string text)
     {

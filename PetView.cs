@@ -12,8 +12,8 @@ namespace DynamicIsland;
 
 public enum PetSpecies { None, Coco, Pipoca, Bu, Bit, Custom }
 
-/// <summary>Accessory on top of the mascot. Auto follows the calendar (Christmas, festa junina, New Year).</summary>
-public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa }
+/// <summary>Accessory on top of the mascot. Auto follows the calendar (Halloween, Christmas, festa junina, New Year).</summary>
+public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa, Bruxa }
 
 /// <summary>
 /// The island's mascot, drawn from shapes on a 24×24 canvas (scale it with a Viewbox). Coco (the island's own
@@ -141,6 +141,7 @@ public sealed class PetView : Canvas
     {
         { Month: 12, Day: 31 } or { Month: 1, Day: 1 } => PetOutfit.Festa,
         { Month: 12 } => PetOutfit.Noel,
+        { Month: 10, Day: >= 25 } => PetOutfit.Bruxa,
         { Month: 6 or 7 } => PetOutfit.Palha,
         _ => PetOutfit.None,
     };
@@ -439,6 +440,11 @@ public sealed class PetView : Canvas
                 _hat.Children.Add(Fill("M6.6,-0.2 L6.2,-5.4 L9.4,-2.6 L12,-6.6 L14.6,-2.6 L17.8,-5.4 L17.4,-0.2 Z", B(0xFFFFD60A)));
                 foreach (var x in new[] { 6.2, 11.3, 17.0 })
                     _hat.Children.Add(Place(new Ellipse { Width = 1.4, Height = 1.4, Fill = B(0xFFFF375F) }, x - 0.3, x == 11.3 ? -7.6 : -6.4));
+                break;
+            case PetOutfit.Bruxa:
+                _hat.Children.Add(Place(new Ellipse { Width = 21, Height = 3.4, Fill = B(0xFF2B1B3D) }, 1.5, -2.2));
+                _hat.Children.Add(Fill("M7.4,-1 L13.4,-11.4 C14.2,-12.6 16.4,-12 17.6,-10 C15.6,-10.6 14.8,-9.6 15.4,-7.6 L16.8,-1 Z", B(0xFF3A2452)));
+                _hat.Children.Add(Place(new Rectangle { Width = 9.4, Height = 1.5, Fill = B(0xFFFF9F0A) }, 7.3, -2.6));
                 break;
             case PetOutfit.Oculos:
                 var lens = B(0xF01C1C1E);

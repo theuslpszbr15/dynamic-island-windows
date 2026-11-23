@@ -413,6 +413,31 @@ public partial class IslandWindow
             "https://github.com/theuslpszbr15/dynamic-island-windows/actions"));
         await Shot("53-github-ci");
         TransientEnded();
+        // clipboard history, the internet line and a download (made-up data, in memory only)
+        _clips = new ClipboardHistory(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "island-snapshot-clips"));
+        foreach (var text in new[] { "pedido #48213 enviado", "https://github.com/theuslpszbr15/dynamic-island-windows", "Reunião às 15h na sala 2", "matheus@exemplo.com" })
+            _clips.Add(text);
+        _clips.TogglePin(_clips.Items.First(i => i.Text.StartsWith("Reunião")));
+        SetExpanded(true, PageClipboard);
+        await Shot("54-clipboard");
+        _clips.Clear();
+        _clips.TogglePin(_clips.Items[0]);
+        _clips = null;
+        ShowPage(PageSystem, 0);
+        NetLine.Text = "↓ 4.2 MB/s   ↑ 310 KB/s   ·   ping 18 ms";
+        await Shot("55-system-internet");
+        SetExpanded(false);
+        _downloads = new DownloadWatch(Dispatcher);
+        _downloads.GetType().GetField("_active", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(_downloads, new Dictionary<string, Download>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["x"] = new Download { TempPath = "x", Name = "ubuntu-26.04-desktop.iso", Bytes = 1_840_000_000, BytesPerSecond = 12_400_000 },
+            });
+        Retarget();
+        await Shot("56-download");
+        _downloads.Dispose();
+        _downloads = null;
+        Retarget();
         _plans =
         [
             new PlanUse("Copilot", PlanUsage.CopilotColor, 52, "mês", DateTimeOffset.Now.AddDays(8)),

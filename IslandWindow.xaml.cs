@@ -19,10 +19,10 @@ namespace DynamicIsland;
 public partial class IslandWindow : Window
 {
     enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info, Translation }
-    enum CompactKind { Clock, Media, Timer, Agent }
+    enum CompactKind { Clock, Media, Timer, Agent, Download }
 
-    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7, PageJarvis = 8;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular", "Tarefas e foco", "Jarvis"];
+    const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7, PageJarvis = 8, PageClipboard = 9;
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular", "Tarefas e foco", "Jarvis", "Copiados"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
     // The two clips ApplySize mutates every frame; created once, so the animation allocates nothing.
@@ -62,7 +62,7 @@ public partial class IslandWindow : Window
     readonly DispatcherTimer _transientTimer, _hoverTimer, _clockTimer, _liveTimer, _guardTimer, _dragTimer, _pollTimer, _watchTimer;
     readonly List<Rectangle> _eqBars = [];
     bool _eqPlaying;
-    readonly Border[] _dots = new Border[9];
+    readonly Border[] _dots = new Border[10];
     readonly Meter _cpu, _ram, _disk, _power;
     FileItem? _pressed;
     Point _pressPoint;
@@ -183,6 +183,8 @@ public partial class IslandWindow : Window
         StartExtras();
         ApplyPlanUsage();
         ApplyGitHub();
+        StartNetAndDownloads();
+        ApplyWakeWord();
         ApplyDiscord();
         await _media.StartAsync();
         if (_settings.ShowNotifications) await _notifications.StartAsync();
@@ -250,6 +252,9 @@ public partial class IslandWindow : Window
         _discord?.Dispose();
         _discordWindow?.Dispose();
         _glassTimer?.Stop();
+        _net?.Dispose();
+        _downloads?.Dispose();
+        _wake?.Dispose();
         _hub.Dispose();
         _media.Dispose();
         _volume.Dispose();
@@ -278,6 +283,7 @@ public partial class IslandWindow : Window
     {
         if (Agents.Any(a => a.IsActive)) return CompactKind.Agent;
         if (TimerActive) return CompactKind.Timer;
+        if (_downloads?.Active.Count > 0 && _settings.DownloadProgress) return CompactKind.Download;
         if (MediaShown) return CompactKind.Media;
         return CompactKind.Clock;
     }
@@ -308,6 +314,7 @@ public partial class IslandWindow : Window
             CompactKind.Agent => new(290 + extra, h),
             CompactKind.Media => new((LyricsOn ? 360 : 220) + extra, h),
             CompactKind.Timer => new(150 + extra + PetExtraWidth(kind), h),
+            CompactKind.Download => new(300 + extra, h),
             _ => new(132 + extra + PetExtraWidth(kind) + PlansWidth, h),
         };
     }
@@ -320,7 +327,8 @@ public partial class IslandWindow : Window
         PagePending => new(520, 236),
         PageTasks => new(520, 236),
         PageJarvis => new(520, 236),
-        PageSystem => new(450, 216),
+        PageClipboard => new(520, 236),
+        PageSystem => new(450, 236),
         _ => ExpandedSize,
     };
 
@@ -427,6 +435,8 @@ public partial class IslandWindow : Window
         if (kind == CompactKind.Media) UpdateLyric();
         CompactAgent.Visibility = Vis(kind == CompactKind.Agent);
         CompactTimer.Visibility = Vis(kind == CompactKind.Timer);
+        CompactDownload.Visibility = Vis(kind == CompactKind.Download);
+        if (kind == CompactKind.Download) UpdateCompactDownload();
         if (kind == CompactKind.Agent) UpdateCompactAgent();
         // Looping animations only run where they can be seen: one behind a hidden panel (or a hidden island)
         // still has the whole software-rendered window redrawn every frame.
@@ -726,7 +736,7 @@ public partial class IslandWindow : Window
 
     // ───────────────────────── pages ─────────────────────────
 
-    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage, TasksPage, JarvisPage];
+    FrameworkElement[] Pages => [MediaPage, SystemPage, FilesPage, AgentsPage, TimerPage, CalendarPage, PendingPage, TasksPage, JarvisPage, ClipboardPage];
 
     void ShowPage(int index, int direction)
     {
@@ -782,6 +792,7 @@ public partial class IslandWindow : Window
             case PagePending: UpdatePendingUi(); break;
             case PageTasks: UpdateTasksUi(); break;
             case PageJarvis: UpdateJarvisUi(); break;
+            case PageClipboard: UpdateClipboardUi(); break;
         }
     }
 
@@ -811,7 +822,7 @@ public partial class IslandWindow : Window
         switch (_page)
         {
             case PageMedia: UpdateMediaProgress(); break;
-            case PageSystem when _liveTicks % 2 == 1: SampleSystem(); break;
+            case PageSystem when _liveTicks % 2 == 1: SampleSystem(); UpdateNetLine(); break;
             case PageAgents: foreach (var a in Agents) a.Tick(); break;
         }
     }

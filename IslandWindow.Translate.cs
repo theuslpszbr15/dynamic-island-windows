@@ -8,6 +8,7 @@ namespace DynamicIsland;
 public partial class IslandWindow
 {
     Translation? _translation;
+    string _translationSource = "";
     bool _translating;
 
     async void TranslateSelection()
@@ -28,7 +29,8 @@ public partial class IslandWindow
                 return;
             }
             ShowInfo("\uF2B7", "Traduzindo…", Preview(selected), glyphColor: JarvisColor, seconds: 30);
-            if (await Translator.TranslateAsync(selected) is not { } translation)
+            _translationSource = selected;
+            if (await Translator.TranslateAsync(selected, _settings.TranslateTo) is not { } translation)
             {
                 ShowInfo("\uF2B7", "Não consegui traduzir agora", "tente de novo", glyphColor: Meter.Red, seconds: 3);
                 return;
@@ -71,5 +73,38 @@ public partial class IslandWindow
         if (_translation is not { } translation) return;
         TransientEnded();
         await TextPaster.PasteAsync(translation.Text);
+    }
+
+    /// <summary>The language chip: the same text again into another language (remembered for next time).</summary>
+    void TranslateLangs_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        var menu = new System.Windows.Controls.ContextMenu();
+        foreach (var target in Translator.Targets)
+        {
+            var item = new System.Windows.Controls.MenuItem
+            {
+                Header = target == "auto" ? "Automático (português ↔ inglês)" : target, IsCheckable = true, IsChecked = _settings.TranslateTo == target,
+            };
+            item.Click += async (_, _) =>
+            {
+                _settings.TranslateTo = target;
+                _settings.Save();
+                if (_translationSource.Length == 0) return;
+                _transientTimer.Stop();
+                TranslateLangs.Text = "Traduzindo…";
+                if (await Translator.TranslateAsync(_translationSource, target) is { } again) ShowTranslation(again);
+                else ShowInfo("\uF2B7", "Não consegui traduzir agora", "tente de novo", glyphColor: Meter.Red, seconds: 3);
+            };
+            menu.Items.Add(item);
+        }
+        menu.Opened += (_, _) => { _menuOpen = true; _transientTimer.Stop(); };
+        menu.Closed += (_, _) =>
+        {
+            _menuOpen = false;
+            if (_transient == Transient.Translation) _transientTimer.Start();
+        };
+        menu.PlacementTarget = (UIElement)sender;
+        menu.IsOpen = true;
     }
 }

@@ -67,7 +67,7 @@ static class Native
     [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
     [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleBitmap(IntPtr dc, int w, int h);
     [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
-    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+    [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr obj);
     [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
     [DllImport("gdi32.dll")] static extern int SetStretchBltMode(IntPtr dc, int mode);
     [DllImport("gdi32.dll")] static extern bool StretchBlt(IntPtr dest, int dx, int dy, int dw, int dh, IntPtr src, int sx, int sy, int sw, int sh, int op);
@@ -112,6 +112,8 @@ static class Native
 
     [DllImport("user32.dll")]
     static extern bool IsWindowVisible(IntPtr hwnd);
+
+    public static bool IsWindowVisibleNow(IntPtr hwnd) => IsWindowVisible(hwnd);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     static extern int GetWindowText(IntPtr hwnd, System.Text.StringBuilder text, int max);

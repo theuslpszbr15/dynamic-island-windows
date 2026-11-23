@@ -329,7 +329,7 @@ public sealed partial class SettingsWindow : DarkWindow
         var importMascot = new Button { Content = "Importar PNG…", Style = (Style)Resources["Action"] };
         importMascot.Click += (_, _) => { if (ImportMascot()) { _app.SetMascot(PetSpecies.Custom); Render(); } };
         page.Children.Add(Card("Mascote", Note("Ele segue o mouse com os olhos, dança com a música e muda de cor com os agentes."), mascots,
-            Choice("Roupinha", "No modo automático ele se veste sozinho no Natal, nas festas juninas e no Ano-Novo.",
+            Choice("Roupinha", "No modo automático ele se veste sozinho no Halloween, no Natal, nas festas juninas e no Ano-Novo.",
                 App.Outfits.Select(o => (o.Outfit, o.Label)).ToArray(), S.Outfit, o => { _app.SetOutfit(o); Render(); }),
             Toggle("Animações ociosas (mosquinha e bolinha)", "Quando parado, o mascote persegue uma mosquinha brilhante ou brinca com uma bolinha. Shift + clique faz carinho (PatPat).",
                 S.PlayfulPet, v => { S.PlayfulPet = v; S.Save(); _app.Island.ApplyLook(); }),
@@ -752,6 +752,9 @@ public sealed partial class SettingsWindow : DarkWindow
                 [("hold", "Segurar para falar"), ("text", "Só escrever")],
                 S.JarvisVoiceMode, m => { S.JarvisVoiceMode = m; S.Save(); }),
             Toggle("Falar as respostas", "O Jarvis lê a resposta em voz alta (voz baixada ou a voz em português do Windows).", S.JarvisSpeak, v => { S.JarvisSpeak = v; S.Save(); }),
+            Toggle("\"Ei Jarvis\"", (_app.Island.WakeProblem ?? "Diga \"ei Jarvis\" e faça o pedido; ele envia quando você para de falar.") +
+                " Usa o reconhecimento de voz do Windows, sem internet. Enquanto ligado, o Windows mostra o microfone em uso.",
+                S.WakeWord, v => { S.WakeWord = v; S.Save(); _app.Island.ApplyWakeWord(); }),
             Choice("Brilho da voz", "As cores que sobem da borda da ilha quando você fala e quando o Jarvis responde.",
                 [.. VoiceGlow.Variants, ("off", "Desligado")],
                 S.JarvisGlow, v => { S.JarvisGlow = v; S.Save(); _app.Island.ApplyLook(); }),
@@ -783,7 +786,10 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.QuickTranslate = v;
                 S.Save();
                 _app.Island.RegisterHotkeys();
-            })));
+            }),
+            Choice("Traduzir para", "Também dá para trocar clicando no idioma, na própria ilha.",
+                Translator.Targets.Select(t => (t, t == "auto" ? "Automático (português ↔ inglês)" : t)).ToArray(),
+                S.TranslateTo, v => { S.TranslateTo = v; S.Save(); })));
 
         page.Children.Add(Card("Motores locais",
             Note("Os mesmos do app JARVIS. Se o JARVIS já baixou algum, a ilha usa o dele. Cada arquivo é conferido (SHA-256) antes de rodar. " +

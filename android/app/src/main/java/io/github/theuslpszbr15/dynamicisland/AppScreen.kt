@@ -518,7 +518,26 @@ private fun WakeCard() {
 
 @Composable
 private fun RemoteCard(pc: PcState?, onRemote: (String, Int) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Android's own speech recognition (the phone's keyboard voice); the text goes to the PC and is typed there
+    val dictate = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val said = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim().orEmpty()
+        if (said.isEmpty()) return@rememberLauncherForActivityResult
+        val sent = Link.type(said)
+        android.widget.Toast.makeText(context, if (sent) "Digitado no PC" else "O PC não está conectado", android.widget.Toast.LENGTH_SHORT).show()
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        UiSecondary("Ditar no PC", {
+            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Fale: o texto é digitado onde você está no PC")
+            try { dictate.launch(intent) }
+            catch (_: android.content.ActivityNotFoundException) {
+                android.widget.Toast.makeText(context, "Este celular não tem reconhecimento de voz", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }, Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f).background(Ui.Card, Ui.CardShape).padding(16.dp).heightIn(min = 112.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -24,6 +24,7 @@ public static class Hotkeys
         new(7, "jarvis", "Ctrl+Alt+J", "Jarvis (segure para falar, toque para escrever)"),
         new(8, "dictate", "Ctrl+Alt+F", "ditado (segure, fale e solte: o texto é colado)"),
         new(9, "translate", "Ctrl+Alt+L", "traduzir o texto selecionado"),
+        new(10, "ocr", "Ctrl+Alt+O", "copiar o texto de um pedaço da tela"),
     ];
 
     public static Shortcut? ById(int id) => All.FirstOrDefault(a => a.Id == id);

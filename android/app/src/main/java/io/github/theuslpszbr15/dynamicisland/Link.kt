@@ -134,6 +134,15 @@ object Link {
         }
     }
 
+    /** Text dictated on the phone: the PC types it where the person is. False when no PC is connected. */
+    fun type(text: String): Boolean {
+        val c = client ?: return false
+        io.execute {
+            try { c.type(text) } catch (_: Exception) {}
+        }
+        return true
+    }
+
     fun sendFilter(off: List<String>, at: Long) {
         val c = client ?: return
         io.execute {

@@ -98,6 +98,8 @@ class LinkClient(
         fun onAppVersion(code: Int, name: String, url: String) {}
         /** Which notices are switched off on the islands (kind names), and when that changed (Unix ms). */
         fun onFilter(off: List<String>, at: Long) {}
+        /** A notification the PC's island showed (PC 1.9.4 and later). */
+        fun onPcNotify(app: String, title: String, body: String) {}
     }
 
     private val writeLock = Any()
@@ -178,6 +180,7 @@ class LinkClient(
                     listener.onFilter((0 until list.length()).map { list.optString(it) }, o.optLong("at"))
                 }
                 "clip" -> o.optString("text").takeIf { it.isNotEmpty() && it.length <= MAX_CLIP }?.let(listener::onClip)
+                "pcNotify" -> listener.onPcNotify(o.optString("app").take(60), o.optString("title").take(120), o.optString("body").take(400))
                 "pc" -> listener.onPcState(PcState(
                     o.optString("title").take(120), o.optString("artist").take(120), o.optBoolean("playing"),
                     o.optInt("volume").coerceIn(0, 100), o.optBoolean("muted"), o.optLong("shutdownAt"),
@@ -348,6 +351,9 @@ class LinkClient(
 
     /** Text copied on the phone goes to the PC's clipboard. */
     fun clip(text: String) = send(JSONObject().put("type", "clip").put("text", text))
+
+    /** Text dictated on the phone, typed where the person is on the PC. */
+    fun type(text: String) = send(JSONObject().put("type", "type").put("text", text.take(2000)))
 
     /** Remote control: play, next, prev, volup, voldown, mute, lock, shutdown (in [minutes]), cancelShutdown. */
     fun remote(action: String, minutes: Int = 0) =

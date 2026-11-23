@@ -18,6 +18,7 @@ object Notifications {
     const val APPROVAL_CHANNEL = "approvals"
     const val AGENT_CHANNEL = "agents"
     const val FILE_CHANNEL = "files"
+    const val PC_CHANNEL = "pc"
     const val EXTRA_FILE_ID = "fileId"
     const val LINK_ID = 1
     const val EXTRA_FINGERPRINT = "fingerprint"
@@ -51,6 +52,28 @@ object Notifications {
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             }
         )
+        manager.createNotificationChannel(
+            NotificationChannel(PC_CHANNEL, "Avisos do PC", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "As notificações que aparecem na ilha do PC (o filtro é o do PC)"
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+        )
+    }
+
+    /** A notification the PC's island showed, grouped per app so a chatty one replaces its own. */
+    fun pcNotice(context: Context, app: String, title: String, body: String) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val notification = NotificationCompat.Builder(context, PC_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_bit)
+            .setContentTitle(title.ifBlank { app })
+            .setContentText(body)
+            .setSubText(if (app.isBlank()) "PC" else "$app · PC")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, null))
+            .build()
+        NotificationManagerCompat.from(context).notify(4000 + (app.hashCode() and 0xFFF), notification)
     }
 
     /** Off for the app or for the permission requests: requests would arrive without any sound or banner. */

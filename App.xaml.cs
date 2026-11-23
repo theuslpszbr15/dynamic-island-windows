@@ -100,6 +100,7 @@ public partial class App : Application
         (PetOutfit.Palha, "Chapéu de palha"),
         (PetOutfit.Oculos, "Óculos escuros"),
         (PetOutfit.Coroa, "Coroa"),
+        (PetOutfit.Bruxa, "Chapéu de bruxa"),
     ];
 
     public void SetOutfit(PetOutfit outfit)

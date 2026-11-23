@@ -4,6 +4,67 @@ using Xunit;
 
 namespace DynamicIsland.Tests;
 
+public class ScreenToolsTests
+{
+    [Fact]
+    public void ReadsWindowsOwnOcr()
+    {
+        if (!ScreenOcr.Available) return; // no OCR language on this Windows
+        using var image = new System.Drawing.Bitmap(1000, 90);
+        using (var g = System.Drawing.Graphics.FromImage(image))
+        {
+            g.Clear(System.Drawing.Color.White);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            using var font = new System.Drawing.Font("Segoe UI", 26);
+            g.DrawString("Erro 404 pagina nao encontrada", font, System.Drawing.Brushes.Black, 10, 20);
+        }
+        var text = ScreenOcr.ReadAsync(image).GetAwaiter().GetResult() ?? "";
+        Assert.True(text.Contains("404") && text.Contains("encontrada", StringComparison.OrdinalIgnoreCase), "leu: " + text);
+    }
+
+    /// <summary>WAKE_E2E=1 (opens the microphone for a moment): Windows' recognizer starts listening for "ei Jarvis".</summary>
+    [Fact]
+    public async Task WakeWordStarts()
+    {
+        if (Environment.GetEnvironmentVariable("WAKE_E2E") != "1") return;
+        using var wake = new WakeWord();
+        Assert.True(await wake.StartAsync(), wake.Problem);
+        Assert.True(wake.Running);
+    }
+
+    [Theory]
+    [InlineData(@"C:\u\Downloads\video.mp4.crdownload", "video.mp4")]
+    [InlineData(@"C:\u\Downloads\Unconfirmed 123456.crdownload", "")]
+    [InlineData(@"C:\u\Downloads\setup.exe.part", "setup.exe")]
+    public void KnowsTheBrowsersTemporaryFiles(string path, string final)
+    {
+        Assert.True(DownloadWatch.IsPartial(path));
+        Assert.Equal(final, DownloadWatch.FinalName(path));
+    }
+
+    [Fact]
+    public void ClipboardHistoryKeepsTwentyAndPinned()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "clip-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var history = new ClipboardHistory(folder);
+            for (var i = 0; i < 25; i++) history.Add("texto " + i);
+            Assert.Equal(ClipboardHistory.Recent, history.Items.Count);
+            Assert.Equal("texto 24", history.Items[0].Text);
+            history.Add("texto 10"); // copied again: back on top
+            Assert.Equal("texto 10", history.Items[0].Text);
+            history.TogglePin(history.Items.First(i => i.Text == "texto 15"));
+            history.Clear();
+            Assert.Equal("texto 15", Assert.Single(history.Items).Text);
+            // pinned ones survive a restart (encrypted for this Windows user)
+            Assert.Equal("texto 15", Assert.Single(new ClipboardHistory(folder).Items).Text);
+            Assert.DoesNotContain("texto 15", File.ReadAllText(Path.Combine(folder, "clipboard-pinned.bin")));
+        }
+        finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+    }
+}
+
 public class TranslatorTests
 {
     [Fact]

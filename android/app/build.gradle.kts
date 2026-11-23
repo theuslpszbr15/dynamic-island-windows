@@ -16,8 +16,8 @@ android {
         // the combined fingerprint / screen-lock prompt needs Android 11
         minSdk = 30
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.5.5"
+        versionCode = 18
+        versionName = "1.5.6"
     }
 
     // Release key: android/keystore.properties (storeFile, storePassword, keyAlias, keyPassword; never committed)
@@ -69,6 +69,8 @@ android {
         unitTests.all { test ->
             // interop test against a running Dynamic Island: PHONE_LINK=<pairing link>
             System.getenv("PHONE_LINK")?.let { test.environment("PHONE_LINK", it) }
+            // Robolectric would install Conscrypt for the whole test JVM, and the relay tests that run after it hang
+            test.systemProperty("robolectric.conscryptMode", "OFF")
         }
     }
 }

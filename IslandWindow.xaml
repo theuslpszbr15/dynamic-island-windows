@@ -327,6 +327,15 @@
 
                     <!-- ===== Compact ===== -->
                     <Grid x:Name="CompactView" Height="34" VerticalAlignment="Top">
+                        <!-- a browser download: its name, how much came and how fast -->
+                        <Grid x:Name="CompactDownload" Visibility="Collapsed">
+                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" FontSize="13" Foreground="#FF0A84FF"
+                                       HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0,0,0" />
+                            <TextBlock x:Name="CompactDownloadName" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" Margin="36,0,118,0" />
+                            <TextBlock x:Name="CompactDownloadInfo" FontSize="11.5" Foreground="{DynamicResource Muted}" Typography.NumeralAlignment="Tabular"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" />
+                        </Grid>
                         <local:PetView x:Name="CompactPet" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,1" Panel.ZIndex="1" />
                         <TextBlock x:Name="CompactClock" Text="00:00" FontSize="13.5" FontWeight="SemiBold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -500,9 +509,11 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Horizontal" Background="Transparent" Cursor="Hand" HorizontalAlignment="Left"
+                                        MouseLeftButtonUp="TranslateLangs_Click" ToolTip="Traduzir para outro idioma">
                                 <TextBlock FontFamily="{StaticResource Icons}" Text="&#xF2B7;" FontSize="13" Foreground="#FF83D4B4" VerticalAlignment="Center" />
                                 <TextBlock x:Name="TranslateLangs" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE70D;" FontSize="9" Foreground="{DynamicResource Muted}" Margin="6,1,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                             <TextBlock x:Name="TranslateText" Grid.Row="1" FontSize="13.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
                                        MaxHeight="92" Margin="0,6,0,0" />
@@ -700,8 +711,15 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <UniformGrid x:Name="SystemMeters" Rows="2" Columns="2" />
+                                    <!-- internet: speed right now and ping -->
+                                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock x:Name="NetIcon" FontFamily="{StaticResource Icons}" Text="&#xE701;" FontSize="13" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="NetLine" FontSize="11.5" Foreground="{DynamicResource Muted}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                   Typography.NumeralAlignment="Tabular" />
+                                    </StackPanel>
                                     <Grid Grid.Row="1" Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -1011,6 +1029,29 @@
                                             </Button>
                                         </StackPanel>
                                         <TextBlock x:Name="JarvisStateText" FontSize="12" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Grid>
+
+                                <!-- Clipboard history: pinned first, then the newest; a click copies again -->
+                                <Grid x:Name="ClipboardPage" Visibility="Collapsed">
+                                    <Grid.RenderTransform>
+                                        <TranslateTransform />
+                                    </Grid.RenderTransform>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel x:Name="ClipList" />
+                                    <TextBlock x:Name="ClipEmpty" Text="Copie um texto em qualquer app e ele aparece aqui" FontSize="12"
+                                               Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Grid Grid.Row="1" Margin="0,6,0,0">
+                                        <Button Style="{StaticResource Chip}" Margin="0" Height="30" HorizontalAlignment="Left" Click="ClipSearch_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE721;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <TextBlock Text="Buscar e ver tudo" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                        <TextBlock x:Name="ClipCount" FontSize="11.5" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                     </Grid>
                                 </Grid>
                             </Grid>

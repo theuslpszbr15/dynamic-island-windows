@@ -135,6 +135,7 @@ public partial class IslandWindow : IJarvisHost
     public void TriggerJarvis()
     {
         if (_mic != null) return;
+        RememberJarvisTarget();
         ShowJarvisPage();
         if (_settings.JarvisVoiceMode != "hold" || !CanListen)
         {
@@ -157,6 +158,7 @@ public partial class IslandWindow : IJarvisHost
 
     public void OpenJarvis()
     {
+        RememberJarvisTarget();
         if (_jarvisWindow != null)
         {
             _jarvisWindow.Activate();

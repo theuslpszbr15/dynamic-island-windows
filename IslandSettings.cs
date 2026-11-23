@@ -104,6 +104,8 @@ public sealed class IslandSettings
     public string DictationStyle { get; set; } = "clean";
     /// <summary>Select text, press the shortcut: the translation shows on the island (needs the Groq key).</summary>
     public bool QuickTranslate { get; set; } = true;
+    /// <summary>"auto" (Portuguese ↔ English) or a language from Translator.Targets.</summary>
+    public string TranslateTo { get; set; } = "auto";
     /// <summary>Copilot, Claude and Codex plan usage next to the clock.</summary>
     public bool PlanUsage { get; set; } = true;
     /// <summary>CI failures, pull requests and releases of <see cref="GitHubRepos"/> on the island.</summary>
@@ -112,6 +114,14 @@ public sealed class IslandSettings
     public bool GitHubCi { get; set; } = true;
     public bool GitHubPulls { get; set; } = true;
     public bool GitHubReleases { get; set; } = true;
+    /// <summary>The last 20 copied texts on the island's "Copiados" page (kept in memory; pinned ones encrypted on disk).</summary>
+    public bool ClipboardHistory { get; set; } = true;
+    /// <summary>A card when the internet drops and when it comes back.</summary>
+    public bool NetAlerts { get; set; } = true;
+    /// <summary>A browser download in progress shows on the compact island.</summary>
+    public bool DownloadProgress { get; set; } = true;
+    /// <summary>"Ei Jarvis" opens Jarvis by voice (Windows' offline recognition; the microphone shows as in use).</summary>
+    public bool WakeWord { get; set; }
     /// <summary>A new install offers the demo once.</summary>
     public bool DemoPending { get; set; }
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
@@ -140,6 +150,10 @@ public sealed class IslandSettings
     public bool PhoneCalls { get; set; } = true;
     /// <summary>The phone can control music, volume, lock and shutdown of this PC.</summary>
     public bool PhoneRemote { get; set; } = true;
+    /// <summary>Text dictated on the phone is typed where you are on the PC.</summary>
+    public bool PhoneTyping { get; set; } = true;
+    /// <summary>The notifications the island shows also go to the paired phone.</summary>
+    public bool PhoneNotifications { get; set; } = true;
     /// <summary>Who joins the Discord call the user is in shows on the island (local RPC, see Services/DiscordVoice).</summary>
     public bool DiscordCalls { get; set; }
     /// <summary>Also a small pill when someone leaves that call.</summary>

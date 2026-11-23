@@ -228,6 +228,7 @@ class LinkService : Service() {
         }
 
         override fun onClip(text: String) = ClipSync.fromPc(this@LinkService, text)
+    override fun onPcNotify(app: String, title: String, body: String) = Notifications.pcNotice(this@LinkService, app, title, body)
 
         override fun onWake(mac: String, broadcast: String) = Wake.save(this@LinkService, mac, broadcast)
 

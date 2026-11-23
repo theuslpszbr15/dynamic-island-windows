@@ -42,6 +42,7 @@ public partial class IslandWindow
             _phone.RelayTrouble += OnRelayTrouble;
             _phone.PendingChanged += OnPhonePending;
             _phone.Clip += OnPhoneClip;
+            _phone.Type += OnPhoneType;
             _phone.Remote += OnPhoneRemote;
             _phone.Call += OnPhoneCall;
             _phone.FilterFromPhone += OnPhoneFilter;

@@ -167,6 +167,11 @@ public partial class IslandWindow
             TranslateSelection();
             return;
         }
+        if (action == "ocr")
+        {
+            CopyTextFromScreen();
+            return;
+        }
         if (action == "hide")
         {
             // Over a full-screen app the island is already out of the way: the key shows it until pressed again.
@@ -260,6 +265,7 @@ public partial class IslandWindow
             {
                 var raw = Clipboard.GetText();
                 var fromPhone = raw == _clipFromPhone;
+                if (_settings.ClipboardHistory) Clips.Add(raw);
                 SendClipToPhone(raw);
                 if (!show || fromPhone) return;
                 var text = string.Join(' ', raw.Split((char[])['\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));

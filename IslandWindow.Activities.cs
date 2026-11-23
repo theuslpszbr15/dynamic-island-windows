@@ -229,6 +229,9 @@ public partial class IslandWindow
         }
         ShowCard(n.Logo, n.Title, n.App, n.Body, seconds: claude ? 15 : 5, important: claude);
         _notifyAction = claude ? () => OpenApp(n.AppId) : null;
+        // the same notification on the paired phone (what the island shows, so the same filter)
+        if (_settings.PhoneNotifications && !_demo && _phone?.Running == true && _phone.ConnectedPhones > 0)
+            _phone.PublishNotification(n.App, n.Title, n.Body);
     }
 
     /// <summary>Brings an app forward by its AppUserModelId (an app already open just comes to the front).</summary>

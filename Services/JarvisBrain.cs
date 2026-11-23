@@ -21,6 +21,8 @@ public interface IJarvisHost
     void Media(string action);
     /// <summary>Shows the whole script and asks; true only when the person allows it.</summary>
     Task<bool> ConfirmScriptAsync(string description, string code);
+    /// <summary>The text on the window the person was looking at when they called Jarvis (OCR); null when unreadable.</summary>
+    Task<string?> ReadScreenAsync();
 }
 
 /// <summary>
@@ -185,6 +187,7 @@ public sealed class JarvisBrain
                      "Nunca revele chaves ou senhas. Você só executa as ações das ferramentas disponíveis. " +
                      "Quando o usuário pedir para você lembrar algo, mudar como o chama, ou adotar um comportamento daqui pra frente, chame a ferramenta lembrar. " +
                      "Scripts só com executar_script (o usuário aprova antes). " +
+                     "Quando perguntarem sobre algo que está na tela (um erro, uma mensagem, uma página), chame ver_tela antes de responder. " +
                      $"Data e hora atuais (use esta, nunca invente): {Now()}.";
         if (_facts.Count > 0)
             prompt += "\n\nMEMÓRIA PERMANENTE (preferências e fatos que o usuário pediu; siga SEMPRE, inclusive como chamar o usuário):\n" +
@@ -398,6 +401,7 @@ public sealed class JarvisBrain
         Tool("listar_pasta", "Lista arquivos de uma pasta dentro do usuário (ex: Desktop, Downloads).", new() { ["caminho"] = Str() }),
         Tool("ler_arquivo", "Lê um arquivo de texto dentro da pasta do usuário.", new() { ["caminho"] = Str() }, "caminho"),
         Tool("status_pc", "Mostra uso de RAM e espaço livre em disco."),
+        Tool("ver_tela", "Lê o texto da janela que o usuário está olhando (erros, mensagens, páginas)."),
         Tool("volume", "Controla o volume do Windows.", new() { ["acao"] = Enum("aumentar", "diminuir", "mudo") }, "acao"),
         Tool("midia", "Controla a música ou vídeo que está tocando no PC.", new() { ["acao"] = Enum("tocar_pausar", "proxima", "anterior") }, "acao"),
         Tool("buscar_web", "Busca fatos na Wikipedia (pessoas, lugares, conceitos, tecnologia) e devolve resumos.", new() { ["consulta"] = Str() }, "consulta"),
@@ -440,6 +444,8 @@ public sealed class JarvisBrain
                 "listar_pasta" => ListFolder(S("caminho")),
                 "ler_arquivo" => ReadFile(S("caminho")),
                 "status_pc" => PcStatus(),
+                "ver_tela" => await _host.ReadScreenAsync() is { Length: > 0 } screen
+                    ? "Texto na tela:\n" + (screen.Length > 3000 ? screen[..3000] : screen) : "Não consegui ler a tela.",
                 "volume" => Volume(S("acao")),
                 "midia" => OnHost(() => _host.Media(S("acao")), "Feito."),
                 "buscar_web" => await SearchWikipedia(S("consulta")),

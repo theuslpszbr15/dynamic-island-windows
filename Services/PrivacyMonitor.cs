@@ -106,6 +106,8 @@ public static class PrivacyMonitor
             using var key = parent.OpenSubKey(name);
             if (key == null) continue;
             if (name == "NonPackaged") { Collect(key, apps); continue; }
+            // the island itself listening for "ei Jarvis" isn't news
+            if (string.Equals(name.Replace('#', '\\'), Environment.ProcessPath, StringComparison.OrdinalIgnoreCase)) continue;
             if (key.GetValue("LastUsedTimeStart") is long start && start > 0 && key.GetValue("LastUsedTimeStop") is long stop && stop == 0)
                 apps.Add(Friendly(name));
         }
