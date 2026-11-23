@@ -88,6 +88,41 @@ public static class Updater
         return null;
     }
 
+    /// <summary>The phone app from the latest release, checked against its SHA-256 digest, in a fresh %TEMP% folder;
+    /// null when the release has no checked APK or the download fails.</summary>
+    public static async Task<string?> DownloadAndroidAppAsync()
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, LatestApi);
+            request.Headers.Accept.ParseAdd("application/vnd.github+json");
+            using var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return null;
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var tag = json.RootElement.GetProperty("tag_name").GetString() ?? "latest";
+            foreach (var asset in json.RootElement.GetProperty("assets").EnumerateArray())
+            {
+                if (asset.GetProperty("name").GetString() != "DynamicIsland-Android.apk") continue;
+                var url = asset.GetProperty("browser_download_url").GetString();
+                var digest = asset.TryGetProperty("digest", out var d) ? d.GetString() : null;
+                if (url == null || !url.StartsWith("https://github.com/", StringComparison.Ordinal) || digest?.StartsWith("sha256:", StringComparison.Ordinal) != true)
+                    return null;
+                var bytes = await Http.GetByteArrayAsync(url);
+                if (!Convert.ToHexString(SHA256.HashData(bytes)).Equals(digest[7..], StringComparison.OrdinalIgnoreCase)) return null;
+                var folder = Path.Combine(Path.GetTempPath(), "DynamicIsland-apk-" + Guid.NewGuid().ToString("N")[..8]);
+                Directory.CreateDirectory(folder);
+                var path = Path.Combine(folder, $"DynamicIsland-{tag}.apk");
+                await File.WriteAllBytesAsync(path, bytes);
+                return path;
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or IOException)
+        {
+            Log.Warn("Updater", "phone app: " + ex.Message);
+        }
+        return null;
+    }
+
     /// <summary>Downloads to a fresh folder in %TEMP%; throws if the file doesn't match the release digest or
     /// (when this copy is signed) isn't signed by the same publisher.</summary>
     public static async Task<string> DownloadAsync(UpdateInfo info)

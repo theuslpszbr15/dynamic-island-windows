@@ -68,12 +68,34 @@ public partial class IslandWindow
     // Coming in over the internet is new, so it's worth a glance: if it wasn't you, "Parear de novo" cuts it off.
     readonly HashSet<string> _oldAppWarned = [];
 
-    // Once per phone while the island runs: the QR code to download the new app is one click away.
+    // Once per phone while the island runs. With file sending on, the update goes straight to the phone (it shows there
+    // as a file to accept, then Android installs it); otherwise the QR code to download it.
     void OnOldApp(string device)
     {
         if (SnapshotMode || !_oldAppWarned.Add(device)) return;
-        ShowInfo("\uE8EA", "App do celular desatualizado", $"Atualize para {PhoneLink.AndroidVersionName}",
-            glyphColor: System.Windows.Media.Color.FromRgb(0xFF, 0x9F, 0x0A), action: () => ((App)System.Windows.Application.Current).ShowAppDownload(), seconds: 8);
+        var direct = CanSendToPhone;
+        ShowInfo("\uE8EA", "App do celular desatualizado", direct ? "Enviar atualização" : $"Atualize para {PhoneLink.AndroidVersionName}",
+            glyphColor: System.Windows.Media.Color.FromRgb(0xFF, 0x9F, 0x0A), seconds: 12,
+            action: direct ? () => _ = SendAppUpdateToPhoneAsync() : () => ((App)System.Windows.Application.Current).ShowAppDownload());
+    }
+
+    /// <summary>Downloads the phone app from the latest release (checked against its SHA-256) and offers it to the phone.</summary>
+    public async Task SendAppUpdateToPhoneAsync()
+    {
+        if (!CanSendToPhone)
+        {
+            ((App)System.Windows.Application.Current).ShowAppDownload();
+            return;
+        }
+        ShowInfo("\uE896", "Baixando o app do celular…", "", seconds: 30);
+        if (await Updater.DownloadAndroidAppAsync() is not { } apk)
+        {
+            ShowInfo("\uE8EA", "Não consegui baixar o app agora", "Ver QR", glyphColor: Meter.Red, seconds: 6,
+                action: () => ((App)System.Windows.Application.Current).ShowAppDownload());
+            return;
+        }
+        // the phone shows it as a file to accept; tapping it opens Android's installer
+        await SendFilesToPhoneAsync([apk]);
     }
 
     void OnPhoneJoined(string device, bool viaRelay)

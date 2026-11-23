@@ -1238,6 +1238,18 @@ public sealed partial class SettingsWindow : DarkWindow
                 Render();
             };
             buttons.Children.Add(copy);
+            if (phones > 0)
+            {
+                // the newest app straight to the phone: it arrives as a file to accept, then Android installs it
+                var update = new Button { Content = "Enviar o app atualizado", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
+                update.Click += async (_, _) =>
+                {
+                    update.IsEnabled = false;
+                    await island.SendAppUpdateToPhoneAsync();
+                    update.IsEnabled = true;
+                };
+                buttons.Children.Add(update);
+            }
             buttons.Children.Add(again);
             var stop = new Button { Content = phones > 0 ? "Desconectar o celular" : "Parar de esperar", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 8) };
             stop.Click += (_, _) => { _app.TogglePhoneLink(); Render(); };

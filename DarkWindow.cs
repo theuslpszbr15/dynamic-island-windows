@@ -247,8 +247,11 @@ public abstract class DarkWindow : Window
     {
         if (_sections.All(s => s.Id != page)) return;
         if (_searchBox.Text.Length > 0) _searchBox.Text = "";
+        var other = page != _page;
         _page = page;
         Render();
+        // another section starts at its top; only re-rendering the same one keeps the scroll
+        if (other) _scroll.ScrollToTop();
     }
 
     /// <summary>Builds the current page again (keeping the scroll position).</summary>
@@ -317,7 +320,7 @@ public abstract class DarkWindow : Window
         content.Children.Add(new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 16, Width = 30, VerticalAlignment = VerticalAlignment.Center });
         content.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
         var button = new RadioButton { Content = content, Tag = id, Style = (Style)Resources["Nav"], GroupName = "nav" };
-        button.Checked += (_, _) => { if (_page != id) { _page = id; Render(); } };
+        button.Checked += (_, _) => { if (_page != id) Navigate(id); };
         return button;
     }
 

@@ -32,6 +32,17 @@ public class ScreenToolsTests
         Assert.True(wake.Running);
     }
 
+    /// <summary>APK_E2E=1 (downloads ~22 MB): the phone app of the latest release comes down checked against its digest.</summary>
+    [Fact]
+    public async Task DownloadsThePhoneAppChecked()
+    {
+        if (Environment.GetEnvironmentVariable("APK_E2E") != "1") return;
+        var apk = await Updater.DownloadAndroidAppAsync();
+        Assert.NotNull(apk);
+        Assert.True(new FileInfo(apk!).Length > 1_000_000);
+        Directory.Delete(Path.GetDirectoryName(apk)!, true);
+    }
+
     [Theory]
     [InlineData(@"C:\u\Downloads\video.mp4.crdownload", "video.mp4")]
     [InlineData(@"C:\u\Downloads\Unconfirmed 123456.crdownload", "")]
