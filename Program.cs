@@ -18,6 +18,13 @@ public static class Program
             return devApp.Run();
         }
 
+        if (args.Length > 2 && args[0] == "--try-computer")
+        {
+            var tryApp = new App { ComputerTask = args[1], ComputerFolder = args[2] };
+            tryApp.InitializeComponent();
+            return tryApp.Run();
+        }
+
         if (args.Length > 1 && args[0] == "--perf")
         {
             var perfApp = new App { PerfFolder = args[1] };

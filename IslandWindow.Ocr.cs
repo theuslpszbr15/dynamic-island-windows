@@ -58,6 +58,7 @@ public partial class IslandWindow
 
     async Task<string?> IJarvisHost.ReadScreenAsync()
     {
+        if (Native.IsInputDesktopLocked()) return "(a tela do PC está bloqueada; não há nada para ler até o usuário desbloquear)";
         var target = _jarvisTarget != IntPtr.Zero && Native.IsWindowVisibleNow(_jarvisTarget) ? _jarvisTarget : Native.GetForegroundWindow();
         if (target == IntPtr.Zero || !Native.GetWindowRect(target, out var r)) return null;
         // a maximized window reaches past the screen edge; only what is on screen counts

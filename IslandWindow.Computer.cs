@@ -16,6 +16,16 @@ public partial class IslandWindow
 
     public bool ComputerBusy => _computer != null;
 
+    /// <summary>--try-computer: each step's picture, answer and approval card go here, and the card is allowed by itself.</summary>
+    public string? ComputerTestFolder { get; init; }
+
+    void TestLog(int step, string line, byte[]? jpeg = null)
+    {
+        if (ComputerTestFolder == null) return;
+        File.AppendAllText(Path.Combine(ComputerTestFolder, "steps.txt"), $"[{step}] {line}\n");
+        if (jpeg != null) File.WriteAllBytes(Path.Combine(ComputerTestFolder, $"step{step:00}.jpg"), jpeg);
+    }
+
     /// <summary>Stops Jarvis's computer use now (the pill's "Parar").</summary>
     public void StopComputer(string why = "O usuário parou.")
     {
@@ -31,6 +41,7 @@ public partial class IslandWindow
             return "O controle do computador está desligado. Diga ao usuário que ele pode ligar em Configurações › Jarvis › Controle do computador.";
         if (_computer != null) return "Já estou usando o computador em outra tarefa.";
         if (!JarvisBrain.HasKey) return "O controle do computador precisa da chave da Groq.";
+        if (Native.IsInputDesktopLocked()) return "A tela do PC está bloqueada: o usuário precisa desbloquear antes.";
 
         using var cts = new CancellationTokenSource(ComputerUse.MaxTime);
         _computer = cts;
@@ -49,6 +60,7 @@ public partial class IslandWindow
             for (var step = 1; step <= ComputerUse.MaxSteps; step++)
             {
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
+                if (Native.IsInputDesktopLocked()) return "Parei: a tela do PC foi bloqueada." + Summary();
                 ComputerPill($"Jarvis no controle · passo {step}");
 
                 var front = Native.GetForegroundWindow();
@@ -56,9 +68,11 @@ public partial class IslandWindow
                 using var shot = ScreenOcr.Capture(screen);
                 var lines = await ScreenOcr.ReadLinesAsync(shot) ?? [];
                 var scale = Math.Min(1.0, (double)ComputerUse.ImageWidth / shot.Width);
+                var jpeg = ComputerUse.Jpeg(shot, scale);
                 var json = await JarvisBrain.VisionJsonAsync(ComputerUse.SystemPrompt,
                     ComputerUse.StepText(task, step, done, lines, scale, (int)(shot.Width * scale), (int)(shot.Height * scale)),
-                    ComputerUse.Jpeg(shot, scale));
+                    jpeg);
+                TestLog(step, "modelo: " + (json?.ToJsonString() ?? "(nada)"), jpeg);
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
                 if (json == null) return "Não consegui ver a tela (sem internet ou no limite grátis da Groq)." + Summary();
 
@@ -109,6 +123,14 @@ public partial class IslandWindow
                 {
                     _computerAsk = new ComputerAskWindow(what + (action.Reason.Length > 0 ? $"\n{action.Reason}" : ""), risky, offerRest: !risky && askAll, screen, point);
                     _computerAsk.Show();
+                    if (ComputerTestFolder != null)
+                    {
+                        await Task.Delay(1200);
+                        using (var card = ScreenOcr.Capture(screen))
+                            card.Save(Path.Combine(ComputerTestFolder, $"step{step:00}-aprovar.png"));
+                        TestLog(step, "aprovação: " + what + (risky ? " (importante)" : ""));
+                        _computerAsk.Finish(ComputerAnswer.Allow);
+                    }
                     var answer = await _computerAsk.Answer;
                     _computerAsk = null;
                     if (answer == ComputerAnswer.Stop || cts.IsCancellationRequested)
@@ -124,6 +146,7 @@ public partial class IslandWindow
 
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
                 await PerformAsync(action, point, screen);
+                TestLog(step, "feito: " + what + (point is { } at ? $" @ {at.X},{at.Y}" : ""));
                 done.Add(what);
                 try { await Task.Delay(action.Kind == "esperar" ? 2500 : 900, cts.Token); }
                 catch (OperationCanceledException) { }

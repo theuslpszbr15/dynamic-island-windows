@@ -17,6 +17,8 @@ public partial class App : Application
 
     public string? SnapshotFolder { get; init; }
     public string? PerfFolder { get; init; }
+    public string? ComputerTask { get; init; }
+    public string? ComputerFolder { get; init; }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -41,6 +43,20 @@ public partial class App : Application
             _window.Show();
             await _window.RunSnapshotsAsync(SnapshotFolder);
             try { File.Delete(PhoneLink.SecretFile); } catch { }
+            Shutdown();
+            return;
+        }
+
+        if (ComputerTask != null && ComputerFolder != null)
+        {
+            // a developer's check of computer use: one real task, every step and approval saved to the folder
+            Directory.CreateDirectory(ComputerFolder);
+            Settings = new IslandSettings { ReadOnly = true, DiscreetIdle = false, ComputerUse = true, ComputerUseApproval = "perigosas" };
+            _window = new IslandWindow(Settings) { ComputerTestFolder = ComputerFolder };
+            _window.Show();
+            await Task.Delay(1500);
+            var result = await ((IJarvisHost)_window).UseComputerAsync(ComputerTask);
+            File.WriteAllText(Path.Combine(ComputerFolder, "result.txt"), result);
             Shutdown();
             return;
         }

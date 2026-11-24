@@ -172,6 +172,29 @@ static class Native
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll")] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+    [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr desktop);
+
+    /// <summary>The PC is locked: the lock screen (LockApp) or a screensaver is in front, or the input desktop is
+    /// Winlogon's (password, UAC), which a normal app can't open.</summary>
+    public static bool IsInputDesktopLocked()
+    {
+        var desktop = OpenInputDesktop(0, false, 0x0100); // DESKTOP_SWITCHDESKTOP
+        if (desktop == IntPtr.Zero) return true;
+        CloseDesktop(desktop);
+        var saver = false;
+        if (SystemParametersInfo(0x0072, 0, ref saver, 0) && saver) return true; // SPI_GETSCREENSAVERRUNNING
+        if (GetWindowThreadProcessId(GetForegroundWindow(), out var pid) == 0) return false;
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            return process.ProcessName.Equals("LockApp", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, ref bool value, uint flags);
+
     /// <summary>A click at a physical screen point.</summary>
     public static void Click(int x, int y, bool right = false, bool twice = false)
     {
