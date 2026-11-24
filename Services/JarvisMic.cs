@@ -16,7 +16,10 @@ public sealed class JarvisMic : IDisposable
     WaveFileWriter? _writer;
     TaskCompletionSource? _stopped;
     string _path = "";
-    double _lowState, _midState, _level, _low, _mid, _high;
+    double _lowState, _midState, _level, _low, _mid, _high, _peak;
+
+    /// <summary>The loudest moment so far (same scale as Level): near zero means the microphone heard nothing.</summary>
+    public double Peak => Volatile.Read(ref _peak);
 
     public (double Level, double Low, double Mid, double High) Read() =>
         (Volatile.Read(ref _level), Volatile.Read(ref _low), Volatile.Read(ref _mid), Volatile.Read(ref _high));
@@ -80,6 +83,7 @@ public sealed class JarvisMic : IDisposable
     {
         var (level, low, mid, high) = Levels(buffer, 0, bytes, Rate, ref _lowState, ref _midState);
         Volatile.Write(ref _level, level);
+        if (level > _peak) Volatile.Write(ref _peak, level);
         Volatile.Write(ref _low, low);
         Volatile.Write(ref _mid, mid);
         Volatile.Write(ref _high, high);

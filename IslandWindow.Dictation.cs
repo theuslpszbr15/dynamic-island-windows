@@ -9,15 +9,12 @@ namespace DynamicIsland;
 public partial class IslandWindow
 {
     static readonly TimeSpan DictationLimit = TimeSpan.FromMinutes(2), DictationMinimum = TimeSpan.FromMilliseconds(350);
-    // below this the recording was silence (the meter is RMS × 15.5: speech reads 0.3 and up)
-    const double DictationSilence = 0.06;
     const uint VK_ESCAPE = 0x1B;
 
     JarvisMic? _dictMic;
     Task<string?>? _dictStart;
     DispatcherTimer? _dictTimer;
     DateTime _dictSince;
-    double _dictPeak;
     bool _dictHandsFree;
 
     public bool Dictating => _dictMic != null;
@@ -40,7 +37,6 @@ public partial class IslandWindow
         var key = Hotkeys.Parse(Hotkeys.Keys(_settings, "dictate"))?.Key ?? 0;
         Jarvis.StopSpeaking();
         _dictSince = DateTime.Now;
-        _dictPeak = 0;
         _dictHandsFree = false;
         var mic = _dictMic = new JarvisMic();
         _dictStart = mic.StartAsync();
@@ -53,7 +49,6 @@ public partial class IslandWindow
         _dictTimer.Tick += (_, _) =>
         {
             if (!ReferenceEquals(_dictMic, mic)) return;
-            _dictPeak = Math.Max(_dictPeak, mic.Read().Level);
             var elapsed = DateTime.Now - _dictSince;
             if (Native.IsKeyDown(VK_ESCAPE)) _ = StopDictationAsync(cancel: true);
             else if (elapsed > DictationLimit) _ = StopDictationAsync();
@@ -85,7 +80,7 @@ public partial class IslandWindow
         _dictTimer?.Stop();
         _glow.Listening = false;
         var tooShort = DateTime.Now - _dictSince < DictationMinimum;
-        var silent = _dictPeak < DictationSilence;
+        var silent = mic.Peak < SilentPeak;
         var wave = await starting == null ? await mic.StopAsync() : null;
         mic.Dispose();
         try
@@ -95,23 +90,23 @@ public partial class IslandWindow
                 if (cancel) ShowInfo("\uE711", "Ditado cancelado", "", seconds: 1.6);
                 return;
             }
-            if (tooShort || silent)
+            if (tooShort)
             {
                 ShowInfo("\uE720", "Não ouvi nada", "", glyphColor: JarvisColor, seconds: 2);
                 return;
             }
+            if (silent)
+            {
+                MicrophoneSilent(this);
+                return;
+            }
             _glow.Processing = true;
             ShowInfo("\uE720", "Transcrevendo…", "", glyphColor: JarvisColor, seconds: 60);
-            string? heard;
-            try { heard = (JarvisBrain.HasKey ? await JarvisBrain.TranscribeAsync(wave) : null) ?? await Jarvis.TranscribeAsync(wave); }
-            catch (Exception ex)
-            {
-                Log.Error("Dictation", ex);
-                heard = null;
-            }
+            var (heard, problem) = await HearAsync(wave);
             if (Dictation.Clean(heard) is not { } text)
             {
-                ShowInfo("\uE720", "Não entendi", "tente de novo", glyphColor: JarvisColor, seconds: 2.5);
+                ShowInfo("\uE720", problem ?? "Não entendi", problem != null ? "" : "tente de novo", glyphColor: problem != null ? Meter.Red : JarvisColor,
+                    seconds: problem != null ? 7 : 2.5, action: problem != null ? () => ((App)Application.Current).ShowSettings("jarvis") : null);
                 return;
             }
             if (_settings.DictationStyle != "said" && JarvisBrain.HasKey)

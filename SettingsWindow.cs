@@ -866,7 +866,8 @@ public sealed partial class SettingsWindow : DarkWindow
             Note("O cérebro do github.com/theuslpszbr15/Project.Jarvis: com uma chave grátis da Groq, o Jarvis escreve no Bloco de Notas, " +
                  "abre programas e sites, anota, cria pastas, lê arquivos, mostra o uso do PC, muda o volume, controla a música, " +
                  "põe timer, lembrete e tarefa, vê o clima, pesquisa na Wikipédia e lembra de você. Scripts só rodam depois que você " +
-                 "lê o código e permite. O que você pede vai para a Groq; a chave fica guardada só neste PC (criptografada)."),
+                 "lê o código e permite. O que você pede vai para a Groq; a chave fica guardada só neste PC (criptografada). " +
+                 "Em outro PC, cole a chave de novo lá: ela não vai junto."),
             state,
             Row("Chave da Groq", JarvisBrain.HasKey ? "Salva. Cole outra para trocar, ou salve vazio para apagar." : "console.groq.com › API Keys", keyRow),
             Row("Seu nome", "Como o Jarvis te chama.", name),

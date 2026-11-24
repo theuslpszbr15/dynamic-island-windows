@@ -345,9 +345,12 @@ public sealed class JarvisBrain
     }
 
     /// <summary>Whisper on Groq (much better than the small local one). Null without a key or on failure.</summary>
-    public static async Task<string?> TranscribeAsync(string wave)
+    public static async Task<string?> TranscribeAsync(string wave) => (await TranscribeWithReasonAsync(wave)).Text;
+
+    /// <summary>What was said, or why Groq didn't say (in words for the island).</summary>
+    public static async Task<(string? Text, string? Problem)> TranscribeWithReasonAsync(string wave)
     {
-        if (LoadKey() is not { } key) return null;
+        if (LoadKey() is not { } key) return (null, "Falta a chave da Groq: Configurações › Jarvis");
         try
         {
             using var form = new MultipartFormDataContent
@@ -360,13 +363,19 @@ public sealed class JarvisBrain
             using var request = new HttpRequestMessage(HttpMethod.Post, WhisperUrl) { Content = form };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
             using var response = await Http.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return null;
-            return (await response.Content.ReadAsStringAsync()).Trim();
+            if (response.IsSuccessStatusCode) return ((await response.Content.ReadAsStringAsync()).Trim(), null);
+            Log.Warn("Groq whisper", $"HTTP {(int)response.StatusCode}");
+            return (null, response.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "A Groq recusou a chave: cole uma nova em Configurações › Jarvis",
+                HttpStatusCode.TooManyRequests => "Limite grátis da Groq: tente de novo em um minuto",
+                _ => $"A Groq não transcreveu agora ({(int)response.StatusCode})",
+            });
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Log.Error("Groq whisper", ex);
-            return null;
+            return (null, "Sem internet para falar com a Groq");
         }
     }
 

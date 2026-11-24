@@ -139,6 +139,9 @@ public partial class IslandWindow : IJarvisHost
         ShowJarvisPage();
         if (_settings.JarvisVoiceMode != "hold" || !CanListen)
         {
+            if (_settings.JarvisVoiceMode == "hold")
+                ShowInfo("\uE720", "Para falar: chave da Groq ou microfone local", "Configurar", glyphColor: Meter.Red, seconds: 8,
+                    action: () => ((App)Application.Current).ShowSettings("jarvis"));
             OpenJarvis();
             return;
         }
@@ -200,6 +203,7 @@ public partial class IslandWindow : IJarvisHost
         _listenLimit?.Stop();
         var error = await starting;
         var wave = error == null ? await mic.StopAsync() : null;
+        var silent = mic.Peak < SilentPeak;
         mic.Dispose();
         if (error != null)
         {
@@ -215,23 +219,60 @@ public partial class IslandWindow : IJarvisHost
             if (discard) HideJarvisPill();
             return;
         }
+        if (silent)
+        {
+            try { File.Delete(wave); } catch { }
+            SetJarvisState("Pronto");
+            MicrophoneSilent(this);
+            return;
+        }
         SetJarvisState("Transcrevendo…");
         ShowInfo("\uE720", "Transcrevendo…", "", glyphColor: JarvisColor, seconds: 60);
-        string? said;
-        try { said = (JarvisBrain.HasKey ? await JarvisBrain.TranscribeAsync(wave) : null) ?? await Jarvis.TranscribeAsync(wave); }
-        catch (Exception ex)
-        {
-            Log.Error("Jarvis transcribe", ex);
-            said = null;
-        }
+        string? said, problem;
+        try { (said, problem) = await HearAsync(wave); }
         finally { try { File.Delete(wave); } catch { } }
         if (string.IsNullOrWhiteSpace(said) || said.StartsWith('['))
         {
             SetJarvisState("Pronto");
-            ShowInfo("\uE720", "Não entendi", "tente de novo", glyphColor: JarvisColor, seconds: 3);
+            ShowInfo("\uE720", problem ?? "Não entendi", problem != null ? "" : "tente de novo", glyphColor: problem != null ? Meter.Red : JarvisColor,
+                seconds: problem != null ? 7 : 3, action: problem != null ? () => ((App)Application.Current).ShowSettings("jarvis") : null);
             return;
         }
         await AskJarvisAsync(said);
+    }
+
+    // the meter is RMS × 15.5: a voice reads 0.3 and up, a muted or wrong microphone stays near 0
+    const double SilentPeak = 0.04;
+
+    static void MicrophoneSilent(IslandWindow island) =>
+        island.ShowInfo("\uE720", "O microfone não captou som", "Som do Windows", glyphColor: Meter.Red, seconds: 7,
+            action: () => Process.Start(new ProcessStartInfo("ms-settings:sound") { UseShellExecute = true }));
+
+    /// <summary>What was said (Groq's Whisper with a key, else the local engine), or why nothing could be heard.</summary>
+    async Task<(string? Text, string? Problem)> HearAsync(string wave)
+    {
+        string? problem = null;
+        if (JarvisBrain.HasKey)
+        {
+            var (text, why) = await JarvisBrain.TranscribeWithReasonAsync(wave);
+            if (!string.IsNullOrWhiteSpace(text)) return (text, null);
+            problem = why;
+        }
+        if (Jarvis.Folder(Jarvis.Engine.Microphone) != null)
+        {
+            try
+            {
+                var local = await Jarvis.TranscribeAsync(wave);
+                if (!string.IsNullOrWhiteSpace(local)) return (local, null);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Jarvis transcribe", ex);
+                problem ??= "O microfone local falhou: baixe de novo em Configurações › Jarvis";
+            }
+            return (null, problem);
+        }
+        return (null, problem ?? "Sem chave da Groq e sem o microfone local: Configurações › Jarvis");
     }
 
     void HideJarvisPill()
