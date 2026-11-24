@@ -8,6 +8,12 @@ public class VoiceTests
 {
     const int Rate = 22050;
 
+    [Theory]
+    [InlineData("Duas lentes. - **60 mm**: boa para retratos. - **16 mm**: mais cena.", "Duas lentes. 60 mm: boa para retratos. 16 mm: mais cena.")]
+    [InlineData("Opções:\n- **rápido**\n- lento", "Opções: rápido. lento")]
+    [InlineData("Ele disse “normal”, ok.", "Ele disse normal, ok.")]
+    public void SpeechTextDropsMarkdown(string text, string spoken) => Assert.Equal(spoken, Jarvis.SpeechText(text));
+
     // 16-bit mono WAV: (seconds, loud) pieces in a row
     static byte[] Wave(params (double Seconds, bool Loud)[] pieces)
     {

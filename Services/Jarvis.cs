@@ -478,10 +478,24 @@ public static class Jarvis
         return output;
     }
 
+    /// <summary>The text as it should be heard: no markdown marks (the voice reads "asterisco"), list items and line
+    /// breaks become sentence ends so the voice pauses.</summary>
+    internal static string SpeechText(string text)
+    {
+        text = Regex.Replace(text, @"\*{1,3}|_{2,}|`+|^#+\s*", "", RegexOptions.Multiline);
+        text = Regex.Replace(text, @"^\s*([-•–]|\d+[.)])\s+", ". ", RegexOptions.Multiline);
+        text = Regex.Replace(text, @"\s+[-•–—]\s+(?=\S)", ". ");
+        text = Regex.Replace(text, "[“”\"«»]", "");
+        text = Regex.Replace(text, @"\s*\n+\s*", ". ");
+        text = Regex.Replace(text, @"([.!?:;,])(\s*\.)+(?=\s|$)", "$1");
+        return Regex.Replace(text, @"^[\s.]+|\s{2,}", m => m.Index == 0 ? "" : " ").Trim();
+    }
+
     /// <summary>Says the text with the Piper voice, or the Windows Portuguese voice without it (stops what was being
     /// said). False when there is no voice.</summary>
     public static async Task<bool> SpeakAsync(string text)
     {
+        text = SpeechText(text);
         if (!CanSpeak || string.IsNullOrWhiteSpace(text)) return false;
         var dir = Folder(Engine.Voice);
         StopSpeaking();
@@ -537,7 +551,7 @@ public static class Jarvis
         {
             await RunAsync(exe, dir,
                 ["--model", "voice.onnx", "--output_file", name, "--espeak_data", espeak,
-                 "--length_scale", (1 / 0.95).ToString("0.00", CultureInfo.InvariantCulture)],
+                 "--length_scale", (1 / 0.95).ToString("0.00", CultureInfo.InvariantCulture), "--sentence_silence", "0.3"],
                 input: text.Length > 4000 ? text[..4000] : text, timeout: TimeSpan.FromMinutes(1), cancel: cancel);
             File.Move(Path.Combine(dir, name), wave, true);
         }

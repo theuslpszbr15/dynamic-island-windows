@@ -456,6 +456,8 @@ public sealed class JarvisBrain
     static string Clean(string text)
     {
         text = Regex.Replace(text, "<think>.*?</think>", "", RegexOptions.Singleline);
+        // the answers are read aloud: markdown marks would be spoken
+        text = Regex.Replace(text, @"\*{1,3}|_{2,}|`+|^#+\s*", "", RegexOptions.Multiline);
         text = Regex.Replace(text, "[\u00a0\u202f\u2009]", " ");
         text = Regex.Replace(text, @"(\s*(\.\.\.|…)\s*){2,}", "... ");
         return Regex.Replace(text, @"\s+", " ").Trim();
