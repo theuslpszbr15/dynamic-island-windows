@@ -5,7 +5,7 @@ using Xunit;
 
 namespace DynamicIsland.Tests;
 
-/// <summary>The public relay: no key in the QR, the Ed25519 answer to the relay's challenge, the 10 MB file limit
+/// <summary>The public relay: no key in the QR, the Ed25519 answer to the relay's challenge, the 60 MB file limit
 /// through the relay and the relay's close codes in words.</summary>
 public class PublicRelayTests
 {
@@ -71,13 +71,13 @@ public class PublicRelayTests
         Assert.Null(PhoneLink.AnswerChallenge(message, new string('a', 64), new byte[32]));
 
     [Fact]
-    public void FilesThroughTheRelayStopAt10MbPerBatch()
+    public void FilesThroughTheRelayStopAt60MbPerBatch()
     {
         Assert.True(PhoneLink.FitsRoute(PhoneLink.RelayMaxBatchBytes, viaRelay: true));
         Assert.False(PhoneLink.FitsRoute(PhoneLink.RelayMaxBatchBytes + 1, viaRelay: true));
         // on the local network the usual limits apply
         Assert.True(PhoneLink.FitsRoute(PhoneLink.MaxFileBytes, viaRelay: false));
-        Assert.Contains("10 MB", PhoneLink.RelayTooBigMessage);
+        Assert.Contains("60 MB", PhoneLink.RelayTooBigMessage);
     }
 
     [Fact]

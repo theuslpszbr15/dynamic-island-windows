@@ -155,7 +155,7 @@ object FileSender {
         val folder = File(outbox(context), id).apply { mkdirs() }
         val items = mutableListOf<OfferItem>()
         var total = 0L
-        // Offers now wait in Pendentes even with no connection: check the 10 MB relay cap against the
+        // Offers now wait in Pendentes even with no connection: check the 60 MB relay cap against the
         // current route when there is one (the PC checks again when the bytes actually go).
         val route = Link.client?.route ?: Route.Lan
         try {

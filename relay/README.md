@@ -13,9 +13,9 @@ A ilha já vem com um repasse público ligado para pareamentos novos
 (`wss://dynamic-island-relay.brendoribeiron.workers.dev`): o usuário só escaneia o QR, sem conta e sem deploy.
 O QR leva `relay=` mas não leva chave. Para não ficar caro nem virar túnel grátis, ele tem limites:
 
-- por sala (pareamento): 50 MB por dia de túnel (somando os dois sentidos) e 30 conexões novas por minuto;
+- por sala (pareamento): 300 MB por dia de túnel (somando os dois sentidos) e 30 conexões novas por minuto;
 - por endereço IP: 60 conexões novas por minuto (binding de Rate Limiting da Cloudflare, aproximado e por local);
-- arquivos pelo repasse: até 10 MB por envio (o PC e o celular conferem; na rede local continuam 30 MB por arquivo).
+- arquivos pelo repasse: até 60 MB por envio (o PC e o celular conferem; na rede local continuam 30 MB por arquivo, vídeos 60 MB).
 
 Passou de um limite, a conexão fecha com `4429` e o app e a ilha mostram
 "limite do repasse atingido, tente mais tarde ou use seu próprio repasse".

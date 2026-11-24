@@ -1230,7 +1230,7 @@ public sealed partial class SettingsWindow : DarkWindow
         if (S.PhoneRelayMode != PhoneRelayMode.Own)
             return Card("Fora de casa (pela internet)",
                 Note(about + (S.PhoneRelayMode == PhoneRelayMode.Public
-                    ? " O público é grátis e tem limites (50 MB por dia, arquivos até 10 MB); para mais, use o seu próprio."
+                    ? " O público é grátis e tem limites (300 MB por dia, até 60 MB por envio); para mais, use o seu próprio."
                     : "")),
                 mode, state, RelaySetupRows());
         return OwnRelayCard(island, mode, state, about);

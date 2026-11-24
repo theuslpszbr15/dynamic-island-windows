@@ -43,10 +43,10 @@ public sealed partial class PhoneLink
     /// <summary>60 MB for videos, 30 MB for everything else (the phone uses the same rule).</summary>
     public static long MaxBytesFor(string name) => VideoExtensions.Contains(Path.GetExtension(name)) ? MaxVideoBytes : MaxFileBytes;
 
-    /// <summary>Through the relay a batch carries at most 10 MB in all (the relay has a daily budget per pairing);
+    /// <summary>Through the relay a batch carries at most 60 MB in all (the relay has a daily budget per pairing);
     /// on the local network the limits above apply. The phone uses the same rule.</summary>
-    public const long RelayMaxBatchBytes = 10L * 1024 * 1024;
-    public const string RelayTooBigMessage = "Pela internet o limite é 10 MB por envio. Na mesma rede Wi-Fi vai até 30 MB por arquivo.";
+    public const long RelayMaxBatchBytes = 60L * 1024 * 1024;
+    public const string RelayTooBigMessage = "Pela internet o limite é 60 MB por envio.";
 
     /// <summary>Whether a batch of <paramref name="totalBytes"/> may go over this route.</summary>
     public static bool FitsRoute(long totalBytes, bool viaRelay) => !viaRelay || totalBytes <= RelayMaxBatchBytes;
@@ -128,7 +128,7 @@ public sealed partial class PhoneLink
         // Every phone is away (on the relay): don't offer what none of them could fetch.
         bool allRelay;
         lock (_gate) allRelay = _peers.Where(p => p.Authenticated).All(p => p.Relay);
-        if (!FitsRoute(paths.Sum(p => new FileInfo(p).Length), allRelay)) return "Pela internet: máx. 10 MB";
+        if (!FitsRoute(paths.Sum(p => new FileInfo(p).Length), allRelay)) return "Pela internet: máx. 60 MB";
         lock (_gate)
             if (_offers.Count >= MaxOffers) return "Espere os outros";
 

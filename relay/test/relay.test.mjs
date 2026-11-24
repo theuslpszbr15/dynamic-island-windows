@@ -252,7 +252,7 @@ test("more than 60 new connections a minute from one address: 4429 rate limit", 
   }
 });
 
-test("50 MB a day per room: the tunnel is closed with 4429 and new phones are refused", async () => {
+test("300 MB a day per room: the tunnel is closed with 4429 and new phones are refused", async () => {
   const mf = await relay();
   try {
     const r = room();
@@ -262,14 +262,14 @@ test("50 MB a day per room: the tunnel is closed with 4429 and new phones are re
     const chunk = new Uint8Array(64 * 1024);
     let received = 0;
     data.ws.addEventListener("message", (e) => { received += e.data.byteLength ?? 0; });
-    for (let i = 0; i < 801 && !phone.close; i++) {
+    for (let i = 0; i < 4801 && !phone.close; i++) {
       phone.ws.send(chunk);
       if (i % 50 === 0) await new Promise((res) => setTimeout(res, 0));
     }
     const closed = await within(phone.closed, 10_000);
     assert.equal(closed.code, 4429);
     assert.equal(closed.reason, "daily limit");
-    assert.ok(received <= 50 * 1024 * 1024);
+    assert.ok(received <= 300 * 1024 * 1024);
     const late = await open(mf, `/phone/${r}`);
     const refused = await within(late.closed);
     assert.equal(refused.code, 4429);

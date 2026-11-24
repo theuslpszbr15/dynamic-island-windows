@@ -105,11 +105,11 @@ class RelayPairingTest {
         assertEquals(key, Pairing.parse("$base&relay=wss%3A%2F%2Frelay.example.com&rk=$key")!!.relayKey)
     }
 
-    @Test fun filesThroughTheRelayStopAt10Mb() {
+    @Test fun filesThroughTheRelayStopAt60Mb() {
         assertTrue(FileOffer.fitsRoute(FileOffer.RELAY_MAX_BYTES, Route.Relay))
         assertTrue(!FileOffer.fitsRoute(FileOffer.RELAY_MAX_BYTES + 1, Route.Relay))
         assertTrue(FileOffer.fitsRoute(FileOffer.MAX_BYTES, Route.Lan))
-        assertTrue(FileOffer.RELAY_TOO_BIG.contains("10 MB"))
+        assertTrue(FileOffer.RELAY_TOO_BIG.contains("60 MB"))
     }
 
     @Test fun pingsRarelyThroughTheRelay() {

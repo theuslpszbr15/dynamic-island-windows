@@ -22,7 +22,7 @@
 // Access key: optional. With the RELAY_KEY secret set, a client that sends "Authorization: Bearer <key>" must send the
 // right one (HTTP 401 otherwise); clients that send nothing are let in, so the relay works for anyone who pairs.
 //
-// Limits, so a public relay stays cheap: per room 50 MB of tunnel a day (both directions) and 30 new connections a
+// Limits, so a public relay stays cheap: per room 300 MB of tunnel a day (both directions) and 30 new connections a
 // minute; per IP address a rate limit. Over a limit the socket is closed with 4429 and a reason.
 // Close codes: 4400 bad request, 4401 the PC didn't prove the room's key, 4404 the PC isn't in the room,
 // 4429 a limit (reason "room full", "daily limit" or "rate limit").
@@ -47,7 +47,7 @@ const MAX_BUFFER = 64 * 1024; // phone bytes held while the PC's data socket is 
 const PAIR_TIMEOUT_MS = 15_000; // a phone whose PC never opens the data socket is dropped
 const AUTH_TIMEOUT_MS = 10_000; // a control socket that doesn't sign the challenge in time is dropped
 const MAX_UNVERIFIED = 4; // control sockets still on the challenge, per room
-const DAILY_BYTES = 50 * 1024 * 1024; // tunnel bytes per room per UTC day, both directions
+const DAILY_BYTES = 300 * 1024 * 1024; // tunnel bytes per room per UTC day, both directions
 const ROOM_CONNECTIONS_PER_MINUTE = 30;
 const IP_CONNECTIONS_PER_MINUTE = 60; // the same number goes in wrangler.toml
 const USAGE_SAVE_STEP = 1024 * 1024; // the day's count is written to storage every MB (and when a socket closes)
