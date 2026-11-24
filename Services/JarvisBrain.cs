@@ -214,12 +214,23 @@ public sealed class JarvisBrain
         {
             var messages = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = SystemPrompt() } };
             var tools = new JsonArray([.. Tools.Select(t => t!.DeepClone()), .. (await _host.PluginToolsAsync()).Select(t => t!.DeepClone())]);
-            foreach (var m in LastTurns(_history, TurnsSent)) messages.Add(m.DeepClone());
+            var past = LastTurns(_history, TurnsSent);
+            foreach (var m in past) messages.Add(m.DeepClone());
             var turn = new List<JsonObject> { new() { ["role"] = "user", ["content"] = text } };
             messages.Add(turn[0].DeepClone());
+            var lean = false;
             for (var step = 0; step < MaxSteps; step++)
             {
-                var message = await CallAsync(key, messages, tools);
+                JsonObject message;
+                try { message = await CallAsync(key, messages, tools); }
+                catch (TooLargeException) when (!lean)
+                {
+                    // the free plan caps tokens per request: drop the plugins' tools and the old turns
+                    lean = true;
+                    tools = new JsonArray([.. Tools.Select(t => t!.DeepClone())]);
+                    for (var i = 0; i < past.Count; i++) messages.RemoveAt(1);
+                    message = await CallAsync(key, messages, tools);
+                }
                 var calls = message["tool_calls"] as JsonArray;
                 if (calls is not { Count: > 0 })
                 {
@@ -258,6 +269,7 @@ public sealed class JarvisBrain
                 : "Os modelos grátis da Groq estão no limite agora. Tenta daqui a pouco.";
         }
         catch (UnauthorizedAccessException) { return "A Groq recusou a chave. Confira em Configurações › Jarvis."; }
+        catch (TooLargeException) { return "O pedido ficou grande demais para o plano grátis da Groq. Tenta um pedido mais curto."; }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Log.Error("JarvisBrain", ex);
@@ -276,10 +288,12 @@ public sealed class JarvisBrain
         public double? Wait { get; } = wait;
     }
 
+    sealed class TooLargeException : Exception;
+
     async Task<JsonObject> CallAsync(string key, JsonArray messages, JsonArray tools)
     {
         double? wait = null;
-        var badCall = false;
+        bool badCall = false, tooLarge = false;
         foreach (var model in Models)
         {
             var body = new JsonObject
@@ -298,6 +312,12 @@ public sealed class JarvisBrain
                 continue;
             }
             if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException();
+            if (response.StatusCode == HttpStatusCode.RequestEntityTooLarge)
+            {
+                Log.Warn("JarvisBrain", $"{model}: 413 ({body.ToJsonString().Length} chars)");
+                tooLarge = true;
+                continue;
+            }
             if (response.StatusCode == HttpStatusCode.BadRequest)
             {
                 var problem = await response.Content.ReadAsStringAsync();
@@ -313,6 +333,7 @@ public sealed class JarvisBrain
             var json = JsonNode.Parse(await response.Content.ReadAsStringAsync());
             return json?["choices"]?[0]?["message"] as JsonObject ?? throw new InvalidDataException("Resposta vazia da Groq.");
         }
+        if (tooLarge && wait == null) throw new TooLargeException();
         if (badCall && wait == null) throw new InvalidDataException("O modelo se confundiu com as ferramentas. Tente pedir de outro jeito.");
         if (wait is <= 12)
         {
