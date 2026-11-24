@@ -94,6 +94,8 @@ public sealed class IslandSettings
     public Dictionary<string, int> FocusLog { get; set; } = [];
     /// <summary>Jarvis's shortcut: "hold" = hold to talk (a tap opens the chat box), "text" = always the chat box.</summary>
     public string JarvisVoiceMode { get; set; } = "hold";
+    /// <summary>Microphone for Jarvis and dictation by name; empty = the one chosen in Windows' sound settings.</summary>
+    public string JarvisMic { get; set; } = "";
     /// <summary>Jarvis says its answers with the Piper voice (when downloaded).</summary>
     public bool JarvisSpeak { get; set; } = true;
     /// <summary>Colors of the voice glow while Jarvis listens, thinks or speaks (VoiceGlow.Variants) or "off".</summary>
@@ -176,6 +178,8 @@ public sealed class IslandSettings
     public long IslandOffAt { get; set; }
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
     public FullscreenMode Fullscreen { get; set; } = FullscreenMode.Alerts;
+    /// <summary>Also reach the phone through the USB cable (adb reverse), for PCs whose network the phone can't see.</summary>
+    public bool PhoneUsb { get; set; }
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

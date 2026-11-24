@@ -258,7 +258,7 @@ public partial class IslandWindow : IJarvisHost
     {
         if (_mic != null) return;
         Jarvis.StopSpeaking();
-        var mic = _mic = new JarvisMic();
+        var mic = _mic = new JarvisMic(_settings.JarvisMic);
         _micStart = _mic.StartAsync();
         // a click on "Falar" has no key to release: the limit ends it, and a mic that failed to start ends it at once
         _listenLimit?.Stop();

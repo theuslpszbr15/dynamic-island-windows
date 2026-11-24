@@ -38,7 +38,7 @@ public partial class IslandWindow
         Jarvis.StopSpeaking();
         _dictSince = DateTime.Now;
         _dictHandsFree = false;
-        var mic = _dictMic = new JarvisMic();
+        var mic = _dictMic = new JarvisMic(_settings.JarvisMic);
         _dictStart = mic.StartAsync();
         _glow.Listening = true;
         ShowInfo("\uE720", "Ditando…", "solte para colar", glyphColor: JarvisColor, seconds: DictationLimit.TotalSeconds + 5);

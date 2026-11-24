@@ -85,6 +85,7 @@ public partial class IslandWindow
         _extrasTimer?.Stop();
         foreach (var approval in _approvals) _ = AgentHub.Reply(approval.Id, "none");
         _phone?.Dispose();
+        _usb?.Dispose();
         AgentStats.Save();
     }
 

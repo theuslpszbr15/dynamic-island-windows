@@ -29,12 +29,28 @@ public partial class IslandWindow
     }
     public string? PhoneError { get; private set; }
 
+    UsbBridge? _usb;
+    public UsbBridge? Usb => _usb;
+
+    /// <summary>Starts or stops keeping the USB tunnel up, to match the settings and the link.</summary>
+    public void ApplyPhoneUsb()
+    {
+        if (!_settings.PhoneLink || !_settings.PhoneUsb || _phone is not { Running: true })
+        {
+            _usb?.Stop();
+            return;
+        }
+        _usb ??= new UsbBridge();
+        _usb.Start(() => _phone.Port);
+    }
+
     public void ApplyPhoneLink()
     {
         if (!_settings.PhoneLink)
         {
             _phone?.Stop();
             UpdatePhoneSend();
+            ApplyPhoneUsb();
             return;
         }
         if (_phone == null)
@@ -73,6 +89,12 @@ public partial class IslandWindow
         if (_settings.IslandOffAt > 0) _phone.PublishFilter(_settings.IslandOffKinds, _settings.IslandOffAt);
         PublishPhoneSessions();
         PublishPhoneTray();
+        ApplyPhoneUsb();
+#if DEBUG
+        // End-to-end tests of the phone app read the pairing link from a file instead of scanning the QR code.
+        if (Environment.GetEnvironmentVariable("DYNAMIC_ISLAND_TEST_LINK_FILE") is { Length: > 0 } linkFile)
+            File.WriteAllText(linkFile, _phone.PairingLink(true));
+#endif
         foreach (var approval in _approvals) PublishApproval(approval);
     }
 

@@ -6,11 +6,32 @@ namespace DynamicIsland.Services;
 /// Records the microphone to a 16 kHz mono WAV (what whisper.cpp reads) and measures how loud it is, overall and in
 /// three bands, for the voice glow (QuickVoice's MicMeter). Audio stays in the temp file until Jarvis transcribes it.
 /// </summary>
-public sealed class JarvisMic : IDisposable
+public sealed class JarvisMic(string preferred = "") : IDisposable
 {
     const int Rate = 16000;
     // voice-glow's gain chain: RMS × 5 × sensitivity 3.1
     const double Gain = 5 * 3.1;
+
+    /// <summary>The microphones Windows lists (names cut at 31 characters by the old wave API).</summary>
+    public static IReadOnlyList<string> Devices()
+    {
+        var list = new List<string>();
+        try
+        {
+            for (var i = 0; i < WaveInEvent.DeviceCount; i++) list.Add(WaveInEvent.GetCapabilities(i).ProductName);
+        }
+        catch { }
+        return list;
+    }
+
+    // The chosen microphone, else -1 (WAVE_MAPPER): the one picked in Windows' sound settings.
+    static int DeviceFor(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return -1;
+        var devices = Devices();
+        var index = devices.ToList().FindIndex(d => string.Equals(d, name, StringComparison.OrdinalIgnoreCase));
+        return index;
+    }
 
     WaveInEvent? _mic;
     WaveFileWriter? _writer;
@@ -30,7 +51,8 @@ public sealed class JarvisMic : IDisposable
         try
         {
             _path = Path.Combine(Path.GetTempPath(), $"jarvis-mic-{Environment.ProcessId}.wav");
-            _mic = new WaveInEvent { WaveFormat = new WaveFormat(Rate, 16, 1), BufferMilliseconds = 40 };
+            // A device unplugged since it was chosen falls back to Windows' microphone.
+            _mic = new WaveInEvent { DeviceNumber = DeviceFor(preferred), WaveFormat = new WaveFormat(Rate, 16, 1), BufferMilliseconds = 40 };
             _writer = new WaveFileWriter(_path, _mic.WaveFormat);
             var stopped = _stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _mic.DataAvailable += (_, e) =>
