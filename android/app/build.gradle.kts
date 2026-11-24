@@ -7,6 +7,15 @@ plugins {
     id("io.github.takahirom.roborazzi")
 }
 
+// The Android builds Robolectric 4.14.1 runs: sdk 34 (@Config) and 35 (targetSdk, the default). One configuration
+// each: in one, Gradle would keep only the newer version of the same module.
+val robolectricSdk34: Configuration by configurations.creating
+val robolectricSdk35: Configuration by configurations.creating
+val robolectricJars = tasks.register<Copy>("robolectricJars") {
+    from(robolectricSdk34, robolectricSdk35)
+    into(layout.buildDirectory.dir("robolectric-jars"))
+}
+
 android {
     namespace = "io.github.theuslpszbr15.dynamicisland"
     compileSdk = 35
@@ -77,6 +86,10 @@ android {
             System.getenv("PHONE_LINK")?.let { test.environment("PHONE_LINK", it) }
             // Robolectric would install Conscrypt for the whole test JVM, and the relay tests that run after it hang
             test.systemProperty("robolectric.conscryptMode", "OFF")
+            // the Android jar comes through Gradle (cached, retried) instead of Robolectric's own download, which CI kept losing
+            test.dependsOn(robolectricJars)
+            test.systemProperty("robolectric.offline", "true")
+            test.systemProperty("robolectric.dependency.dir", robolectricJars.get().destinationDir.absolutePath)
         }
     }
 }
@@ -104,4 +117,6 @@ dependencies {
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.39.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.test.ext:junit:1.2.1")
+    robolectricSdk34("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7") { isTransitive = false }
+    robolectricSdk35("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7") { isTransitive = false }
 }
