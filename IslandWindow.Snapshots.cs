@@ -339,23 +339,27 @@ public partial class IslandWindow
         ApplyPhoneLink();
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
-        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "agents", "phone", "phone-end", "tray", "updates", "phone-download" })
+        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "jarvis-plugins", "agents", "phone", "phone-end", "tray", "updates", "phone-download" })
         {
             if (section == "phone-download") settingsWindow.ShowDownloadQr();
-            else settingsWindow.Navigate(section == "phone-end" ? "phone" : section);
+            else settingsWindow.Navigate(section switch { "phone-end" => "phone", "jarvis-plugins" => "jarvis", _ => section });
             await Task.Delay(700);
             var root = (FrameworkElement)settingsWindow.Content;
-            if (section == "phone-end")
+            if (section is "phone-end" or "jarvis-plugins")
             {
                 // the page's scroller is the tallest one; the Wake-on-LAN card sits at its end
                 System.Windows.Controls.ScrollViewer? page = null;
+                System.Windows.Controls.TextBlock? plugins = null;
                 void Find(DependencyObject node)
                 {
                     if (node is System.Windows.Controls.ScrollViewer s && (page == null || s.ExtentHeight > page.ExtentHeight)) page = s;
+                    if (node is System.Windows.Controls.TextBlock { Text: "Plugins do Jarvis" } t) plugins = t;
                     for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Find(VisualTreeHelper.GetChild(node, i));
                 }
                 Find(root);
-                page?.ScrollToEnd();
+                if (section == "phone-end") page?.ScrollToEnd();
+                else if (page?.Content is Visual content && plugins != null)
+                    page.ScrollToVerticalOffset(plugins.TransformToAncestor(content).Transform(new Point()).Y - 40);
                 await Task.Delay(300);
             }
             var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
@@ -438,6 +442,22 @@ public partial class IslandWindow
         _downloads.Dispose();
         _downloads = null;
         Retarget();
+        ComputerPill("Jarvis no controle · passo 3");
+        await Shot("57-computer-pill");
+        var primary = System.Windows.Forms.Screen.PrimaryScreen!.Bounds;
+        var ask = new ComputerAskWindow("Clicar em “Finalizar compra”\nconcluir o pedido que o usuário pediu", risky: true, offerRest: false, primary, null);
+        ask.Show();
+        await Task.Delay(500);
+        {
+            var root = (FrameworkElement)ask.Content;
+            var image = new RenderTargetBitmap((int)(root.ActualWidth * 1.5), (int)(root.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
+            image.Render(root);
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(image));
+            await using var file = File.Create(System.IO.Path.Combine(folder, "57-computer-ask.png"));
+            png.Save(file);
+        }
+        ask.Finish(ComputerAnswer.Stop);
         _plans =
         [
             new PlanUse("Copilot", PlanUsage.CopilotColor, 52, "mês", DateTimeOffset.Now.AddDays(8)),

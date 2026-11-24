@@ -6,6 +6,21 @@ namespace DynamicIsland.Tests;
 
 public class ScreenToolsTests
 {
+    /// <summary>MCP_E2E=1 (downloads @playwright/mcp with npx the first time, opens Edge): the browser plugin starts,
+    /// lists its tools, opens a page and reads it.</summary>
+    [Fact]
+    public async Task PlaywrightPluginBrowses()
+    {
+        if (Environment.GetEnvironmentVariable("MCP_E2E") != "1") return;
+        var plugin = McpPlugin.Playwright();
+        plugin.Command += " --headless";
+        using var client = new McpClient(plugin);
+        Assert.True(await client.StartAsync(), client.Problem);
+        Assert.Contains(client.Tools, t => t["name"]?.GetValue<string>() == "browser_navigate");
+        var page = await client.CallAsync("browser_navigate", new System.Text.Json.Nodes.JsonObject { ["url"] = "https://example.com" });
+        Assert.Contains("Example Domain", page);
+        Assert.Equal("p_navegador_browser_navigate", client.ToolName("browser_navigate"));
+    }
     [Fact]
     public void ReadsWindowsOwnOcr()
     {

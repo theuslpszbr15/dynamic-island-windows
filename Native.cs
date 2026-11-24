@@ -156,6 +156,37 @@ static class Native
 
     public static void PressCtrlV() => PressCtrl(0x56);
 
+    /// <summary>Holds the keys down in order and lets go in reverse (a shortcut like Ctrl+A).</summary>
+    public static void PressKeys(IReadOnlyList<byte> keys)
+    {
+        foreach (var key in keys) keybd_event(key, 0, 0, UIntPtr.Zero);
+        for (var i = keys.Count - 1; i >= 0; i--) keybd_event(keys[i], 0, 2, UIntPtr.Zero);
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    static extern void mouse_event(uint flags, int dx, int dy, int data, UIntPtr extra);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    /// <summary>A click at a physical screen point.</summary>
+    public static void Click(int x, int y, bool right = false, bool twice = false)
+    {
+        SetCursorPos(x, y);
+        uint down = right ? 0x0008u : 0x0002u, up = right ? 0x0010u : 0x0004u;
+        for (var i = 0; i < (twice ? 2 : 1); i++)
+        {
+            mouse_event(down, 0, 0, 0, UIntPtr.Zero);
+            mouse_event(up, 0, 0, 0, UIntPtr.Zero);
+        }
+    }
+
+    /// <summary>Mouse wheel where the cursor is; positive scrolls up (120 = one notch).</summary>
+    public static void Wheel(int amount) => mouse_event(0x0800, 0, 0, amount, UIntPtr.Zero);
+
     public static void PressCtrl(byte key)
     {
         const byte control = 0x11;

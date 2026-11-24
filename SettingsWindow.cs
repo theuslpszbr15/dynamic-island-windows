@@ -761,6 +761,8 @@ public sealed partial class SettingsWindow : DarkWindow
             Row("Conversar agora", "Abre a caixa do Jarvis embaixo da ilha.", open)));
 
         page.Children.Add(BrainCard());
+        page.Children.Add(PluginsCard());
+        page.Children.Add(ComputerCard());
 
         var dictate = Hotkeys.Keys(S, "dictate");
         page.Children.Add(Card("Ditado em qualquer lugar",
@@ -798,6 +800,97 @@ public sealed partial class SettingsWindow : DarkWindow
             Engine(Services.Jarvis.Engine.Voice, "Para o Jarvis falar as respostas."),
             Engine(Services.Jarvis.Engine.Microphone, "Para falar com o Jarvis segurando o atalho.")));
     }
+
+    /// <summary>MCP plugins: each one's tools become Jarvis's tools. Playwright's browser comes in the list, off.</summary>
+    Border PluginsCard()
+    {
+        var island = _app.Island;
+        TextBox Box(string text, double width, string tip) => new()
+        {
+            Text = text, Width = width, FontSize = 12.5, Padding = new Thickness(8, 5, 8, 5), Background = Hover, Foreground = Brushes.White,
+            CaretBrush = Brushes.White, BorderThickness = new Thickness(1), BorderBrush = Line, ToolTip = tip,
+        };
+        var rows = new List<UIElement>
+        {
+            Note("Plugins dão ao Jarvis ferramentas novas: cada um é um servidor MCP (o padrão aberto de ferramentas para IA) que roda neste PC. " +
+                 "O Navegador (Playwright) abre o Edge e deixa o Jarvis pesquisar, ler páginas e preencher formulários sozinho. " +
+                 "Ele precisa do Node.js; a primeira vez baixa o plugin (pode levar um minuto). Precisa da chave da Groq."),
+        };
+        foreach (var plugin in S.Plugins.ToList())
+        {
+            var status = Note(island.PluginClients.TryGetValue(plugin.Name, out var client) && client.Running ? $"✓ Rodando · {client.Tools.Count} ferramentas" : "");
+            var test = new Button { Content = "Testar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            test.Click += async (_, _) =>
+            {
+                test.IsEnabled = false;
+                status.Text = "Abrindo…";
+                var problem = await island.TestPluginAsync(plugin);
+                status.Text = problem ?? (island.PluginClients.TryGetValue(plugin.Name, out var c) ? $"✓ Funcionando · {c.Tools.Count} ferramentas" : "✓ Funcionando");
+                status.Foreground = problem == null ? new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58)) : new SolidColorBrush(Color.FromRgb(0xFF, 0x45, 0x3A));
+                test.IsEnabled = true;
+            };
+            var remove = new Button { Content = "Remover", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+            remove.Click += (_, _) =>
+            {
+                S.Plugins.Remove(plugin);
+                S.Save();
+                island.ApplyPlugins();
+                Render();
+            };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+            buttons.Children.Add(test);
+            buttons.Children.Add(remove);
+            rows.Add(Toggle(plugin.Name, plugin.Command, plugin.Enabled, v => { plugin.Enabled = v; S.Save(); island.ApplyPlugins(); }, buttons));
+            rows.Add(status);
+        }
+
+        var name = Box("", 110, "Nome curto (ex.: arquivos)");
+        var command = Box("", 260, "O comando que inicia o servidor MCP (ex.: npx -y @modelcontextprotocol/server-filesystem C:\\Users\\voce\\Documents)");
+        var add = new Button { Content = "Adicionar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        add.Click += (_, _) =>
+        {
+            var label = new string(name.Text.Trim().ToLowerInvariant().Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
+            if (label.Length == 0 || command.Text.Trim().Length == 0)
+            {
+                DarkDialog.Ask(this, "Plugins", "Dê um nome e o comando que inicia o plugin.", "OK", null);
+                return;
+            }
+            if (S.Plugins.Any(p => p.Name.Equals(label, StringComparison.OrdinalIgnoreCase)))
+            {
+                DarkDialog.Ask(this, "Plugins", "Já existe um plugin com esse nome.", "OK", null);
+                return;
+            }
+            S.Plugins.Add(new McpPlugin { Name = label, Command = command.Text.Trim(), Enabled = true });
+            S.Save();
+            Render();
+        };
+        var addRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        addRow.Children.Add(name);
+        addRow.Children.Add(new Border { Width = 8 });
+        addRow.Children.Add(command);
+        addRow.Children.Add(add);
+        rows.Add(Note("Adicionar plugin: um nome curto e o comando que inicia o servidor MCP. Só adicione plugins em que você confia: eles rodam com o seu usuário."));
+        rows.Add(addRow);
+        if (!S.Plugins.Any(p => p.Name == McpPlugin.Playwright().Name))
+        {
+            var restore = new Button { Content = "Adicionar", Style = (Style)Resources["Action"] };
+            restore.Click += (_, _) => { S.Plugins.Insert(0, McpPlugin.Playwright()); S.Save(); Render(); };
+            rows.Add(Row("Navegador (Playwright)", "Voltar com o plugin do navegador.", restore));
+        }
+        return Card("Plugins do Jarvis", [.. rows]);
+    }
+
+    /// <summary>Jarvis on the mouse and keyboard, with the safeguards spelled out.</summary>
+    Border ComputerCard() =>
+        Card("Controle do computador",
+            Note("Peça \"Jarvis, no Spotify aberto, toca a playlist Foco\" e ele faz na tela: olha a tela, decide um passo e mexe o mouse e o teclado. " +
+                 "Travas: você aprova antes (todas as ações ou só as importantes), Esc para tudo na hora, a ilha mostra \"Jarvis no controle\", " +
+                 "ele nunca digita em campo de senha e para em 20 passos ou 5 minutos. A captura da tela vai para a Groq a cada passo."),
+            Toggle("Deixar o Jarvis usar o mouse e o teclado", JarvisBrain.HasKey ? "Desligado, ele só responde e usa as outras ferramentas." : "Precisa da chave da Groq.",
+                S.ComputerUse, v => { S.ComputerUse = v; S.Save(); Render(); }, enabled: JarvisBrain.HasKey || S.ComputerUse),
+            Choice("Pedir permissão", "Importantes: digitar, Enter, Delete e cliques em comprar, pagar, enviar, excluir, confirmar…",
+                [("cada", "Antes de cada ação"), ("perigosas", "Só nas importantes")],
+                S.ComputerUseApproval, v => { S.ComputerUseApproval = v; S.Save(); }));
 
     /// <summary>The Project.Jarvis brain: a Groq key (kept with DPAPI) turns on the tools (Notepad, apps, notes, timer…).</summary>
     Border BrainCard()

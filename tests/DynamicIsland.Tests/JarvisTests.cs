@@ -121,6 +121,9 @@ public class JarvisTests
         public void Media(string action) => Done.Add("midia " + action);
         public Task<bool> ConfirmScriptAsync(string description, string code) { Done.Add("script " + code); return Task.FromResult(false); }
         public Task<string?> ReadScreenAsync() => Task.FromResult<string?>("Erro CS0103: o nome 'contador' não existe no contexto atual");
+        public Task<System.Text.Json.Nodes.JsonArray> PluginToolsAsync() => Task.FromResult(new System.Text.Json.Nodes.JsonArray());
+        public Task<string?> CallPluginAsync(string name, System.Text.Json.Nodes.JsonObject arguments) => Task.FromResult<string?>(null);
+        public Task<string> UseComputerAsync(string task) { Done.Add("computador " + task); return Task.FromResult("O usuário parou."); }
     }
 
     /// <summary>JARVIS_E2E_GROQ=1 with a Groq key saved (or a Project.Jarvis to import it from): the brain calls its

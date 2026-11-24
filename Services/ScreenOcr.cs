@@ -25,7 +25,35 @@ public static class ScreenOcr
     public static bool Available => Engine() != null;
 
     /// <summary>The lines of text in the image, top to bottom; null when Windows has no OCR language installed.</summary>
-    public static async Task<string?> ReadAsync(Drawing.Bitmap image)
+    public static async Task<string?> ReadAsync(Drawing.Bitmap image) =>
+        await RecognizeAsync(image) is { } result ? string.Join('\n', result.Lines.Select(line => line.Text)).Trim() : null;
+
+    /// <summary>Each line of text with where it is (pixels of <paramref name="image"/>); null without an OCR language.</summary>
+    public static async Task<List<(string Text, Drawing.RectangleF Box)>?> ReadLinesAsync(Drawing.Bitmap image)
+    {
+        if (await RecognizeAsync(image, keepScale: true) is not { } found) return null;
+        var (result, scale) = found;
+        var lines = new List<(string, Drawing.RectangleF)>();
+        foreach (var line in result.Lines)
+        {
+            if (line.Words.Count == 0) continue;
+            float left = float.MaxValue, top = float.MaxValue, right = 0, bottom = 0;
+            foreach (var word in line.Words)
+            {
+                var r = word.BoundingRect;
+                left = Math.Min(left, (float)r.X);
+                top = Math.Min(top, (float)r.Y);
+                right = Math.Max(right, (float)(r.X + r.Width));
+                bottom = Math.Max(bottom, (float)(r.Y + r.Height));
+            }
+            lines.Add((line.Text, new Drawing.RectangleF(left / scale, top / scale, (right - left) / scale, (bottom - top) / scale)));
+        }
+        return lines;
+    }
+
+    static async Task<OcrResult?> RecognizeAsync(Drawing.Bitmap image) => (await RecognizeAsync(image, keepScale: false))?.Result;
+
+    static async Task<(OcrResult Result, float Scale)?> RecognizeAsync(Drawing.Bitmap image, bool keepScale)
     {
         if (Engine() is not { } engine) return null;
         var source = image;
@@ -43,8 +71,7 @@ public static class ScreenOcr
             System.Runtime.InteropServices.Marshal.Copy(data.Scan0, bytes, 0, bytes.Length);
             source.UnlockBits(data);
             using var bitmap = SoftwareBitmap.CreateCopyFromBuffer(bytes.AsBuffer(), BitmapPixelFormat.Bgra8, source.Width, source.Height, BitmapAlphaMode.Premultiplied);
-            var result = await engine.RecognizeAsync(bitmap);
-            return string.Join('\n', result.Lines.Select(line => line.Text)).Trim();
+            return (await engine.RecognizeAsync(bitmap), (float)scale);
         }
         finally
         {

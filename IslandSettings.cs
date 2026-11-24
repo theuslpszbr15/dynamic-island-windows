@@ -122,6 +122,12 @@ public sealed class IslandSettings
     public bool DownloadProgress { get; set; } = true;
     /// <summary>"Ei Jarvis" opens Jarvis by voice (Windows' offline recognition; the microphone shows as in use).</summary>
     public bool WakeWord { get; set; }
+    /// <summary>MCP servers whose tools Jarvis can use (Playwright's browser comes in the list, off).</summary>
+    public List<Services.McpPlugin> Plugins { get; set; } = [Services.McpPlugin.Playwright()];
+    /// <summary>Jarvis may move the mouse and type on this PC (usar_computador). Off until the person turns it on.</summary>
+    public bool ComputerUse { get; set; }
+    /// <summary>"cada" asks before every action; "perigosas" only before typing, Enter/Delete and clicks on buy, send, delete…</summary>
+    public string ComputerUseApproval { get; set; } = "cada";
     /// <summary>A new install offers the demo once.</summary>
     public bool DemoPending { get; set; }
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>

@@ -255,6 +255,8 @@ public partial class IslandWindow : Window
         _net?.Dispose();
         _downloads?.Dispose();
         _wake?.Dispose();
+        StopComputer();
+        StopPlugins();
         _hub.Dispose();
         _media.Dispose();
         _volume.Dispose();

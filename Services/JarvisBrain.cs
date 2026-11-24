@@ -23,6 +23,12 @@ public interface IJarvisHost
     Task<bool> ConfirmScriptAsync(string description, string code);
     /// <summary>The text on the window the person was looking at when they called Jarvis (OCR); null when unreadable.</summary>
     Task<string?> ReadScreenAsync();
+    /// <summary>The enabled plugins' tools, in the model's function format (started on first use).</summary>
+    Task<JsonArray> PluginToolsAsync();
+    /// <summary>Runs a plugin tool; null when <paramref name="name"/> isn't one.</summary>
+    Task<string?> CallPluginAsync(string name, JsonObject arguments);
+    /// <summary>Mouse and keyboard on the person's screen for <paramref name="task"/>, under their watch; what happened.</summary>
+    Task<string> UseComputerAsync(string task);
 }
 
 /// <summary>
@@ -36,7 +42,7 @@ public sealed class JarvisBrain
     const string WhisperUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
     // each model has its own free limit; on 429 the next one answers
     static readonly string[] Models = ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"];
-    const int MaxSteps = 5, TurnsSent = 4, TurnsKept = 8, MaxFacts = 60;
+    const int MaxSteps = 14, TurnsSent = 4, TurnsKept = 8, MaxFacts = 60, ToolResultChars = 5000;
 
     static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     /// <summary>Tests keep the memory and the notes here instead of the settings folder.</summary>
@@ -188,6 +194,10 @@ public sealed class JarvisBrain
                      "Quando o usuário pedir para você lembrar algo, mudar como o chama, ou adotar um comportamento daqui pra frente, chame a ferramenta lembrar. " +
                      "Scripts só com executar_script (o usuário aprova antes). " +
                      "Quando perguntarem sobre algo que está na tela (um erro, uma mensagem, uma página), chame ver_tela antes de responder. " +
+                     "Para sites (pegar uma informação, preencher um formulário, baixar um arquivo), se houver ferramentas p_navegador_*: " +
+                     "abra com browser_navigate, leia com browser_snapshot e use as refs dele em browser_click e browser_type. " +
+                     "usar_computador mexe no mouse e no teclado do PC de verdade: use só quando o usuário pedir para fazer algo na tela dele " +
+                     "e nenhuma outra ferramenta resolver, e nunca para digitar senhas. " +
                      $"Data e hora atuais (use esta, nunca invente): {Now()}.";
         if (_facts.Count > 0)
             prompt += "\n\nMEMÓRIA PERMANENTE (preferências e fatos que o usuário pediu; siga SEMPRE, inclusive como chamar o usuário):\n" +
@@ -203,12 +213,13 @@ public sealed class JarvisBrain
         try
         {
             var messages = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = SystemPrompt() } };
+            var tools = new JsonArray([.. Tools.Select(t => t!.DeepClone()), .. (await _host.PluginToolsAsync()).Select(t => t!.DeepClone())]);
             foreach (var m in LastTurns(_history, TurnsSent)) messages.Add(m.DeepClone());
             var turn = new List<JsonObject> { new() { ["role"] = "user", ["content"] = text } };
             messages.Add(turn[0].DeepClone());
             for (var step = 0; step < MaxSteps; step++)
             {
-                var message = await CallAsync(key, messages);
+                var message = await CallAsync(key, messages, tools);
                 var calls = message["tool_calls"] as JsonArray;
                 if (calls is not { Count: > 0 })
                 {
@@ -231,7 +242,7 @@ public sealed class JarvisBrain
                     var done = new JsonObject
                     {
                         ["role"] = "tool", ["tool_call_id"] = call["id"]?.GetValue<string>() ?? "",
-                        ["content"] = result.Length > 2500 ? result[..2500] : result,
+                        ["content"] = result.Length > ToolResultChars ? result[..ToolResultChars] + "…" : result,
                     };
                     messages.Add(done);
                     // what a file or a page said needn't be sent again in later turns
@@ -265,14 +276,14 @@ public sealed class JarvisBrain
         public double? Wait { get; } = wait;
     }
 
-    async Task<JsonObject> CallAsync(string key, JsonArray messages)
+    async Task<JsonObject> CallAsync(string key, JsonArray messages, JsonArray tools)
     {
         double? wait = null;
         foreach (var model in Models)
         {
             var body = new JsonObject
             {
-                ["model"] = model, ["messages"] = messages.DeepClone(), ["tools"] = Tools.DeepClone(), ["tool_choice"] = "auto",
+                ["model"] = model, ["messages"] = messages.DeepClone(), ["tools"] = tools.DeepClone(), ["tool_choice"] = "auto",
                 ["temperature"] = 0.5, ["max_tokens"] = 500,
             };
             if (model.StartsWith("openai/gpt-oss", StringComparison.Ordinal)) body["reasoning_effort"] = "low";
@@ -293,9 +304,69 @@ public sealed class JarvisBrain
         if (wait is <= 12)
         {
             await Task.Delay(TimeSpan.FromSeconds(wait.Value));
-            return await CallAsync(key, messages);
+            return await CallAsync(key, messages, tools);
         }
         throw new LimitException(wait);
+    }
+
+    // models that see images, in order (Groq retires models: a 404 moves on to the next)
+    static readonly string[] VisionModels = ["qwen/qwen3.8-27b", "meta-llama/llama-4-scout-17b-16e-instruct"];
+
+    /// <summary>A model that sees: <paramref name="jpeg"/> plus the text, answered as JSON (computer use). Null without a
+    /// key, at the limit or offline.</summary>
+    public static async Task<JsonObject?> VisionJsonAsync(string system, string text, byte[] jpeg, bool retried = false)
+    {
+        if (LoadKey() is not { } key) return null;
+        foreach (var model in VisionModels)
+            try
+            {
+                var body = new JsonObject
+                {
+                    ["model"] = model, ["temperature"] = 0.1, ["max_tokens"] = 1200,
+                    ["messages"] = new JsonArray
+                    {
+                        new JsonObject { ["role"] = "system", ["content"] = system },
+                        new JsonObject
+                        {
+                            ["role"] = "user",
+                            ["content"] = new JsonArray
+                            {
+                                new JsonObject { ["type"] = "text", ["text"] = text },
+                                new JsonObject { ["type"] = "image_url", ["image_url"] = new JsonObject { ["url"] = "data:image/jpeg;base64," + Convert.ToBase64String(jpeg) } },
+                            },
+                        },
+                    },
+                };
+                using var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+                using var response = await Http.SendAsync(request);
+                if (response.StatusCode == HttpStatusCode.NotFound) continue;
+                // the free plan's per-minute limit: wait it out once if it's short
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && !retried
+                    && (response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 5) is var wait and <= 15)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, wait)));
+                    return await VisionJsonAsync(system, text, jpeg, retried: true);
+                }
+                if (!response.IsSuccessStatusCode)
+                {
+                    Log.Warn("Groq vision", $"{model}: HTTP {(int)response.StatusCode}");
+                    return null;
+                }
+                var content = JsonNode.Parse(await response.Content.ReadAsStringAsync())?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+                if (content == null) return null;
+                // a thinking model may reason first
+                if (content.LastIndexOf("</think>", StringComparison.Ordinal) is var think and >= 0) content = content[(think + 8)..];
+                int start = content.IndexOf('{'), end = content.LastIndexOf('}');
+                return start >= 0 && end > start ? JsonNode.Parse(content[start..(end + 1)]) as JsonObject : null;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            {
+                Log.Error("Groq vision", ex);
+                return null;
+            }
+        Log.Warn("Groq vision", "nenhum modelo de visão disponível");
+        return null;
     }
 
     /// <summary>One plain answer (no tools, no memory) for a job like fixing a dictation or translating. Null without a
@@ -411,6 +482,8 @@ public sealed class JarvisBrain
         Tool("ler_arquivo", "Lê um arquivo de texto dentro da pasta do usuário.", new() { ["caminho"] = Str() }, "caminho"),
         Tool("status_pc", "Mostra uso de RAM e espaço livre em disco."),
         Tool("ver_tela", "Lê o texto da janela que o usuário está olhando (erros, mensagens, páginas)."),
+        Tool("usar_computador", "Controla o mouse e o teclado do PC para fazer uma tarefa na tela; o usuário acompanha, aprova e pode parar com Esc.",
+            new() { ["tarefa"] = Str("O que fazer, em detalhes (ex.: 'no Spotify aberto, tocar a playlist Foco')") }, "tarefa"),
         Tool("volume", "Controla o volume do Windows.", new() { ["acao"] = Enum("aumentar", "diminuir", "mudo") }, "acao"),
         Tool("midia", "Controla a música ou vídeo que está tocando no PC.", new() { ["acao"] = Enum("tocar_pausar", "proxima", "anterior") }, "acao"),
         Tool("buscar_web", "Busca fatos na Wikipedia (pessoas, lugares, conceitos, tecnologia) e devolve resumos.", new() { ["consulta"] = Str() }, "consulta"),
@@ -465,7 +538,8 @@ public sealed class JarvisBrain
                 "lembrar" => Remember(S("fato")),
                 "esquecer" => Forget(S("trecho")),
                 "executar_script" => await RunScriptAsync(S("codigo"), S("descricao")),
-                _ => $"Ferramenta desconhecida: {name}",
+                "usar_computador" => await _host.UseComputerAsync(S("tarefa")),
+                _ => await _host.CallPluginAsync(name, a) ?? $"Ferramenta desconhecida: {name}",
             };
         }
         catch (Exception ex)
