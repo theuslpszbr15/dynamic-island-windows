@@ -78,6 +78,17 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
 - Atalhos para tudo (`Ctrl+Alt+D/M/T/A/C/K/J/F/L/O`), trocáveis nas configurações.
 - **Demonstração** guiada na primeira vez.
 
+**O que roda só no seu PC e o que usa internet**
+
+| Sem internet (local) | Com internet |
+|---|---|
+| Toda a ilha: música, sistema, avisos, timer, tarefas, agenda do Outlook, bandeja, agentes e aprovações | Letras (LRCLIB), clima (wttr.in) e agenda por link iCal |
+| OCR da tela (OCR do Windows) e o "Ei Jarvis" (reconhecimento de voz do Windows) | Jarvis com ferramentas, plugins e uso do computador: chave **grátis** da Groq, guardada cifrada só no seu PC |
+| Jarvis sem chave: IA (Qwen 2.5), voz (Piper) e microfone (whisper.cpp) baixados uma vez e rodando no PC | Ditado e tradução pela Groq (o ditado também funciona com o microfone local, sem a correção) |
+| Celular no mesmo Wi-Fi: ligação direta, cifrada | Celular fora de casa (repasse que só vê bytes cifrados), GitHub na ilha, uso do plano das IAs e atualizações |
+
+Nada é obrigatório: sem chave e sem internet a ilha funciona e o Jarvis conversa com a IA local.
+
 ## Baixar
 
 Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.github.io/dynamic-island-windows/)** (dá para testar a ilha no navegador).
