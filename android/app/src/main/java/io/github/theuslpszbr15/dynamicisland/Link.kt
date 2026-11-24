@@ -13,6 +13,9 @@ import java.util.concurrent.Executors
 
 enum class LinkStatus { Unpaired, Connecting, Connected, Offline, AuthFailed, Paused }
 
+/** A question asked to the PC's Jarvis from the phone. [state]: "sent", "thinking", "done" or "error". */
+data class JarvisTurn(val id: String, val question: String, val answer: String = "", val state: String = "sent")
+
 data class LinkUi(
     val pairing: Pairing? = null,
     val status: LinkStatus = LinkStatus.Unpaired,
@@ -33,6 +36,8 @@ data class LinkUi(
     val pc: PcState? = null,
     /** A newer app than this one exists (the PC said so); null when up to date. */
     val update: AppUpdate.Available? = null,
+    /** The questions to the PC's Jarvis since the app opened, newest last. */
+    val jarvis: List<JarvisTurn> = emptyList(),
 )
 
 /** What the UI and the notifications show; the service feeds it, the UI answers through it. */
@@ -142,6 +147,28 @@ object Link {
         }
         return true
     }
+
+    /** Asks the PC's Jarvis; the answer arrives in [LinkUi.jarvis]. False when no PC is connected. */
+    fun askJarvis(question: String): Boolean {
+        val c = client ?: return false
+        val id = FileOffer.newId()
+        update { s -> s.copy(jarvis = (s.jarvis + JarvisTurn(id, question.take(2000))).takeLast(MAX_JARVIS_TURNS)) }
+        io.execute {
+            try { c.jarvis(id, question) } catch (_: Exception) { jarvisAnswer(id, "error", "A conexão caiu. Tente de novo.") }
+        }
+        // an older island doesn't know the question and never says "thinking"
+        main.postDelayed({
+            if (_state.value.jarvis.any { it.id == id && it.state == "sent" })
+                jarvisAnswer(id, "error", "O PC não respondeu. Atualize a ilha no PC (versão 1.9.18 ou mais nova).")
+        }, JARVIS_ACK_MS)
+        return true
+    }
+
+    fun jarvisAnswer(id: String, state: String, text: String) =
+        update { s -> s.copy(jarvis = s.jarvis.map { if (it.id == id) it.copy(state = state, answer = text) else it }) }
+
+    private const val MAX_JARVIS_TURNS = 20
+    private const val JARVIS_ACK_MS = 12_000L
 
     fun sendFilter(off: List<String>, at: Long) {
         val c = client ?: return

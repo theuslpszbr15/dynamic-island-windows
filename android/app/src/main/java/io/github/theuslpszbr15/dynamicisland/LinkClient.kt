@@ -100,6 +100,8 @@ class LinkClient(
         fun onFilter(off: List<String>, at: Long) {}
         /** A notification the PC's island showed (PC 1.9.4 and later). */
         fun onPcNotify(app: String, title: String, body: String) {}
+        /** How a question for Jarvis is going: "thinking", "done" (the answer) or "error" (why). PC 1.9.18 and later. */
+        fun onJarvis(id: String, state: String, text: String) {}
     }
 
     private val writeLock = Any()
@@ -181,6 +183,9 @@ class LinkClient(
                 }
                 "clip" -> o.optString("text").takeIf { it.isNotEmpty() && it.length <= MAX_CLIP }?.let(listener::onClip)
                 "pcNotify" -> listener.onPcNotify(o.optString("app").take(60), o.optString("title").take(120), o.optString("body").take(400))
+                "jarvis" -> o.optString("state").takeIf { it in setOf("thinking", "done", "error") }?.let { state ->
+                    listener.onJarvis(o.optString("id").take(64), state, o.optString("text").take(MAX_JARVIS))
+                }
                 "pc" -> listener.onPcState(PcState(
                     o.optString("title").take(120), o.optString("artist").take(120), o.optBoolean("playing"),
                     o.optInt("volume").coerceIn(0, 100), o.optBoolean("muted"), o.optLong("shutdownAt"),
@@ -355,6 +360,8 @@ class LinkClient(
     /** Text dictated on the phone, typed where the person is on the PC. */
     fun type(text: String) = send(JSONObject().put("type", "type").put("text", text.take(2000)))
 
+    fun jarvis(id: String, text: String) = send(JSONObject().put("type", "jarvis").put("id", id).put("text", text.take(2000)))
+
     /** Remote control: play, next, prev, volup, voldown, mute, lock, shutdown (in [minutes]), cancelShutdown. */
     fun remote(action: String, minutes: Int = 0) =
         send(JSONObject().put("type", "remote").put("action", action).apply { if (minutes > 0) put("minutes", minutes) })
@@ -432,6 +439,7 @@ class LinkClient(
         const val MAX_FILTER = 32
         /** Same limit as the PC's PhoneLink.MaxClipChars. */
         const val MAX_CLIP = 16_000
+        const val MAX_JARVIS = 8000
 
         /** Why the PC's address didn't answer, in words that say what to check. */
         fun lanError(pairing: Pairing, e: IOException): String {

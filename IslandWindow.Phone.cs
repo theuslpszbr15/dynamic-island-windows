@@ -53,6 +53,7 @@ public partial class IslandWindow
             _phone.PendingChanged += OnPhonePending;
             _phone.Clip += OnPhoneClip;
             _phone.Type += OnPhoneType;
+            _phone.AskJarvis += OnPhoneJarvis;
             _phone.Remote += OnPhoneRemote;
             _phone.Call += OnPhoneCall;
             _phone.FilterFromPhone += OnPhoneFilter;

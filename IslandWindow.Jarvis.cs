@@ -361,18 +361,33 @@ public partial class IslandWindow : IJarvisHost
         if (_transient == Transient.Info) TransientEnded();
     }
 
-    public async Task AskJarvisAsync(string message)
+    /// <summary>A question from the phone: answered on the phone (not out loud on the PC).</summary>
+    async void OnPhoneJarvis(string id, string text)
     {
-        if (JarvisState == "Pensando…") return;
+        if (JarvisState == "Pensando…" || ComputerBusy)
+        {
+            _phone?.PublishJarvis(id, "error", "O Jarvis está ocupado no PC. Tente de novo em instantes.");
+            return;
+        }
+        _phone?.PublishJarvis(id, "thinking", "");
+        string? answer = null;
+        try { answer = await AskJarvisAsync(text, fromPhone: true); }
+        catch (Exception ex) { Log.Error("Jarvis from phone", ex); }
+        _phone?.PublishJarvis(id, answer == null ? "error" : "done", answer ?? "Não deu para responder agora.");
+    }
+
+    public async Task<string?> AskJarvisAsync(string message, bool fromPhone = false)
+    {
+        if (JarvisState == "Pensando…") return null;
         var history = JarvisHistory.ToList();
         JarvisHistory.Add((true, message));
         SetJarvisState("Pensando…");
-        ShowInfo("\uE99A", "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);
+        ShowInfo(fromPhone ? "\uE8EA" : "\uE99A", fromPhone ? "Pergunta do celular" : "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);
         var reply = JarvisBrain.HasKey ? new Jarvis.Reply(await Brain.RespondAsync(message)) : await Jarvis.AskAsync(message, history);
         JarvisHistory.Add((false, reply.Text));
         if (JarvisHistory.Count > JarvisHistoryMax) JarvisHistory.RemoveRange(0, JarvisHistory.Count - JarvisHistoryMax);
         JarvisLast = reply;
-        var speak = _settings.JarvisSpeak && Jarvis.CanSpeak;
+        var speak = !fromPhone && _settings.JarvisSpeak && Jarvis.CanSpeak;
         SetJarvisState(speak ? "Falando…" : "Pronto");
 
         // "pesquise…", "abre o YouTube": the link opens right away (only Google and YouTube over https)
@@ -387,5 +402,6 @@ public partial class IslandWindow : IJarvisHost
             if (JarvisState == "Falando…") SetJarvisState("Pronto");
         }
         if (JarvisOnScreen && !_hover && JarvisState == "Pronto" && _mic == null) ScheduleClose(Math.Clamp(3 + reply.Text.Length / 25.0, 5, 12));
+        return reply.Text;
     }
 }

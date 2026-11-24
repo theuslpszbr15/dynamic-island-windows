@@ -67,4 +67,12 @@ class ScreensTest {
             TrayItem("4", "notepad.exe", "app", null),
         ),
     ))
+
+    @Test fun jarvis() = shot("09-jarvis", LinkUi(
+        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 1,
+        jarvis = listOf(
+            JarvisTurn("1", "que horas são?", "São 15:42.", "done"),
+            JarvisTurn("2", "abre o Spotify e toca minha playlist", "", "thinking"),
+        ),
+    ))
 }

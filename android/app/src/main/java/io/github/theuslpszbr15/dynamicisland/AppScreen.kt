@@ -457,6 +457,7 @@ private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, 
         val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
             { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
         if (!connected) item(span = full) { WakeCard() }
+        if (connected) item(span = full) { JarvisCard(state.jarvis) }
         if (connected) item(span = full) { RemoteCard(state.pc, onRemote) }
         item(span = full) {
             UiCard {
@@ -484,6 +485,62 @@ private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, 
         }
         gridItems(state.tray, key = { it.id }) { TrayTile(it, onOpen) }
         item(span = full) { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+/** Asks the PC's Jarvis (typed or said); the answers show here, the last few. */
+@Composable
+private fun JarvisCard(turns: List<JarvisTurn>) {
+    val context = LocalContext.current
+    var question by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    fun ask(text: String) {
+        val q = text.trim()
+        if (q.isEmpty()) return
+        if (Link.askJarvis(q)) question = ""
+        else android.widget.Toast.makeText(context, "O PC não está conectado", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    val listen = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let(::ask)
+    }
+    UiCard {
+        UiCardTitle("Perguntar ao Jarvis", "Quem responde é o Jarvis do PC: o que ele fizer (abrir, tocar, criar) acontece no PC.")
+        turns.takeLast(3).forEach { t ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Você: ${t.question}", color = Ui.Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                when (t.state) {
+                    "sent", "thinking" -> Text("Pensando…", color = Ui.Muted, fontSize = 15.sp)
+                    "error" -> Text(t.answer, color = Ui.Warn, fontSize = 14.sp)
+                    else -> {
+                        Text(t.answer, color = Ui.Text, fontSize = 15.sp)
+                        UiLink("Copiar", {
+                            FileReceiver.copy(context, t.answer)
+                            android.widget.Toast.makeText(context, "Resposta copiada", android.widget.Toast.LENGTH_SHORT).show()
+                        })
+                    }
+                }
+            }
+        }
+        OutlinedTextField(
+            value = question, onValueChange = { question = it.take(2000) }, maxLines = 4,
+            placeholder = { Text("Pergunte ou peça algo") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { ask(question) }),
+            modifier = Modifier.fillMaxWidth(), shape = Ui.ButtonShape,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            UiSecondary("Falar", {
+                val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Fale com o Jarvis")
+                try { listen.launch(intent) }
+                catch (_: android.content.ActivityNotFoundException) {
+                    android.widget.Toast.makeText(context, "Este celular não tem reconhecimento de voz", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }, Modifier.weight(1f))
+            UiPrimary("Perguntar", { ask(question) }, Modifier.weight(1f), enabled = question.isNotBlank())
+        }
     }
 }
 

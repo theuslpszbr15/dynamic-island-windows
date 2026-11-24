@@ -13,6 +13,18 @@ public class PhoneCommandTests
     public void PingAsksForAPong() =>
         Assert.Equal(PhoneLink.PhoneAction.Ping, Parse("""{"type":"ping"}""").Action);
 
+    [Fact]
+    public void AQuestionForJarvisNeedsAnIdAndText()
+    {
+        var command = Parse("""{"type":"jarvis","id":"abc","text":"que horas são?"}""");
+        Assert.Equal(PhoneLink.PhoneAction.Jarvis, command.Action);
+        Assert.Equal("abc", command.Id);
+        Assert.Equal("que horas são?", command.Text);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"jarvis","text":"oi"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"jarvis","id":"abc","text":""}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse($$"""{"type":"jarvis","id":"abc","text":"{{new string('a', 2001)}}"}""").Action);
+    }
+
     [Theory]
     [InlineData("allow")]
     [InlineData("deny")]

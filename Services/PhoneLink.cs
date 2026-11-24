@@ -110,7 +110,10 @@ public sealed partial class PhoneLink : IDisposable
     public event Action<string>? Clip;
     /// <summary>Text dictated on the phone, to be typed where the person is on the PC.</summary>
     public event Action<string>? Type;
+    /// <summary>A question for Jarvis typed or said on the phone: (id, text). The answer goes back with <see cref="PublishJarvis"/>.</summary>
+    public event Action<string, string>? AskJarvis;
     const int MaxTypeChars = 2000;
+    const int MaxJarvisChars = 8000;
     /// <summary>Raised on the UI thread: (action, minutes) from the phone's remote control.</summary>
     public event Action<string, int>? Remote;
     /// <summary>Raised on the UI thread: ("ringing" | "offhook" | "idle", contact name, number) for the phone's calls.</summary>
@@ -428,6 +431,10 @@ public sealed partial class PhoneLink : IDisposable
         Broadcast(new JsonObject { ["type"] = "clip", ["text"] = text }.ToJsonString());
     }
 
+    /// <summary>How a question from the phone is going: "thinking", then "done" with the answer or "error" with why.</summary>
+    public void PublishJarvis(string id, string state, string text) =>
+        Broadcast(new JsonObject { ["type"] = "jarvis", ["id"] = id, ["state"] = state, ["text"] = Cut(text, MaxJarvisChars) }.ToJsonString());
+
     /// <summary>A notification shown on the PC's island, repeated on the phone (apps from 1.5.6 show it).</summary>
     public void PublishNotification(string app, string title, string body) =>
         Broadcast(new JsonObject { ["type"] = "pcNotify", ["app"] = Cut(app, 60), ["title"] = Cut(title, 120), ["body"] = Cut(body, 400) }.ToJsonString());
@@ -583,6 +590,9 @@ public sealed partial class PhoneLink : IDisposable
                     case PhoneAction.Type:
                         _ = _ui.InvokeAsync(() => Type?.Invoke(command.Text!));
                         break;
+                    case PhoneAction.Jarvis:
+                        _ = _ui.InvokeAsync(() => AskJarvis?.Invoke(command.Id!, command.Text!));
+                        break;
                     case PhoneAction.Remote:
                         _ = _ui.InvokeAsync(() => Remote?.Invoke(command.Text!, command.Minutes));
                         break;
@@ -670,7 +680,7 @@ public sealed partial class PhoneLink : IDisposable
 
     /// <summary>What the PC does with one JSON line from a phone. Serve's state machine, extracted so tests can
     /// drive it; <see cref="PhoneAction.None"/> means the line is fine but asks for nothing.</summary>
-    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Filter, Bye, Type }
+    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Filter, Bye, Type, Jarvis }
 
     /// <summary>Text is the copied text (Clip) or the remote action (Remote); State/Name/Number describe a Call.</summary>
     internal sealed record PhoneCommand(PhoneAction Action, string? Fingerprint = null, string? Decision = null,
@@ -694,6 +704,8 @@ public sealed partial class PhoneLink : IDisposable
                 return new PhoneCommand(PhoneAction.Clip, Text: clip);
             case "type" when Str(root, "text") is { Length: > 0 and <= MaxTypeChars } typed:
                 return new PhoneCommand(PhoneAction.Type, Text: typed);
+            case "jarvis" when id is { Length: > 0 and <= 64 } && Str(root, "text") is { Length: > 0 and <= MaxTypeChars } question:
+                return new PhoneCommand(PhoneAction.Jarvis, Id: id, Text: question);
             case "remote" when Str(root, "action") is { } action && RemoteActions.Contains(action):
                 return new PhoneCommand(PhoneAction.Remote, Text: action,
                     Minutes: root.TryGetProperty("minutes", out var m) && m.TryGetInt32(out var mi) ? Math.Clamp(mi, 1, 720) : 0);

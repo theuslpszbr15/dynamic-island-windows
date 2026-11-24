@@ -70,6 +70,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
   **Baixar** (galeria ou Downloads), na notificação, nos Pendentes, no Histórico e no visualizador.
 - **Controle remoto do PC:** música, volume, bloquear, desligar com timer, abrir apps fixados e **ligar o PC**
   (Wake-on-LAN).
+- **Perguntar ao Jarvis pelo celular** (escrevendo ou falando): quem responde é o Jarvis do PC, e o que ele faz acontece
+  no PC.
 - **Ligações do celular aparecem na ilha do PC** com o nome do contato.
 - **Ilha flutuante no celular** com timers, bateria, foco e os agentes do PC; aprovar comandos do Claude com a digital.
 - O PC manda a atualização do app para o celular com um clique.
