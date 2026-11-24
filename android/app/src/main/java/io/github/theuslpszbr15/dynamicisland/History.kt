@@ -66,6 +66,11 @@ object History {
 
     fun remove(context: Context, id: String, sent: Boolean) = change(context) { list -> list.filterNot { it.id == id && it.sent == sent } }
 
+    /** A picture kept only for the clipboard was saved to the gallery: the lists point at the saved one. */
+    fun replaceUri(context: Context, old: String, new: String) = change(context) { list ->
+        list.map { r -> if (old in r.uris) r.copy(uris = r.uris.map { if (it == old) new else it }, status = "Recebido") else r }
+    }
+
     fun clear(context: Context, sent: Boolean) = change(context) { list -> list.filterNot { it.sent == sent } }
 
     @Synchronized

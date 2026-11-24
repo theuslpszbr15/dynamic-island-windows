@@ -25,8 +25,8 @@ android {
         // the combined fingerprint / screen-lock prompt needs Android 11
         minSdk = 30
         targetSdk = 35
-        versionCode = 18
-        versionName = "1.5.6"
+        versionCode = 19
+        versionName = "1.5.7"
     }
 
     // Release key: android/keystore.properties (storeFile, storePassword, keyAlias, keyPassword; never committed)

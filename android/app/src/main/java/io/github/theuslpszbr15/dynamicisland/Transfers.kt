@@ -15,6 +15,8 @@ data class OfferItem(val name: String, val size: Long, val sha256: String, val i
 data class FileOffer(val id: String, val items: List<OfferItem>, val receivedAt: Long) {
     val totalBytes get() = items.sumOf { it.size }
     val isText get() = items.size == 1 && items[0].isText
+    /** One picture: it can go straight to the clipboard instead of the gallery ("Copiar"). */
+    val isPicture get() = items.size == 1 && !items[0].isText && items[0].name.substringAfterLast('.', "").lowercase() in PICTURES
     val label get() = when {
         isText -> "um texto"
         items.size == 1 -> items[0].name
@@ -37,6 +39,7 @@ data class FileOffer(val id: String, val items: List<OfferItem>, val receivedAt:
         private val ID = Regex("^[0-9a-f]{32}$")
         private val SHA = Regex("^[0-9a-f]{64}$")
         private val VIDEO = setOf("mp4", "mov", "m4v", "mkv", "webm", "3gp", "avi")
+        private val PICTURES = setOf("png", "jpg", "jpeg", "webp", "bmp", "heic", "heif")
         private val random = SecureRandom()
 
         fun isId(id: String) = ID.matches(id)

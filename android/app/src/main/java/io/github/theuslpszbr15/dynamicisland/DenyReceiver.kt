@@ -11,6 +11,8 @@ class DenyReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_PAUSE -> return Link.pause(context)
             ACTION_ACCEPT_FILE -> return intent.getStringExtra(Notifications.EXTRA_FILE_ID)?.let { Link.acceptFile(context, it) } ?: Unit
+            ACTION_COPY_FILE -> return intent.getStringExtra(Notifications.EXTRA_FILE_ID)?.let { Link.acceptFile(context, it, FileReceiver.Take.Copy) } ?: Unit
+            ACTION_SAVE_FILE -> return intent.getStringExtra(Notifications.EXTRA_FILE_ID)?.let { Link.acceptFile(context, it, FileReceiver.Take.Save) } ?: Unit
             ACTION_DECLINE_FILE -> return intent.getStringExtra(Notifications.EXTRA_FILE_ID)?.let { Link.declineFile(context, it) } ?: Unit
             ACTION_COPY_TEXT -> return intent.getStringExtra(Notifications.EXTRA_FILE_ID)?.let { Link.copyText(context, it) } ?: Unit
         }
@@ -22,6 +24,8 @@ class DenyReceiver : BroadcastReceiver() {
         const val ACTION_PAUSE = "io.github.theuslpszbr15.dynamicisland.PAUSE"
         const val ACTION_ACCEPT_FILE = "io.github.theuslpszbr15.dynamicisland.ACCEPT_FILE"
         const val ACTION_DECLINE_FILE = "io.github.theuslpszbr15.dynamicisland.DECLINE_FILE"
+        const val ACTION_COPY_FILE = "io.github.theuslpszbr15.dynamicisland.COPY_FILE"
+        const val ACTION_SAVE_FILE = "io.github.theuslpszbr15.dynamicisland.SAVE_FILE"
         const val ACTION_COPY_TEXT = "io.github.theuslpszbr15.dynamicisland.COPY_TEXT"
     }
 }

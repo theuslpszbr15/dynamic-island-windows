@@ -298,6 +298,9 @@ public sealed partial class SettingsWindow : DarkWindow
         page.Children.Add(Card("Tema", Note("A cor da ilha. Vidro desfoca o que está atrás dela (e some de prints e do compartilhamento de tela)."), themes,
             Toggle("Visual Aurora (borda de luz animada)", "Adiciona uma borda iluminada com gradiente animado e brilho suave ao redor da ilha.",
                 S.AuroraLook, v => { S.AuroraLook = v; S.Save(); _app.Island.ApplyLook(); }),
+            Toggle("Temas da época", "No Halloween (25 a 31/10), no Natal (dezembro), no Ano-Novo e nas festas juninas a ilha ganha uma borda com as cores da data, sozinha." +
+                (Seasons.For(DateTime.Today) is { } now ? $" Agora: {now.Name}." : ""),
+                S.SeasonalLook, v => { S.SeasonalLook = v; S.Save(); _app.Island.ApplyLook(); }),
             Toggle("Brilho laranja", "Um brilho suave atrás desta janela e em volta da ilha aberta. Desligue se preferir tudo liso.",
                 S.GlowLook, v => { S.GlowLook = v; S.Save(); ApplyGlow(); _app.Island.ApplyLook(); })));
 

@@ -262,6 +262,11 @@ private fun RecordList(
                         FileReceiver.copy(context, t)
                         Toast.makeText(context, "Texto copiado", Toast.LENGTH_SHORT).show()
                     },
+                    onCopyPicture = { uri ->
+                        FileReceiver.copyPicture(context, Uri.parse(uri))
+                        Toast.makeText(context, "Imagem copiada", Toast.LENGTH_SHORT).show()
+                    },
+                    onSave = { save(context, record) },
                     onResend = { t ->
                         scope.launch {
                             val answer = offer(context) { FileSender.offerText(context, t) }
@@ -285,11 +290,13 @@ private fun RecordRow(
     ready: Boolean,
     onOpen: () -> Unit,
     onCopy: (String) -> Unit,
+    onCopyPicture: (String) -> Unit,
+    onSave: () -> Unit,
     onResend: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
     val statusColor = when (record.status) {
-        "No PC", "Recebido", "Copiado" -> SGreen
+        "No PC", "Recebido", "Copiado", "Salvo" -> SGreen
         "Esperando o PC", "Enviando", "Pendente no PC", "Na fila", "Vai de novo quando ligar" -> SOrange
         "Recusado", "Não aceito", "Cancelado", "Expirou" -> SMuted
         else -> SRed
@@ -315,14 +322,34 @@ private fun RecordRow(
             val text = record.text
             if (text != null) {
                 TextButton(onClick = { onCopy(text) }) { Text("Copiar") }
+                if (!record.sent) TextButton(onClick = onSave) { Text("Baixar") }
                 if (record.sent) TextButton(onClick = { onResend(text) }, enabled = ready) { Text("Mandar de novo") }
             } else if (!record.sent && record.uris.isNotEmpty()) {
                 TextButton(onClick = onOpen) { Text(if (record.uris.size > 1) "Abrir o primeiro" else "Abrir") }
+                if (record.uris.size == 1 && Media.isImage(record.mimes.firstOrNull().orEmpty()))
+                    TextButton(onClick = { onCopyPicture(record.uris[0]) }) { Text("Copiar") }
+                if (record.uris.any { !FileReceiver.inGallery(it) }) TextButton(onClick = onSave) { Text("Baixar") }
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onRemove) { Text("Tirar", color = SMuted) }
         }
     }
+}
+
+/** Baixar: a text as a .txt in Downloads, a picture kept only for the clipboard into the gallery. */
+private fun save(context: Context, record: TransferRecord) {
+    val text = record.text
+    val ok = if (text != null) FileReceiver.saveText(context, text) != null
+    else record.uris.filterNot(FileReceiver::inGallery).all { uri ->
+        val mime = record.mimes.getOrElse(record.uris.indexOf(uri)) { "image/png" }
+        val name = Uri.parse(uri).lastPathSegment?.substringAfterLast('/') ?: record.title
+        FileReceiver.saveCopy(context, Uri.parse(uri), name, mime)?.also { History.replaceUri(context, uri, it.toString()) } != null
+    }
+    Toast.makeText(context, when {
+        !ok -> "Não deu para salvar (a cópia pode ter sido apagada)"
+        text != null -> "Salvo em Downloads/${FileReceiver.FOLDER}"
+        else -> "Salvo na galeria"
+    }, Toast.LENGTH_SHORT).show()
 }
 
 /** Pictures and videos open in the app's viewer; anything else with whatever app handles it (only this app's own

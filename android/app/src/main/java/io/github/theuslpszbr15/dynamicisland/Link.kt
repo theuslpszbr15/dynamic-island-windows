@@ -166,7 +166,7 @@ object Link {
 
     /** "Aceitar" on the notification (the phone must be unlocked): download on a connection of its own, the same
      * way the link reaches the PC right now (Wi-Fi directly, or the relay). */
-    fun acceptFile(context: Context, id: String) {
+    fun acceptFile(context: Context, id: String, take: FileReceiver.Take = FileReceiver.Take.Default) {
         val app = context.applicationContext
         val offer = _state.value.files.firstOrNull { it.id == id }
         Notifications.cancelFile(app, id)
@@ -177,7 +177,7 @@ object Link {
         // Too big for the relay: the offer stays, so it can still be taken once on the PC's Wi-Fi.
         if (!FileOffer.fitsRoute(offer.totalBytes, c.route)) return tell(app, FileOffer.RELAY_TOO_BIG)
         update { s -> s.copy(files = s.files.filterNot { it.id == id }) }
-        FileReceiver.receive(app, pairing, c.route, offer)
+        FileReceiver.receive(app, pairing, c.route, offer, take)
     }
 
     /** Short texts from the PC, by id, until "Copiar" (kept only in memory, at most a few). */

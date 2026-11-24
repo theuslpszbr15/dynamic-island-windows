@@ -36,7 +36,7 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
 
 **Jarvis, o assistente de IA dentro da ilha**
 - `Ctrl+Alt+J`: tocar abre para escrever, segurar para falar; ou diga **"Ei Jarvis"** (reconhecimento do Windows, offline).
-  Responde na ilha e em voz alta, com o brilho de voz subindo da borda.
+  Responde na ilha e em voz alta, com o brilho de voz subindo da borda; resposta longa vai descendo sozinha conforme ele fala.
 - **Faz coisas, não só conversa** (com uma chave grátis da Groq): abre apps e sites, controla música e volume, cria
   timer, lembrete e tarefa, escreve no Bloco de Notas, cria pastas, lê arquivos, mostra RAM e disco, busca na Wikipedia,
   dá o clima, **lê a tela** ("o que é esse erro?") e roda scripts do PowerShell que você aprova antes. Tem **memória
@@ -64,7 +64,10 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
 - Pareamento por QR, ligação cifrada (TLS com o certificado do PC fixado); funciona no Wi-Fi de casa e **de fora**
   (4G, trabalho) por um repasse que só vê bytes cifrados.
 - **Área de transferência** nos dois sentidos, **arquivos, fotos, vídeos e textos** entre PC e celular (estilo
-  LocalSend), **ditar no celular e o texto aparecer no PC**, notificações do PC no celular.
+  LocalSend), **ditar no celular e o texto aparecer no PC**, notificações do PC no celular. Na ilha, a página
+  **Celular · enviar e receber** mostra o que chegou (Copiar, Mostrar) e manda arquivos ou o que está copiado.
+- No celular, foto ou texto do PC tem **Copiar** (vai direto para a área de transferência, sem encher a galeria) e
+  **Baixar** (galeria ou Downloads), na notificação, nos Pendentes, no Histórico e no visualizador.
 - **Controle remoto do PC:** música, volume, bloquear, desligar com timer, abrir apps fixados e **ligar o PC**
   (Wake-on-LAN).
 - **Ligações do celular aparecem na ilha do PC** com o nome do contato.
@@ -75,7 +78,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
 - Mascotes animados (o **Bit**, Coco, Pipoca, Bu ou um PNG seu) que reagem à música e aos agentes, com roupinhas por
   estação, **PatPat** (Shift + clique) e um mascote que pode morar na área de trabalho.
 - Temas: **vidro desfocado** estilo iOS 26, 8 cores sólidas, tema claro, cor própria; formato pílula ou **notch**;
-  temas compartilháveis num arquivo `.ilha.json`.
+  temas compartilháveis num arquivo `.ilha.json`. **Temas da época**: no Halloween, no Natal, no Ano-Novo e nas festas
+  juninas a borda da ilha ganha as cores da data e o mascote se veste sozinho.
 - **Não atrapalha:** os cliques passam por ela, vira uma barrinha quando ociosa, some em tela cheia e em vídeos, não
   rouba o foco, segue a janela ativa em vários monitores (cada um com sua escala).
 - Atalhos para tudo (`Ctrl+Alt+D/M/T/A/C/K/J/F/L/O`), trocáveis nas configurações.
@@ -113,7 +117,7 @@ Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.g
 | **Mascotes** — o **Bit** (gatinho de capuz, o mascote da ilha), o **Coco** (coquinho), a **Pipoca** (gatinha), o **Bu** (fantasminha) ou **o seu**: importe um PNG (pixel art fica nítido) em *Configurações → Aparência*. Seguem o mouse com os olhos, dançam com a música, ficam azuis enquanto o agente trabalha, laranja e pulando quando ele precisa de você, comemoram quando termina e dormem quando nada acontece. Clique: ficam bravos; três vezes rápido, ficam tontos. Tema, cor própria, Aurora e mascote cabem num arquivo `.ilha.json` para compartilhar. | <img src="docs/img/25-bit-moods.png" width="380"> |
 | **PatPat** — **Shift + clique** no mascote (na ilha ou na área de trabalho) e uma mãozinha em pixel art faz carinho na cabeça dele: 5 quadros em 300 ms, o mascote amassa, fecha os olhos feliz e solta coraçõezinhos. Segure para continuar o afago. Ideia do mod de Minecraft [PatPat](https://github.com/LopyMine/PatPat); o sprite é nosso. | <img src="docs/img/43-patpat.png" width="380"> |
 | **Permitir / Negar** — quando o Claude Code pede permissão (rodar um comando, editar um arquivo), a pergunta aparece na ilha como uma pílula discreta, sem abrir a ilha; passe o mouse ou clique nela para ver o comando e responder (dá para trocar por o painel aberto direto em *Configurações → Agentes*). Sem resposta em ~55 s, ele pergunta no terminal como sempre. | <img src="docs/img/28-approval.png" width="380"> |
-| **Roupinhas** — gorro, chapéu de festa, gorro de Natal, chapéu de palha, óculos escuros e coroa. No modo automático o mascote se veste sozinho no Natal, nas festas juninas e no Ano-Novo. O mascote também pode morar na **área de trabalho**: arraste para onde quiser; ele corre até a ilha quando um agente chama. | <img src="docs/img/34-outfits.png" width="380"> |
+| **Roupinhas** — gorro, chapéu de festa, gorro de Natal, chapéu de palha, óculos escuros e coroa. No modo automático o mascote se veste sozinho no Halloween, no Natal, nas festas juninas e no Ano-Novo. O mascote também pode morar na **área de trabalho**: arraste para onde quiser; ele corre até a ilha quando um agente chama. | <img src="docs/img/34-outfits.png" width="380"> |
 | **Agentes ao vivo** — o mascote do agente, os passos (Leitura, Edição, Terminal…) e o diff da última edição; com vários agentes, a lista de todos com o mascote de cada um. | <img src="docs/img/10b-agent-detail.png" width="380"> |
 | **Vidro (desfocado)** — "liquid glass" estilo iOS 26: o fundo atrás da ilha é fosco no meio e se curva como uma lente nas bordas, com brilho na borda, além de 8 cores sólidas (Obsidiana, Grafite, Ardósia, Oceano, Floresta, Café, Ameixa, Cereja) e o tema claro **Porcelana**. | <img src="docs/img/26-glass-media.png" width="190"> <img src="docs/img/35-light-media.png" width="190"> |
 | **Mídia** — capa, título, progresso e controles de qualquer player (Spotify, YouTube…). A cor de destaque vem da capa. Com mais de um app tocando, bolinhas sobre a capa escolhem qual controlar. | <img src="docs/img/02-now-playing.png" width="380"> |

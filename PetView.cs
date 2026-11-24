@@ -137,6 +137,14 @@ public sealed class PetView : Canvas
         SpeciesChanged?.Invoke();
     }
 
+    /// <summary>A new day: the automatic outfit may change.</summary>
+    public static void CalendarChanged() => SpeciesChanged?.Invoke();
+
+    /// <summary>Snapshots pretend it's another day to show the seasonal looks.</summary>
+    public static DateTime? CalendarDay { get; set; }
+
+    public static DateTime Today => CalendarDay ?? DateTime.Today;
+
     public static PetOutfit Resolve(PetOutfit outfit, DateTime date) => outfit != PetOutfit.Auto ? outfit : date switch
     {
         { Month: 12, Day: 31 } or { Month: 1, Day: 1 } => PetOutfit.Festa,
@@ -268,11 +276,11 @@ public sealed class PetView : Canvas
         };
         MouseLeave += (_, _) => EndPatting();
         Species = DefaultSpecies;
-        Outfit = Resolve(DefaultOutfit, DateTime.Today);
+        Outfit = Resolve(DefaultOutfit, Today);
         void Sync()
         {
             Species = FixedSpecies ?? DefaultSpecies;
-            Outfit = Resolve(DefaultOutfit, DateTime.Today);
+            Outfit = Resolve(DefaultOutfit, Today);
         }
         Loaded += (_, _) =>
         {

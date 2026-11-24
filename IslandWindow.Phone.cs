@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using DynamicIsland.Services;
@@ -16,7 +17,16 @@ public partial class IslandWindow
 
     TransferHistory? _history;
     /// <summary>Recebidos / Enviados of the phone window (kept on disk, encrypted; in memory only in snapshot mode).</summary>
-    public TransferHistory History => _history ??= new TransferHistory(SnapshotMode ? null : TransferHistory.DefaultFile);
+    public TransferHistory History
+    {
+        get
+        {
+            if (_history != null) return _history;
+            _history = new TransferHistory(SnapshotMode ? null : TransferHistory.DefaultFile);
+            _history.Changed += () => Dispatcher.InvokeAsync(() => { if (_expanded && _page == PagePending) UpdatePendingUi(); });
+            return _history;
+        }
+    }
     public string? PhoneError { get; private set; }
 
     public void ApplyPhoneLink()
@@ -384,55 +394,102 @@ public partial class IslandWindow
         : offer.Items.Count == 1 ? offer.Items[0].IsText ? "Um texto longo" : offer.Items[0].Name
         : $"{offer.Items.Count} arquivos";
 
+    const int PhoneRows = 3;
+
     void UpdatePendingUi()
     {
         var list = PhonePending;
-        PendingEmpty.Visibility = Vis(list.Count == 0);
+        var received = History.Entries.Where(e => !e.Sent).Take(Math.Max(0, PhoneRows - list.Count)).ToList();
+        PendingEmpty.Visibility = Vis(list.Count == 0 && received.Count == 0);
         PendingList.Children.Clear();
         foreach (var offer in list)
         {
-            var row = new Grid { Margin = new System.Windows.Thickness(0, 0, 0, 6) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = System.Windows.GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = System.Windows.GridLength.Auto });
             var kind = offer.Text != null || offer.Items.Any(i => i.IsText) ? "\uE8C8"
                 : offer.Items.All(i => MediaFiles.IsImage(i.Name)) ? "\uEB9F"
                 : offer.Items.All(i => MediaFiles.IsVideo(i.Name)) ? "\uE714" : "\uE8A5";
-            var icon = new TextBlock
-            {
-                Text = kind, FontFamily = (System.Windows.Media.FontFamily)FindResource("Icons"), FontSize = 20, Width = 34,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center,
-            };
-            icon.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
-            row.Children.Add(icon);
-            var info = new StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 0, 8, 0) };
-            info.Children.Add(new TextBlock { Text = What(offer), FontSize = 13, FontWeight = System.Windows.FontWeights.SemiBold, TextTrimming = System.Windows.TextTrimming.CharacterEllipsis });
             var left = offer.At + PhoneLink.PendingLifetime - DateTime.Now;
-            var detail = new TextBlock
-            {
-                FontSize = 11.5, TextTrimming = System.Windows.TextTrimming.CharacterEllipsis,
-                Text = $"{offer.Device} · {(offer.Text != null ? $"{offer.Text.Length} caracteres" : SizeText(offer.TotalBytes))} · " +
-                       $"{(offer.At.Date == DateTime.Today ? $"às {offer.At:HH:mm}" : $"{offer.At:dd/MM HH:mm}")} · vale mais {Math.Max(1, (int)left.TotalHours)} h",
-            };
-            detail.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
-            info.Children.Add(detail);
-            Grid.SetColumn(info, 1);
-            row.Children.Add(info);
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            var decline = new System.Windows.Controls.Button { Content = "Recusar", Style = (System.Windows.Style)FindResource("Chip"), Height = 30 };
-            decline.Click += (_, _) => DeclinePending(offer);
-            var accept = new System.Windows.Controls.Button
-            {
-                Content = offer.Text != null ? "Copiar" : "Aceitar", Style = (System.Windows.Style)FindResource("Chip"), Height = 30,
-                Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x0A, 0x84, 0xFF)),
-            };
-            accept.Click += (_, _) => AcceptPending(offer);
-            buttons.Children.Add(decline);
-            buttons.Children.Add(accept);
-            Grid.SetColumn(buttons, 2);
-            row.Children.Add(buttons);
-            PendingList.Children.Add(row);
+            PendingList.Children.Add(PhoneRow(kind, What(offer),
+                $"{offer.Device} · {(offer.Text != null ? $"{offer.Text.Length} caracteres" : SizeText(offer.TotalBytes))} · " +
+                $"{When(offer.At)} · vale mais {Math.Max(1, (int)left.TotalHours)} h",
+                ("Recusar", false, () => DeclinePending(offer)),
+                (offer.Text != null ? "Copiar" : "Aceitar", true, () => AcceptPending(offer))));
         }
+        foreach (var entry in received)
+        {
+            var image = entry.Paths.Count == 1 && MediaFiles.IsImage(entry.Paths[0]) && File.Exists(entry.Paths[0]);
+            var buttons = new List<(string, bool, Action)>();
+            if (entry.Text is { } text) buttons.Add(("Copiar", true, () => CopyFromPhone(text)));
+            else
+            {
+                if (image) buttons.Add(("Copiar", true, () => CopyImage(entry.Paths[0])));
+                if (entry.Paths.FirstOrDefault(File.Exists) is { } first) buttons.Add(("Mostrar", !image, () => ShowInFolder(first)));
+            }
+            PendingList.Children.Add(PhoneRow(entry.Text != null ? "\uE8C8" : image ? "\uEB9F" : "\uE896",
+                entry.Text is { } t ? Preview(t) : entry.Title,
+                $"Recebido · {(entry.Text != null ? $"{entry.Text.Length} caracteres" : SizeText(entry.Bytes))} · {When(entry.When)}",
+                [.. buttons]));
+        }
+    }
+
+    static string When(DateTime at) => at.Date == DateTime.Today ? $"às {at:HH:mm}" : $"{at:dd/MM HH:mm}";
+
+    FrameworkElement PhoneRow(string glyph, string title, string line, params (string Label, bool Main, Action Click)[] buttons)
+    {
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var icon = new TextBlock
+        {
+            Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 20, Width = 34, VerticalAlignment = VerticalAlignment.Center,
+        };
+        icon.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        row.Children.Add(icon);
+        var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        info.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+        var detail = new TextBlock { FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis, Text = line };
+        detail.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        info.Children.Add(detail);
+        Grid.SetColumn(info, 1);
+        row.Children.Add(info);
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var (label, main, click) in buttons)
+        {
+            var b = new Button { Content = label, Style = (Style)FindResource("Chip"), Height = 30, Margin = new Thickness(6, 0, 0, 0) };
+            if (main) b.Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x84, 0xFF));
+            b.Click += (_, e) => { e.Handled = true; click(); };
+            panel.Children.Add(b);
+        }
+        Grid.SetColumn(panel, 2);
+        row.Children.Add(panel);
+        return row;
+    }
+
+    void CopyImage(string path)
+    {
+        try
+        {
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            image.BeginInit();
+            image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(path);
+            image.EndInit();
+            Clipboard.SetImage(image);
+            ShowInfo("\uEB9F", Path.GetFileName(path), "Imagem copiada", glyphColor: AgentSession.Done);
+        }
+        catch { ShowInfo("\uEB9F", "Não deu para copiar a imagem", "", glyphColor: Meter.Red, seconds: 3); }
+    }
+
+    static void ShowInFolder(string path)
+    {
+        try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""); }
+        catch { }
+    }
+
+    void PhoneAll_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        ((App)Application.Current).ShowPhoneWindow("received");
     }
 
     void CopyFromPhone(string text)

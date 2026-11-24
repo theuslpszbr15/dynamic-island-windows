@@ -203,9 +203,15 @@ object Notifications {
      * asks to unlock the phone first; the lock screen shows only that something is waiting, never its name. */
     fun showFileOffer(context: Context, offer: FileOffer) {
         if (!canNotify(context)) return
-        val accept = NotificationCompat.Action.Builder(0, "Aceitar", fileAction(context, DenyReceiver.ACTION_ACCEPT_FILE, offer.id))
+        fun action(label: String, what: String) = NotificationCompat.Action.Builder(0, label, fileAction(context, what, offer.id))
             .setAuthenticationRequired(true)
             .build()
+        // a text: Copiar (the usual) or Baixar as a .txt; one picture: Copiar (no gallery) or Baixar
+        val takes = when {
+            offer.isText -> listOf(action("Baixar", DenyReceiver.ACTION_SAVE_FILE), action("Copiar", DenyReceiver.ACTION_ACCEPT_FILE))
+            offer.isPicture -> listOf(action("Copiar", DenyReceiver.ACTION_COPY_FILE), action("Baixar", DenyReceiver.ACTION_ACCEPT_FILE))
+            else -> listOf(action("Baixar", DenyReceiver.ACTION_ACCEPT_FILE))
+        }
         val title = if (offer.isText) "O PC quer mandar um texto longo" else "O PC quer mandar ${if (offer.items.size == 1) "um arquivo" else "${offer.items.size} arquivos"}"
         val names = offer.items.take(5).joinToString(", ") { it.name } + if (offer.items.size > 5) "…" else ""
         val public = NotificationCompat.Builder(context, FILE_CHANNEL)
@@ -226,7 +232,7 @@ object Notifications {
             .setContentIntent(openApp(context, null))
             .setDeleteIntent(fileAction(context, DenyReceiver.ACTION_DECLINE_FILE, offer.id))
             .addAction(0, "Recusar", fileAction(context, DenyReceiver.ACTION_DECLINE_FILE, offer.id))
-            .addAction(accept)
+            .apply { takes.forEach { addAction(it) } }
             .build()
         NotificationManagerCompat.from(context).notify(fileId(offer.id), notification)
     }

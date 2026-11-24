@@ -378,6 +378,17 @@ public static class Jarvis
     static (double Level, double Low, double Mid, double High)[] _envelope = [];
     static readonly Stopwatch SpeechClock = new();
 
+    /// <summary>How far the voice is through what it is saying (0..1); null when it isn't speaking.</summary>
+    public static double? SpeechProgress
+    {
+        get
+        {
+            var length = _envelope.Length;
+            if (!SpeechClock.IsRunning || length == 0) return null;
+            return Math.Clamp(SpeechClock.ElapsedMilliseconds / (length * 40.0), 0, 1);
+        }
+    }
+
     /// <summary>How loud Jarvis's voice is right now (zero when silent), for the glow.</summary>
     public static (double Level, double Low, double Mid, double High) SpeechLevel()
     {

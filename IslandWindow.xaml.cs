@@ -22,7 +22,7 @@ public partial class IslandWindow : Window
     enum CompactKind { Clock, Media, Timer, Agent, Download }
 
     const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7, PageJarvis = 8, PageClipboard = 9;
-    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Pendentes do celular", "Tarefas e foco", "Jarvis", "Copiados"];
+    static readonly string[] PageTitles = ["Tocando agora", "Sistema", "Bandeja de arquivos", "Agentes", "Timer", "Agenda", "Celular · enviar e receber", "Tarefas e foco", "Jarvis", "Copiados"];
     static readonly Size ExpandedSize = new(450, 190);
     static readonly Duration Quick = TimeSpan.FromMilliseconds(140);
     // The two clips ApplySize mutates every frame; created once, so the animation allocates nothing.
@@ -818,6 +818,7 @@ public partial class IslandWindow : Window
         var text = DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture);
         if (CompactClock.Text != text) CompactClock.Text = text;
         if (_transient == Transient.Approval) UpdateApprovalElapsed();
+        CheckDay();
         UpdatePet();
     }
 

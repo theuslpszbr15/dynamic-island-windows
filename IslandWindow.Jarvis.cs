@@ -81,7 +81,59 @@ public partial class IslandWindow : IJarvisHost
         _glow.Listening = state is "Ouvindo…" or "Falando…";
         _glow.Processing = state is "Transcrevendo…" or "Pensando…";
         UpdateJarvisUi();
+        FollowVoice(state == "Falando…");
         JarvisChanged?.Invoke();
+    }
+
+    bool _following;
+    double _scrollAt;
+
+    // A long answer scrolls down as the voice reads it, a little ahead of the spoken line.
+    void FollowVoice(bool on)
+    {
+        if (on == _following) return;
+        _following = on;
+        if (on)
+        {
+            _scrollAt = 0;
+            JarvisScroll.ScrollToVerticalOffset(0);
+            System.Windows.Media.CompositionTarget.Rendering += FollowFrame;
+        }
+        else System.Windows.Media.CompositionTarget.Rendering -= FollowFrame;
+        UpdateAnswerFade();
+    }
+
+    void FollowFrame(object? sender, EventArgs e)
+    {
+        if (!JarvisOnScreen) return;
+        var room = JarvisScroll.ScrollableHeight;
+        UpdateAnswerFade();
+        if (room <= 0 || Jarvis.SpeechProgress is not { } progress) return;
+        var target = Math.Clamp(progress * JarvisScroll.ExtentHeight - JarvisScroll.ViewportHeight * 0.45, 0, room);
+        _scrollAt += (target - _scrollAt) * 0.08;
+        JarvisScroll.ScrollToVerticalOffset(_scrollAt);
+    }
+
+    void JarvisScroll_ScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e) => UpdateAnswerFade();
+
+    // the text fades out at the edges while there is more above or below
+    (bool, bool) _fade;
+
+    void UpdateAnswerFade()
+    {
+        var fade = (JarvisScroll.VerticalOffset > 1, JarvisScroll.ScrollableHeight - JarvisScroll.VerticalOffset > 1);
+        if (fade == _fade) return;
+        _fade = fade;
+        var (above, below) = fade;
+        JarvisScroll.OpacityMask = above || below
+            ? new System.Windows.Media.LinearGradientBrush(
+                [
+                    new(above ? System.Windows.Media.Colors.Transparent : System.Windows.Media.Colors.Black, 0),
+                    new(System.Windows.Media.Colors.Black, above ? 0.18 : 0),
+                    new(System.Windows.Media.Colors.Black, below ? 0.8 : 1),
+                    new(below ? System.Windows.Media.Colors.Transparent : System.Windows.Media.Colors.Black, 1),
+                ], 90)
+            : null;
     }
 
     bool JarvisOnScreen => _expanded && _page == PageJarvis;

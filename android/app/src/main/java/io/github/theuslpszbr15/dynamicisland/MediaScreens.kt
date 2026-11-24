@@ -115,8 +115,15 @@ fun PendingList(state: LinkUi, mine: List<OutgoingOffer>, modifier: Modifier = M
                 icon = if (offer.isText) R.drawable.ic_send_text else if (offer.items.size > 1) R.drawable.ic_tab_tray else R.drawable.ic_send_file,
             ) {
                 TextButton(onClick = { Link.declineFile(context, offer.id) }) { Text("Recusar", color = MMuted) }
-                TextButton(onClick = { whenUnlocked(context) { Link.acceptFile(context, offer.id) } }, enabled = ready) {
-                    Text(if (offer.isText) "Copiar" else "Aceitar", color = if (ready) MBlue else MMuted, fontWeight = FontWeight.SemiBold)
+                @Composable
+                fun Take(label: String, take: FileReceiver.Take) =
+                    TextButton(onClick = { whenUnlocked(context) { Link.acceptFile(context, offer.id, take) } }, enabled = ready) {
+                        Text(label, color = if (ready) MBlue else MMuted, fontWeight = FontWeight.SemiBold)
+                    }
+                when {
+                    offer.isText -> { Take("Baixar", FileReceiver.Take.Save); Take("Copiar", FileReceiver.Take.Default) }
+                    offer.isPicture -> { Take("Copiar", FileReceiver.Take.Copy); Take("Baixar", FileReceiver.Take.Default) }
+                    else -> Take("Baixar", FileReceiver.Take.Default)
                 }
             }
         }
@@ -238,6 +245,7 @@ class MediaViewerActivity : ComponentActivity() {
     private fun Viewer(uris: List<String>, mimes: List<String>, start: Int) {
         val pager = rememberPagerState(initialPage = start) { uris.size }
         var zoomed by remember { mutableStateOf(false) }
+        val saved = remember { androidx.compose.runtime.mutableStateListOf<String>() }
         LaunchedEffect(pager.currentPage) { zoomed = false }
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !zoomed, key = { uris[it] }) { page ->
@@ -254,7 +262,19 @@ class MediaViewerActivity : ComponentActivity() {
                 Spacer(Modifier.weight(1f))
                 Text("${pager.currentPage + 1} de ${uris.size}", color = Color.White, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { openWith(Uri.parse(uris[pager.currentPage]), mimes.getOrElse(pager.currentPage) { "*/*" }) }) {
+                val uri = uris[pager.currentPage]
+                val mime = mimes.getOrElse(pager.currentPage) { "*/*" }
+                if (Media.isImage(mime)) TextButton(onClick = {
+                    FileReceiver.copyPicture(this@MediaViewerActivity, Uri.parse(uri))
+                    Toast.makeText(this@MediaViewerActivity, "Imagem copiada", Toast.LENGTH_SHORT).show()
+                }) { Text("Copiar", color = Color.White) }
+                if (!FileReceiver.inGallery(uri) && uri !in saved) TextButton(onClick = {
+                    val name = Uri.parse(uri).lastPathSegment?.substringAfterLast('/') ?: "imagem"
+                    val copy = FileReceiver.saveCopy(this@MediaViewerActivity, Uri.parse(uri), name, mime)
+                    if (copy != null) { saved += uri; History.replaceUri(this@MediaViewerActivity, uri, copy.toString()) }
+                    Toast.makeText(this@MediaViewerActivity, if (copy != null) "Salvo na galeria" else "Não deu para salvar", Toast.LENGTH_SHORT).show()
+                }) { Text("Baixar", color = Color.White) }
+                TextButton(onClick = { openWith(Uri.parse(uri), mime) }) {
                     Text("Abrir com…", color = Color.White)
                 }
             }

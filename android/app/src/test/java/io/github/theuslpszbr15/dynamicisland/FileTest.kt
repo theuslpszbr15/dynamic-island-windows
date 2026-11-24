@@ -54,6 +54,13 @@ class FileOfferTest {
         assertTrue(offer(item(text = true, size = 1000))!!.isText)
     }
 
+    @Test fun onePictureCanGoToTheClipboard() {
+        assertTrue(offer(item("Print.PNG"))!!.isPicture)
+        assertTrue(!offer(item(), item("b.jpg"))!!.isPicture)
+        assertTrue(!offer(item("video.mp4"))!!.isPicture)
+        assertTrue(!offer(item(text = true, size = 10))!!.isPicture)
+    }
+
     @Test fun limitsBySizeAndKind() {
         assertNull(offer(item(size = FileOffer.MAX_BYTES + 1))) // a photo over 30 MB
         assertNotNull(offer(item("filme.MP4", FileOffer.MAX_VIDEO_BYTES))) // a video up to 60 MB

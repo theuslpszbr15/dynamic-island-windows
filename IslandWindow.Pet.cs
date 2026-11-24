@@ -79,10 +79,35 @@ public partial class IslandWindow
         CaptureGlass(true);
     }
 
+    static readonly Color[] AuroraColors =
+        [Color.FromRgb(0x0A, 0x84, 0xFF), Color.FromRgb(0xBF, 0x5A, 0xF2), Color.FromRgb(0xFF, 0x37, 0x5F), Color.FromRgb(0x30, 0xD1, 0x58)];
+
+    Seasons.Look? Season => _settings.SeasonalLook ? Seasons.For(PetView.Today) : null;
+
+    DateTime _lookDay = DateTime.Today;
+
+    // the seasonal rim and the mascot's outfit follow the calendar: look again once the day turns
+    void CheckDay()
+    {
+        if (DateTime.Today == _lookDay) return;
+        _lookDay = DateTime.Today;
+        ApplyAurora();
+        PetView.CalendarChanged();
+    }
+
     void ApplyAurora()
     {
-        var on = _settings.AuroraLook && !_hiddenFullscreen;
+        var season = Season;
+        var on = (_settings.AuroraLook || season != null) && !_hiddenFullscreen;
         AuroraRim.Visibility = Vis(on);
+        var colors = season?.Rim ?? AuroraColors;
+        if (AuroraRim.BorderBrush is LinearGradientBrush { IsFrozen: false } rim)
+            for (var i = 0; i < rim.GradientStops.Count && i < colors.Length; i++) rim.GradientStops[i].Color = colors[i];
+        if (AuroraRim.Background is RadialGradientBrush { IsFrozen: false, GradientStops.Count: >= 2 } wash)
+        {
+            wash.GradientStops[0].Color = Color.FromArgb(0x22, colors[0].R, colors[0].G, colors[0].B);
+            wash.GradientStops[1].Color = Color.FromArgb(0x14, colors[1].R, colors[1].G, colors[1].B);
+        }
         if (!on)
         {
             AuroraRotate.BeginAnimation(RotateTransform.AngleProperty, null);

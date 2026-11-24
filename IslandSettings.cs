@@ -69,6 +69,8 @@ public sealed class IslandSettings
     public bool GlowLook { get; set; } = true;
     /// <summary>Animated aurora light rim and glow around the island.</summary>
     public bool AuroraLook { get; set; }
+    /// <summary>Halloween, Natal, Ano-Novo and festa junina colour the island's rim on their dates.</summary>
+    public bool SeasonalLook { get; set; } = true;
     /// <summary>Hides the island when the focused window's top bar sits right under it (e.g. maximized browser tabs).</summary>
     public bool SmartHideUnderTopBar { get; set; }
     /// <summary>Drag the island with Ctrl+LeftClick (or Alt+LeftClick) to another monitor and remember it.</summary>
@@ -242,6 +244,23 @@ public sealed class IslandSettings
         try { Services.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(this, Options)); }
         catch (Exception ex) { Services.Log.Error("IslandSettings.Save", ex); }
     }
+}
+
+/// <summary>The island's dress for a date, on the same days the mascot dresses up (see PetView.Resolve).</summary>
+public static class Seasons
+{
+    public sealed record Look(string Name, Color[] Rim);
+
+    static Color C(uint rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+
+    public static Look? For(DateTime date) => date switch
+    {
+        { Month: 12, Day: 31 } or { Month: 1, Day: 1 } => new("Ano-Novo", [C(0xFFD60A), C(0xFFFFFF), C(0xE5B94E), C(0xC7C7CC)]),
+        { Month: 12 } => new("Natal", [C(0xFF3B30), C(0xFFFFFF), C(0x30D158), C(0xFFD60A)]),
+        { Month: 10, Day: >= 25 } => new("Halloween", [C(0xFF8A00), C(0x9B4DFF), C(0xFF5E00), C(0x7CFC00)]),
+        { Month: 6 or 7 } => new("Festa junina", [C(0xFF3B30), C(0xFFD60A), C(0x0A84FF), C(0x30D158)]),
+        _ => null,
+    };
 }
 
 public static class IslandThemes

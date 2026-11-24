@@ -396,6 +396,18 @@ public partial class IslandWindow
         SetJarvisState("Falando…");
         await Task.Delay(900);
         await Shot("46-jarvis-page");
+        // a long answer half read: scrolled down, faded at the bottom
+        JarvisHistory.Add((true, "o que você pode fazer?"));
+        JarvisHistory.Add((false, "Posso abrir sites e apps, criar arquivos e pastas, escrever textos, listar e ler arquivos, controlar o volume e a " +
+            "música, buscar na web, ver o clima, lembrar de coisas, criar lembretes e timers, pôr tarefas na ilha, usar o mouse e o " +
+            "teclado por você e rodar comandos do PowerShell. Se quiser algo específico, é só pedir: eu explico o que vou fazer antes. " +
+            "Também leio a tela, traduzo textos, mando coisas pro celular, aviso quando a internet cai e conto quanto falta do seu plano."));
+        UpdateJarvisUi();
+        await Task.Delay(300);
+        JarvisScroll.ScrollToVerticalOffset(JarvisScroll.ScrollableHeight / 2);
+        await Task.Delay(300);
+        await Shot("46-jarvis-long");
+        JarvisScroll.ScrollToVerticalOffset(0);
         JarvisHistory.Clear();
         SetJarvisState("Pensando…");
         await Task.Delay(900);
@@ -475,6 +487,29 @@ public partial class IslandWindow
         JarvisHistory.Clear();
         SetJarvisState("Pronto");
         SetExpanded(false);
+        // the Celular page: the latest from the phone and sending to it
+        Resources["PhoneActionsVisibility"] = Visibility.Visible;
+        History.Add(new TransferEntry("a1", DateTime.Now.AddMinutes(-3), false, "Texto", 0, 1, "Copiado", [], "Código do Wi-Fi: casa2026"));
+        History.Add(new TransferEntry("a2", DateTime.Now.AddMinutes(-1), false, "foto da lousa.jpg", 1_800_000, 1, "Recebido", [], null));
+        SetExpanded(true, PagePending);
+        await Shot("59-phone-page");
+        SetExpanded(false);
+        UpdatePhoneSend();
+        // the seasonal looks: rim colours and the mascot's outfit, by themselves
+        PetView.SetDefaultOutfit(PetOutfit.Auto);
+        foreach (var (day, name) in new[] { (new DateTime(2026, 10, 31), "60-season-halloween"), (new DateTime(2026, 12, 20), "60-season-natal") })
+        {
+            PetView.CalendarDay = day;
+            ApplyAurora();
+            PetView.CalendarChanged();
+            SetExpanded(true, PageMedia);
+            await Shot(name);
+            SetExpanded(false);
+        }
+        PetView.CalendarDay = null;
+        PetView.SetDefaultOutfit(PetOutfit.None);
+        ApplyAurora();
+        PetView.CalendarChanged();
         _plans =
         [
             new PlanUse("Copilot", PlanUsage.CopilotColor, 52, "mês", DateTimeOffset.Now.AddDays(8)),

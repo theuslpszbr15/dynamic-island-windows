@@ -852,7 +852,7 @@ private fun OpenCard(
                 title = "O PC quer mandar ${if (offer.isText) "um texto" else offer.label}",
                 detail = Notifications.sizeText(offer.totalBytes) + if (link.files.size > 1) " · mais ${link.files.size - 1} esperando" else "",
                 no = "Rejeitar" to { Link.declineFile(context, offer.id); if (link.files.size <= 1) close() },
-                yes = "Aceitar" to { if (accept(context, offer.id) && link.files.size <= 1) close() },
+                yes = (if (offer.isText) "Copiar" else "Baixar") to { if (accept(context, offer.id) && link.files.size <= 1) close() },
             )
         } ?: Gone(close)
         Pill.Kind.Approval -> link.approvals.firstOrNull()?.let { a ->

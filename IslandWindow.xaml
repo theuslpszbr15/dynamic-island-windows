@@ -930,20 +930,43 @@
                                     </Grid>
                                 </Grid>
 
-                                <!-- Pendentes: what the phone wants to send and nobody answered yet -->
+                                <!-- Celular: what the phone wants to send (Pendentes), the latest received, and sending to it -->
                                 <Grid x:Name="PendingPage" Visibility="Collapsed">
                                     <Grid.RenderTransform>
                                         <TranslateTransform />
                                     </Grid.RenderTransform>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
                                     <ScrollViewer x:Name="PendingScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                                         <StackPanel x:Name="PendingList" />
                                     </ScrollViewer>
                                     <StackPanel x:Name="PendingEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8EA;" FontSize="26" Foreground="{DynamicResource Faint}" HorizontalAlignment="Center" />
-                                        <TextBlock Text="Nada pendente" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
-                                        <TextBlock Text="O que o celular mandar e você não aceitar na hora espera aqui por um dia" FontSize="11.5"
+                                        <TextBlock Text="Nada recebido ainda" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center" />
+                                        <TextBlock Text="O que o celular mandar aparece aqui; o que você não aceitar na hora espera um dia" FontSize="11.5"
                                                    Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" />
                                     </StackPanel>
+                                    <Grid Grid.Row="1" Margin="0,6,0,0">
+                                        <StackPanel Orientation="Horizontal" Visibility="{DynamicResource PhoneActionsVisibility}">
+                                            <Button Style="{StaticResource Chip}" Margin="0,0,6,0" Height="30" ToolTip="Escolher arquivos e mandar pro celular" Click="PhonePick_Click">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8E5;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock Text="Mandar arquivo" FontSize="12.5" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource Chip}" Margin="0" Height="30" ToolTip="Mandar o que está copiado (texto, imagem ou arquivos)" Click="PhoneClipboard_Click">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8C8;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock Text="Mandar copiado" FontSize="12.5" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <Button Style="{StaticResource Chip}" Margin="0" Height="30" HorizontalAlignment="Right" ToolTip="Recebidos, enviados, imagens e vídeos" Click="PhoneAll_Click">
+                                            <TextBlock Text="Ver tudo" FontSize="12.5" />
+                                        </Button>
+                                    </Grid>
                                 </Grid>
 
                                 <!-- Tasks, Hydration & Quick Snippets -->
@@ -1010,7 +1033,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <TextBlock x:Name="JarvisAsked" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
-                                    <ScrollViewer Grid.Row="1" Margin="0,4,0,6" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                    <ScrollViewer x:Name="JarvisScroll" Grid.Row="1" Margin="0,4,0,6" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" ScrollChanged="JarvisScroll_ScrollChanged">
                                         <TextBlock x:Name="JarvisAnswer" FontSize="15" TextWrapping="Wrap" />
                                     </ScrollViewer>
                                     <!-- computer use: the steps, live -->
