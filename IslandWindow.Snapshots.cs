@@ -458,6 +458,7 @@ public partial class IslandWindow
             png.Save(file);
         }
         ask.Finish(ComputerAnswer.Stop);
+        if (_transient == Transient.Info) TransientEnded();
         _plans =
         [
             new PlanUse("Copilot", PlanUsage.CopilotColor, 52, "mês", DateTimeOffset.Now.AddDays(8)),

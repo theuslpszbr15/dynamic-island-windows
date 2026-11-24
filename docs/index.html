@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dynamic Island para Windows</title>
-  <meta name="description" content="Uma ilha dinâmica no topo do Windows: música com letra, agentes de IA com Permitir e Negar, reuniões com Entrar, tarefas e o seu celular Android. Grátis e open source." />
+  <meta name="description" content="Uma ilha dinâmica no topo do Windows com o Jarvis, um assistente de IA que executa tarefas e usa o PC por você: música com letra, agentes de IA com Permitir e Negar, OCR, tradução, ditado, reuniões com Entrar e o seu celular Android. Grátis e open source." />
   <meta name="theme-color" content="#0f0f10" />
   <link rel="icon" href="img/icon.png" />
   <style>
@@ -170,6 +170,7 @@
     <div class="wrap nav">
       <a class="brand" href="#"><img src="img/icon.png" alt="" />Dynamic Island</a>
       <div class="links" id="links">
+        <a href="#jarvis">Jarvis</a>
         <a href="#recursos">Recursos</a>
         <a href="#celular">Celular</a>
         <a href="#comparar">Comparar</a>
@@ -185,8 +186,8 @@
   <main class="wrap">
     <div class="hero">
       <div>
-        <h1>Uma ilha no topo do Windows para a música, os seus agentes de IA e o celular</h1>
-        <p class="lead">Mostra o que está tocando com a letra, o que o Copilot e o Claude Code estão fazendo (com Permitir e Negar), a próxima reunião com o botão Entrar e conversa com o seu Android. Os cliques passam por ela.</p>
+        <h1>A ilha do Windows com uma IA que faz por você</h1>
+        <p class="lead">O Jarvis abre apps, cria lembretes, lê a tela e até usa o mouse e o teclado com a sua aprovação. A ilha também mostra a música com a letra, o que o Copilot e o Claude Code estão fazendo (com Permitir e Negar), a próxima reunião, traduz, dita e conversa com o seu Android. Os cliques passam por ela.</p>
         <div class="actions">
           <a class="btn btn-primary" href="https://github.com/theuslpszbr15/dynamic-island-windows/releases/latest/download/DynamicIsland.exe">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
@@ -211,7 +212,7 @@
                   <ellipse cx="8.6" cy="13.85" rx="1.05" ry="1.35" fill="#1c1c1e"/><ellipse cx="15.4" cy="13.85" rx="1.05" ry="1.35" fill="#1c1c1e"/>
                 </svg>
               </span>
-              <span id="title">Agentes</span>
+              <span id="title">Jarvis</span>
               <span id="clock">seg, 16 nov · 14:30</span>
             </div>
             <div class="body" id="body"></div>
@@ -219,8 +220,10 @@
           <div class="bar"><i></i><i></i><i></i><i></i><i></i></div>
         </div>
         <div class="seg" role="tablist" id="seg">
-          <button role="tab" aria-selected="true" data-mode="agents">Agentes</button>
+          <button role="tab" aria-selected="false" data-mode="agents">Agentes</button>
+          <button role="tab" aria-selected="true" data-mode="jarvis">Jarvis</button>
           <button role="tab" aria-selected="false" data-mode="approval">Permissão</button>
+          <button role="tab" aria-selected="false" data-mode="translate">Tradução</button>
           <button role="tab" aria-selected="false" data-mode="media">Música</button>
           <button role="tab" aria-selected="false" data-mode="meeting">Reunião</button>
           <button role="tab" aria-selected="false" data-mode="focus">Foco</button>
@@ -230,6 +233,44 @@
       </div>
     </div>
   </main>
+
+  <section id="jarvis">
+    <div class="wrap">
+      <h2>O Jarvis faz, não só conversa</h2>
+      <p class="intro">Toque <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>J</kbd> para escrever, segure para falar ou diga "Ei Jarvis". Ele responde na ilha e em voz alta.</p>
+      <div class="grid">
+        <div class="card full">
+          <div>
+            <h3>Um assistente com ferramentas</h3>
+            <p>Abre apps e sites, controla música e volume, cria timer, lembrete e tarefa, escreve no Bloco de Notas, lê arquivos, busca na Wikipedia, dá o clima e lê a tela ("o que é esse erro?"). Lembra de como você quer ser chamado e das suas preferências. Scripts só rodam depois que você lê e aprova.</p>
+          </div>
+          <div class="shot"><img src="img/46-jarvis-page.png" alt="Jarvis respondendo na ilha" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Usa o computador por você, com travas</h3>
+          <p>Olha a tela e mexe o mouse e o teclado para cumprir a tarefa. Você aprova antes (cada ação ou só as importantes), <kbd>Esc</kbd> para tudo na hora, ele nunca digita em campo de senha e para em 20 passos ou 5 minutos.</p>
+          <div class="shot"><img src="img/57-computer-ask.png" alt="Jarvis pedindo permissão para clicar" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Plugins (MCP)</h3>
+          <p>Qualquer servidor MCP vira ferramenta do Jarvis. O navegador (Playwright) já vem pronto: ele pesquisa, lê páginas e preenche formulários sozinho.</p>
+          <div class="shot"><img src="img/40-settings-jarvis-plugins.png" alt="Plugins do Jarvis nas configurações" loading="lazy" /></div>
+        </div>
+        <div class="card">
+          <h3>Grátis</h3>
+          <p>Usa uma chave grátis da Groq, guardada cifrada só neste PC.</p>
+        </div>
+        <div class="card">
+          <h3>Sem internet também</h3>
+          <p>IA, voz e microfone podem rodar no próprio PC (Qwen, Piper e whisper.cpp).</p>
+        </div>
+        <div class="card">
+          <h3>"Ei Jarvis"</h3>
+          <p>Chame pela voz, com o reconhecimento do próprio Windows, sem mandar áudio para fora até você falar.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <section id="recursos">
     <div class="wrap">
@@ -253,6 +294,16 @@
           <p>Lê o Google Agenda ou o Outlook e avisa antes de cada reunião, com o botão Entrar do Teams, Meet ou Zoom.</p>
           <div class="shot"><img src="img/33-calendar-weather.png" alt="Agenda com as próximas reuniões" loading="lazy" /></div>
         </div>
+        <div class="card wide">
+          <h3>Karaokê em tela cheia</h3>
+          <p>Um clique na letra e ela ocupa a tela, sincronizada com a música, nas cores da capa.</p>
+          <div class="shot"><img src="img/52-karaoke.png" alt="Letra em tela cheia" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Tradução rápida</h3>
+          <p>Selecione um texto em qualquer app e aperte <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>L</kbd>. "Trocar o texto" cola a tradução no lugar.</p>
+          <div class="shot"><img src="img/50-translation.png" alt="Tradução na ilha" loading="lazy" /></div>
+        </div>
         <div class="card">
           <h3>Timer e modo foco</h3>
           <p>Enquanto o Pomodoro corre, as notificações esperam. No fim, quanto você focou no dia e na semana.</p>
@@ -264,6 +315,29 @@
         <div class="card">
           <h3>Calls do Discord</h3>
           <p>Quem entra e sai da sua call aparece com a foto, sem configurar nada.</p>
+        </div>
+        <div class="card">
+          <h3>Texto da tela (OCR)</h3>
+          <p><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>O</kbd>, arraste sobre qualquer coisa e o texto é copiado. Sem internet, com o OCR do Windows.</p>
+        </div>
+        <div class="card">
+          <h3>Ditado em qualquer app</h3>
+          <p>Segure <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>F</kbd>, fale e solte: o texto aparece onde você está digitando, já corrigido.</p>
+        </div>
+        <div class="card">
+          <h3>Uso do plano das IAs</h3>
+          <p>Quanto do plano do Copilot, Claude e Codex já foi, ao lado do relógio.</p>
+          <div class="shot"><img src="img/51-plan-usage.png" alt="Uso do plano das IAs" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>Tudo que você copiou</h3>
+          <p>Os últimos 20 textos copiados, com busca e fixar (os fixados ficam cifrados no disco).</p>
+          <div class="shot"><img src="img/54-clipboard.png" alt="Histórico do que foi copiado" loading="lazy" /></div>
+        </div>
+        <div class="card wide">
+          <h3>GitHub na ilha</h3>
+          <p>CI que falhou ou voltou a passar, PRs novos e versões novas dos repositórios que você escolher.</p>
+          <div class="shot"><img src="img/53-github-ci.png" alt="Aviso de CI na ilha" loading="lazy" /></div>
         </div>
         <div class="card wide">
           <h3>O Bit e os outros mascotes</h3>
@@ -289,6 +363,8 @@
           <div><b>Controle remoto</b><span>Música, volume, bloquear o PC, desligar daqui a uma hora e ligar o PC de novo pela rede.</span></div>
           <div><b>Área de transferência e arquivos</b><span>Copiou no PC, está no celular. Fotos e arquivos de até 30 MB nos dois sentidos.</span></div>
           <div><b>Ligações na ilha</b><span>Quem está ligando aparece no PC, com o nome do contato.</span></div>
+          <div><b>Ditar no celular, aparecer no PC</b><span>Fale no celular e o texto é digitado onde você está no PC. Os avisos da ilha também chegam no celular.</span></div>
+          <div><b>Ilha no celular</b><span>Uma ilha flutuante com timers, bateria, foco e os agentes do PC.</span></div>
         </div>
       </div>
       <div class="phones">
@@ -306,7 +382,9 @@
         <div><span></span><span>Dynamic Island</span><span>Apps pagos</span></div>
         <div><span>Preço</span><span class="yes">Grátis, sem conta</span><span class="no">Pagamento ou assinatura</span></div>
         <div><span>Código</span><span class="yes">Aberto (MIT)</span><span class="no">Fechado</span></div>
+        <div><span>Assistente de IA que executa tarefas</span><span class="yes">Jarvis, com plugins e uso do PC</span><span class="no">Não</span></div>
         <div><span>Copilot e Claude Code ao vivo</span><span class="yes">Passos, diff, Permitir e Negar</span><span class="no">Não</span></div>
+        <div><span>OCR, tradução e ditado</span><span class="yes">Em qualquer app, por atalho</span><span class="no">Não</span></div>
         <div><span>App Android</span><span class="yes">Nativo, fora de casa também</span><span class="no">Página web, mesmo Wi-Fi</span></div>
         <div><span>Calls do Discord</span><span class="yes">Sim</span><span class="no">Não</span></div>
       </div>
@@ -349,6 +427,18 @@
             <div class="ellipsis"><span class="del">Row("Monitor", null)</span></div>
             <div class="ellipsis"><span class="add">Row("Monitor", "Em qual tela")</span></div>
           </div>
+        </div>`],
+      jarvis: ["Jarvis", `
+        <div class="s">Você: me lembra de ligar pro João em 20 minutos e abre o Spotify</div>
+        <div class="t" style="font-weight:500;margin-top:6px">Pronto: lembrete às 14:50 e o Spotify está abrindo.</div>
+        <div class="s" style="margin-top:10px;font-family:var(--mono);font-size:11px;line-height:1.9">
+          <div style="color:#30d158">✓ lembrete · 20 min</div><div style="color:#30d158">✓ abrir_app · Spotify</div>
+        </div>`],
+      translate: ["Inglês → Português", `
+        <div class="t" style="font-weight:500">Oi! Podemos remarcar a reunião para quinta às 15h?</div>
+        <div class="row" style="gap:10px;margin-top:14px">
+          <button class="chip" style="background:#2c2c2e;color:#fff">Copiar</button>
+          <button class="chip" style="background:#2c2c2e;color:#fff">Trocar o texto</button>
         </div>`],
       approval: ["Permissão", `
         <div class="t">Claude Code <span style="color:#ff9f0a">esperando seu OK</span> <span class="s">48s</span></div>
@@ -408,8 +498,8 @@
       }, 120);
     }
     document.querySelectorAll("#seg button").forEach(b => b.addEventListener("click", () => show(b.dataset.mode)));
-    title.textContent = modes.agents[0];
-    body.innerHTML = modes.agents[1];
+    title.textContent = modes.jarvis[0];
+    body.innerHTML = modes.jarvis[1];
 
     function pat() {
       const bit = document.getElementById("bit");
