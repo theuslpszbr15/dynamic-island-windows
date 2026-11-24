@@ -31,4 +31,5 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - name: Unit tests
-        run: ./gradlew testReleaseUnitTest
+        # Robolectric downloads Android's jars on the first run; one more try covers a network hiccup
+        run: ./gradlew testReleaseUnitTest || ./gradlew testReleaseUnitTest

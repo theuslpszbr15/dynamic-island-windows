@@ -4,10 +4,10 @@ name: Release
 # attaches them to the GitHub release with their sha256 digests and makes sure the notes carry
 # a `versionCode: N` line (the Windows app and the Android updater both read it).
 # Manual runs (workflow_dispatch) build and verify everything but never create a release.
+# It no longer runs on every tag: releases are published from the PC, with the APK signed by the project's key
+# (the ANDROID_* secrets are not set, so a tag run could only fail).
 
 on:
-  push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
 
 permissions:
