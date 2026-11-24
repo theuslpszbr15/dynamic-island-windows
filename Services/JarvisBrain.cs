@@ -327,7 +327,7 @@ public sealed class JarvisBrain
 
     /// <summary>A model that sees: <paramref name="jpeg"/> plus the text, answered as JSON (computer use). Null without a
     /// key, at the limit or offline.</summary>
-    public static async Task<JsonObject?> VisionJsonAsync(string system, string text, byte[] jpeg, bool retried = false)
+    public static async Task<JsonObject?> VisionJsonAsync(string system, string text, byte[] jpeg, int tries = 0)
     {
         if (LoadKey() is not { } key) return null;
         foreach (var model in VisionModels)
@@ -335,7 +335,7 @@ public sealed class JarvisBrain
             {
                 var body = new JsonObject
                 {
-                    ["model"] = model, ["temperature"] = 0.1, ["max_tokens"] = 1200,
+                    ["model"] = model, ["temperature"] = 0.1, ["max_tokens"] = 700,
                     ["messages"] = new JsonArray
                     {
                         new JsonObject { ["role"] = "system", ["content"] = system },
@@ -355,11 +355,11 @@ public sealed class JarvisBrain
                 using var response = await Http.SendAsync(request);
                 if (response.StatusCode == HttpStatusCode.NotFound) continue;
                 // the free plan's per-minute limit: wait it out once if it's short
-                if (response.StatusCode == HttpStatusCode.TooManyRequests && !retried
-                    && (response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 5) is var wait and <= 15)
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && tries < 3
+                    && (response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 8) is var wait and <= 30)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, wait)));
-                    return await VisionJsonAsync(system, text, jpeg, retried: true);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(2, wait)));
+                    return await VisionJsonAsync(system, text, jpeg, tries + 1);
                 }
                 if (!response.IsSuccessStatusCode)
                 {

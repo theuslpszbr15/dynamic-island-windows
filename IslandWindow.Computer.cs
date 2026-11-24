@@ -49,13 +49,20 @@ public partial class IslandWindow
         var done = new List<string>();
         var askAll = _settings.ComputerUseApproval != "perigosas";
         var allowRest = false;
+        byte[]? lastPrint = null;
+        var stuck = 0;
         var esc = WatchEscAsync(cts);
         string Stopped() => _computerStop ?? $"Parei no limite de {ComputerUse.MaxTime.TotalMinutes:0} minutos.";
         string Summary() => done.Count == 0 ? "" : " Feito: " + string.Join("; ", done) + ".";
         try
         {
-            // back to the window the person was in when they asked (not the Jarvis box)
-            if (_jarvisTarget != IntPtr.Zero && Native.IsWindowVisibleNow(_jarvisTarget)) Native.SetForegroundWindow(_jarvisTarget);
+            // the window the task names, else the one the person was in when they asked (not the Jarvis box)
+            if (ComputerUse.NamedWindow(task, Native.TitledWindows().Where(w => w.Hwnd != _hwnd)) is { } named)
+            {
+                if (!Native.BringForward(named))
+                    return "Não consegui trazer a janela pedida para a frente. Peça ao usuário para abrir ou clicar nela e tente de novo.";
+            }
+            else if (_jarvisTarget != IntPtr.Zero && Native.IsWindowVisibleNow(_jarvisTarget)) Native.BringForward(_jarvisTarget);
             await Task.Delay(400);
             for (var step = 1; step <= ComputerUse.MaxSteps; step++)
             {
@@ -66,6 +73,14 @@ public partial class IslandWindow
                 var front = Native.GetForegroundWindow();
                 var screen = WinForms.Screen.FromHandle(front != IntPtr.Zero ? front : _hwnd).Bounds;
                 using var shot = ScreenOcr.Capture(screen);
+                var print = ComputerUse.Thumbprint(shot);
+                if (lastPrint != null && done.Count > 0 && ComputerUse.Unchanged(lastPrint, print))
+                {
+                    if (++stuck >= 3) return "Não consegui: a tela não muda com o que eu faço, então parei para não ficar repetindo." + Summary();
+                    done[^1] += " (a tela não mudou)";
+                }
+                else stuck = 0;
+                lastPrint = print;
                 var lines = await ScreenOcr.ReadLinesAsync(shot) ?? [];
                 var scale = Math.Min(1.0, (double)ComputerUse.ImageWidth / shot.Width);
                 var jpeg = ComputerUse.Jpeg(shot, scale);
@@ -74,7 +89,7 @@ public partial class IslandWindow
                     jpeg);
                 TestLog(step, "modelo: " + (json?.ToJsonString() ?? "(nada)"), jpeg);
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
-                if (json == null) return "Não consegui ver a tela (sem internet ou no limite grátis da Groq)." + Summary();
+                if (json == null) return "Não consegui ver a tela (sem internet ou no limite grátis da Groq; tente de novo em um minuto)." + Summary();
 
                 var action = ComputerUse.Parse(json);
                 if (action == null)

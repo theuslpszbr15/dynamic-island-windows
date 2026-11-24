@@ -115,6 +115,37 @@ static class Native
 
     public static bool IsWindowVisibleNow(IntPtr hwnd) => IsWindowVisible(hwnd);
 
+    /// <summary>Visible top-level windows that have a title, front to back.</summary>
+    public static List<(IntPtr Hwnd, string Title)> TitledWindows()
+    {
+        var windows = new List<(IntPtr, string)>();
+        var buffer = new System.Text.StringBuilder(512);
+        EnumWindows((hwnd, _) =>
+        {
+            if (!IsWindowVisible(hwnd)) return true;
+            buffer.Clear();
+            if (GetWindowText(hwnd, buffer, buffer.Capacity) > 0) windows.Add((hwnd, buffer.ToString()));
+            return true;
+        }, IntPtr.Zero);
+        return windows;
+    }
+
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int command);
+
+    /// <summary>Restores a minimized window and brings it to the front; false when Windows kept another in front.</summary>
+    public static bool BringForward(IntPtr hwnd)
+    {
+        if (IsIconic(hwnd)) ShowWindow(hwnd, 9); // SW_RESTORE
+        if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd) return true;
+        // Windows only lets the app that got the last input change the front window: a tap of Alt counts as ours
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        SetForegroundWindow(hwnd);
+        Thread.Sleep(150);
+        return GetForegroundWindow() == hwnd;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     static extern int GetWindowText(IntPtr hwnd, System.Text.StringBuilder text, int max);
 

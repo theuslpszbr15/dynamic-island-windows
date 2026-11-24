@@ -58,6 +58,8 @@ public static partial class ComputerUse
         "ctrl+a, ctrl+c, ctrl+v, ctrl+x, ctrl+z, ctrl+f, ctrl+l, ctrl+t, ctrl+w, ctrl+s, alt+tab, win. " +
         "rolar: tecla = cima ou baixo (x,y onde rolar, opcional). esperar: a tela está carregando. " +
         "concluir quando a tarefa estiver feita (motivo = o que foi feito, em uma frase); desistir quando não der (motivo = por quê). " +
+        "Se a janela ou o app pedido não aparece na tela, desista em vez de clicar à toa. " +
+        "Se um passo anterior diz que a tela não mudou, não repita a mesma ação: tente outra ou desista. " +
         "Nunca digite senhas, PIN, dados de cartão ou códigos de verificação: nesse caso, desista e peça ao usuário. " +
         "Não compre, pague, envie ou apague nada que o usuário não tenha pedido exatamente.";
 
@@ -109,6 +111,25 @@ public static partial class ComputerUse
     /// <summary>Typing that looks like a password, PIN, card or code (by the field's label or what the model says).</summary>
     public static bool LooksSecret(ComputerAction action, string? near) =>
         action.Kind == "digitar" && (SecretWords().IsMatch(Plain(near ?? "")) || SecretWords().IsMatch(Plain(action.Reason)));
+
+    /// <summary>The window the task names ("na janela Teste da Ilha", "no Spotify"): the longest title, or the part of a
+    /// title before " - ", that the task mentions; null when it names none.</summary>
+    public static IntPtr? NamedWindow(string task, IEnumerable<(IntPtr Hwnd, string Title)> windows)
+    {
+        var wanted = Plain(task);
+        (IntPtr Hwnd, int Length)? best = null;
+        foreach (var (hwnd, title) in windows)
+        {
+            // "Documento - Bloco de Notas": the app's name counts as much as the document's
+            foreach (var part in title.Split([" - ", " — ", " | "], StringSplitOptions.RemoveEmptyEntries).Append(title))
+            {
+                var name = Plain(part);
+                if (name.Length < 4 || !wanted.Contains(name)) continue;
+                if (best == null || name.Length > best.Value.Length) best = (hwnd, name.Length);
+            }
+        }
+        return best?.Hwnd;
+    }
 
     /// <summary>Where <paramref name="text"/> is among the OCR lines: the center of the matching part (image pixels) and
     /// the whole line. Exact line first, then the shortest line containing it.</summary>
@@ -177,7 +198,8 @@ public static partial class ComputerUse
             foreach (var item in done.TakeLast(8)) text.Append("- ").AppendLine(item);
         }
         text.AppendLine("Textos na tela (texto @ x,y):");
-        var budget = 4000;
+        // the free plan counts tokens per minute: the picture already carries most of the screen
+        var budget = 2500;
         foreach (var (line, box) in lines)
         {
             var entry = string.Create(CultureInfo.InvariantCulture,
@@ -186,6 +208,30 @@ public static partial class ComputerUse
             text.AppendLine(entry);
         }
         return text.ToString();
+    }
+
+    /// <summary>A tiny grayscale copy of the screen, to tell whether an action changed anything.</summary>
+    public static byte[] Thumbprint(Drawing.Bitmap shot)
+    {
+        using var small = new Drawing.Bitmap(shot, 64, 36);
+        var print = new byte[64 * 36];
+        for (var y = 0; y < 36; y++)
+            for (var x = 0; x < 64; x++)
+            {
+                var c = small.GetPixel(x, y);
+                print[y * 64 + x] = (byte)((c.R * 3 + c.G * 6 + c.B) / 10);
+            }
+        return print;
+    }
+
+    /// <summary>The two screens look the same (a clock, a blinking cursor or the island's own pill don't count).</summary>
+    public static bool Unchanged(byte[]? before, byte[] after)
+    {
+        if (before == null || before.Length != after.Length) return false;
+        var moved = 0;
+        for (var i = 0; i < after.Length; i++)
+            if (Math.Abs(before[i] - after[i]) > 12) moved++;
+        return moved <= 10;
     }
 
     /// <summary>The screenshot as JPEG, shrunk by <paramref name="scale"/>.</summary>

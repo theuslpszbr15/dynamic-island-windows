@@ -75,6 +75,37 @@ public class ComputerUseTests
         Assert.Equal("Apertar enter", ComputerUse.Describe(Parse("""{"acao":"tecla","tecla":"enter"}""")!, null));
     }
 
+    [Fact]
+    public void FindsTheWindowTheTaskNames()
+    {
+        var windows = new List<(IntPtr, string)>
+        {
+            (1, "GM Industrial Engineering - Google Chrome"),
+            (2, "Teste da Ilha"),
+            (3, "notas.txt - Bloco de Notas"),
+            (4, "Spotify Premium"),
+        };
+        Assert.Equal((IntPtr)2, ComputerUse.NamedWindow("Na janela Teste da Ilha, escreva oi", windows));
+        Assert.Equal((IntPtr)3, ComputerUse.NamedWindow("no bloco de notas escreva oi", windows));
+        Assert.Equal((IntPtr)1, ComputerUse.NamedWindow("abre uma aba nova no Google Chrome", windows));
+        Assert.Null(ComputerUse.NamedWindow("toca a playlist Foco", windows));
+    }
+
+    [Fact]
+    public void NoticesWhenTheScreenDidNotChange()
+    {
+        using var screen = new Drawing.Bitmap(1280, 720);
+        using (var g = Drawing.Graphics.FromImage(screen)) g.Clear(Drawing.Color.FromArgb(30, 30, 30));
+        var before = ComputerUse.Thumbprint(screen);
+        // a clock ticking in a corner is no change
+        using (var g = Drawing.Graphics.FromImage(screen)) g.FillRectangle(Drawing.Brushes.White, 1240, 700, 30, 15);
+        Assert.True(ComputerUse.Unchanged(before, ComputerUse.Thumbprint(screen)));
+        // a window opening is
+        using (var g = Drawing.Graphics.FromImage(screen)) g.FillRectangle(Drawing.Brushes.White, 300, 200, 600, 300);
+        Assert.False(ComputerUse.Unchanged(before, ComputerUse.Thumbprint(screen)));
+        Assert.False(ComputerUse.Unchanged(null, before));
+    }
+
     /// <summary>VISION_E2E=1 (Groq key on this PC): the vision model looks at a drawn window and picks the right button.</summary>
     [Fact]
     public async Task VisionModelPicksTheButton()
