@@ -147,14 +147,21 @@ public partial class IslandWindow : IJarvisHost
         }
         var key = Hotkeys.Parse(Hotkeys.Keys(_settings, "jarvis"))?.Key ?? 0;
         var since = DateTime.Now;
-        StartListening();
+        var shown = false;
+        // records from the first moment, but only says "Ouvindo…" once it's clearly a hold and not a tap
+        StartListening(quiet: true);
         _holdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
         _holdTimer.Tick += (_, _) =>
         {
-            if (Native.IsKeyDown(key) && DateTime.Now - since < ListenLimit) return;
+            var held = DateTime.Now - since;
+            if (Native.IsKeyDown(key) && held < ListenLimit)
+            {
+                if (!shown && held >= TapLimit) { shown = true; ShowListening(); }
+                return;
+            }
             _holdTimer!.Stop();
-            _ = StopListeningAsync(discard: DateTime.Now - since < TapLimit);
-            if (DateTime.Now - since < TapLimit) OpenJarvis();
+            _ = StopListeningAsync(discard: held < TapLimit);
+            if (held < TapLimit) OpenJarvis();
         };
         _holdTimer.Start();
     }
@@ -178,7 +185,7 @@ public partial class IslandWindow : IJarvisHost
     }
 
     /// <summary>Starts recording (the chat box's mic button and the held shortcut).</summary>
-    public void StartListening()
+    public void StartListening(bool quiet = false)
     {
         if (_mic != null) return;
         Jarvis.StopSpeaking();
@@ -191,6 +198,11 @@ public partial class IslandWindow : IJarvisHost
         _listenLimit.Start();
         _micStart.ContinueWith(t => { if (t.Result != null && ReferenceEquals(_mic, mic)) _ = StopListeningAsync(); },
             TaskScheduler.FromCurrentSynchronizationContext());
+        if (!quiet) ShowListening();
+    }
+
+    void ShowListening()
+    {
         SetJarvisState("Ouvindo…");
         ShowInfo("\uE720", "Ouvindo…", "solte para enviar", glyphColor: JarvisColor, seconds: ListenLimit.TotalSeconds + 2);
     }
