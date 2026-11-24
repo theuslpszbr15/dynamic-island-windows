@@ -179,6 +179,7 @@ public partial class IslandWindow : Window
         _volume.Start();
         if (_volume.Current() is { } volume) (_volumeLevel, _volumeMuted) = volume;
         _spotifyVolume.Start();
+        _spotifyVolume.SetWatching(false);
         _battery.Start();
         _hub.Start();
         StartExtras();
@@ -488,6 +489,7 @@ public partial class IslandWindow : Window
 
     void SetExpanded(bool expanded, int? page = null)
     {
+        _spotifyVolume.SetWatching(expanded);
         if (expanded)
         {
             _transientTimer.Stop();

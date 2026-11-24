@@ -27,6 +27,15 @@ public sealed class AppVolumeService : IDisposable
 
     public void Start() => _poll.Start();
 
+    /// <summary>Every second while its slider can be seen; a slow check otherwise (each check walks the audio sessions).</summary>
+    public void SetWatching(bool watching)
+    {
+        var interval = TimeSpan.FromSeconds(watching ? 1 : 6);
+        if (_poll.Interval == interval) return;
+        _poll.Interval = interval;
+        if (watching) Sample();
+    }
+
     public void Dispose() => _poll.Stop();
 
     void Sample()
