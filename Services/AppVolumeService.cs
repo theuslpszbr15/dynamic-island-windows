@@ -67,6 +67,7 @@ public sealed class AppVolumeService : IDisposable
             {
                 var ctx = Guid.Empty;
                 volume.SetMasterVolume(Math.Clamp(level, 0f, 1f), ref ctx);
+                if (level > 0) volume.SetMute(false, ref ctx);
             }));
             _ = _ui.InvokeAsync(() => Changed?.Invoke(state?.Level ?? level, state?.Muted ?? false, state != null));
         }
@@ -124,11 +125,44 @@ public sealed class AppVolumeService : IDisposable
                 volume.GetMasterVolume(out var cur);
                 var ctx = Guid.Empty;
                 volume.SetMasterVolume(Math.Clamp(cur + delta, 0f, 1f), ref ctx);
+                // raising a muted app should be heard
+                if (delta > 0) volume.SetMute(false, ref ctx);
             });
             if (state != null) _ui.InvokeAsync(() => Changed?.Invoke(state.Value.Level, state.Value.Muted, true));
             return state != null;
         }
         catch { return false; }
+        finally { _busy.Release(); }
+    }
+
+    /// <summary>For Jarvis: "aumentar", "diminuir", "mudo", "tirar_mudo" or "definir" (<paramref name="percent"/>);
+    /// how it ended up, or null when Spotify has no audio session.</summary>
+    public string? Apply(string action, double percent)
+    {
+        if (!_busy.Wait(0)) return null;
+        try
+        {
+            var state = WithSession(volume =>
+            {
+                volume.GetMasterVolume(out var cur);
+                volume.GetMute(out var muted);
+                var ctx = Guid.Empty;
+                var level = action switch
+                {
+                    "aumentar" => cur + 0.15f,
+                    "diminuir" => cur - 0.15f,
+                    "definir" => (float)(percent / 100),
+                    _ => cur,
+                };
+                volume.SetMasterVolume(Math.Clamp(level, 0f, 1f), ref ctx);
+                var mute = action switch { "mudo" => true, "tirar_mudo" or "aumentar" => false, "definir" => level <= 0, _ => muted };
+                volume.SetMute(mute, ref ctx);
+            });
+            if (state is not { } s) return null;
+            _ui.InvokeAsync(() => Changed?.Invoke(s.Level, s.Muted, true));
+            return s.Muted ? $"Spotify no mudo (volume guardado em {Math.Round(s.Level * 100)}%)." : $"Spotify agora em {Math.Round(s.Level * 100)}%.";
+        }
+        catch { return null; }
         finally { _busy.Release(); }
     }
 

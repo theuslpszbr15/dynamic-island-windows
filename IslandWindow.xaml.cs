@@ -79,13 +79,7 @@ public partial class IslandWindow : Window
         _media = new MediaService(Dispatcher, settings);
         _volume = new VolumeService(Dispatcher);
         _spotifyVolume = new AppVolumeService(Dispatcher);
-        JarvisBrain.SpotifyVolume = a => a switch
-        {
-            "aumentar" => Dispatcher.Invoke(() => _spotifyVolume.Nudge(0.10f)),
-            "diminuir" => Dispatcher.Invoke(() => _spotifyVolume.Nudge(-0.10f)),
-            "mudo" => Dispatcher.Invoke(() => _spotifyVolume.ToggleMute()),
-            _ => false
-        };
+        JarvisBrain.SpotifyVolume = (action, percent) => Dispatcher.Invoke(() => _spotifyVolume.Apply(action, percent));
         _battery = new BatteryService(Dispatcher);
         _hub = new AgentHub(Dispatcher);
         _notifications = new NotificationService(Dispatcher);

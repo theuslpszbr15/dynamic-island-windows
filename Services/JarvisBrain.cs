@@ -532,7 +532,9 @@ public sealed class JarvisBrain
         Tool("ver_tela", "Lê o texto da janela que o usuário está olhando (erros, mensagens, páginas)."),
         Tool("usar_computador", "Controla o mouse e o teclado do PC para fazer uma tarefa na tela; o usuário acompanha, aprova e pode parar com Esc.",
             new() { ["tarefa"] = Str("O que fazer, em detalhes (ex.: 'no Spotify aberto, tocar a playlist Foco')") }, "tarefa"),
-        Tool("volume", "Controla o volume do Windows.", new() { ["acao"] = Enum("aumentar", "diminuir", "mudo") }, "acao"),
+        Tool("volume", "Volume da música (do Spotify quando ele toca; senão o do Windows). Responde o nível em que ficou. " +
+             "'definir' usa nivel (0 a 100); 'tirar_mudo' volta o som; 'mudo' silencia.",
+            new() { ["acao"] = Enum("aumentar", "diminuir", "definir", "mudo", "tirar_mudo"), ["nivel"] = new JsonObject { ["type"] = "number", ["description"] = "Porcentagem para 'definir', de 0 a 100." } }, "acao"),
         Tool("midia", "Controla a música ou vídeo que está tocando no PC.", new() { ["acao"] = Enum("tocar_pausar", "proxima", "anterior") }, "acao"),
         Tool("buscar_web", "Busca fatos na Wikipedia (pessoas, lugares, conceitos, tecnologia) e devolve resumos.", new() { ["consulta"] = Str() }, "consulta"),
         Tool("clima", "Previsão do tempo atual de uma cidade.", new() { ["cidade"] = Str() }, "cidade"),
@@ -576,7 +578,7 @@ public sealed class JarvisBrain
                 "status_pc" => PcStatus(),
                 "ver_tela" => await _host.ReadScreenAsync() is { Length: > 0 } screen
                     ? "Texto na tela:\n" + (screen.Length > 3000 ? screen[..3000] : screen) : "Não consegui ler a tela.",
-                "volume" => Volume(S("acao")),
+                "volume" => Volume(S("acao"), N("nivel")),
                 "midia" => OnHost(() => _host.Media(S("acao")), "Feito."),
                 "buscar_web" => await SearchWikipedia(S("consulta")),
                 "clima" => await Weather(S("cidade")),
@@ -709,14 +711,15 @@ public sealed class JarvisBrain
                $"Disco C: {disk.AvailableFreeSpace / Gb:0.0} GB livres de {disk.TotalSize / Gb:0} GB.";
     }
 
-    /// <summary>Set by the island: applies volume to Spotify only (true = handled, false = no Spotify session).</summary>
-    public static Func<string, bool>? SpotifyVolume;
+    /// <summary>Set by the island: applies volume to Spotify only (null = no Spotify session).</summary>
+    public static Func<string, double, string?>? SpotifyVolume;
 
-    static string Volume(string action)
+    static string Volume(string action, double percent)
     {
-        if (SpotifyVolume?.Invoke(action) == true) return $"Volume do Spotify: {action}.";
+        if (SpotifyVolume?.Invoke(action, percent) is { } spotify) return spotify;
+        if (action == "tirar_mudo") action = "mudo";
         byte key = action switch { "aumentar" => 0xAF, "diminuir" => 0xAE, "mudo" => 0xAD, _ => 0 };
-        if (key == 0) return "Ação inválida.";
+        if (key == 0) return "Sem Spotify tocando, só consigo aumentar, diminuir ou pôr no mudo o volume do Windows.";
         for (var i = 0; i < (action == "mudo" ? 1 : 5); i++) Native.PressKey(key);
         return $"Volume: {action}.";
     }
