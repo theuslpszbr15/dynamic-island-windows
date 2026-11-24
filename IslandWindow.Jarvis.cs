@@ -386,6 +386,6 @@ public partial class IslandWindow : IJarvisHost
             await Jarvis.SpeakAsync(reply.Text);
             if (JarvisState == "Falando…") SetJarvisState("Pronto");
         }
-        if (JarvisOnScreen && !_hover) ScheduleClose(Math.Clamp(3 + reply.Text.Length / 25.0, 5, 12));
+        if (JarvisOnScreen && !_hover && JarvisState == "Pronto" && _mic == null) ScheduleClose(Math.Clamp(3 + reply.Text.Length / 25.0, 5, 12));
     }
 }

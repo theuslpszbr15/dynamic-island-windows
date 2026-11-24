@@ -413,6 +413,71 @@ public static class Jarvis
         return [.. list];
     }
 
+    /// <summary>Where the samples start and how many bytes they take (0, 0 when it isn't a WAV).</summary>
+    static (int Start, int Length) DataChunk(byte[] wav)
+    {
+        if (wav.Length < 44 || Encoding.ASCII.GetString(wav, 0, 4) != "RIFF") return (0, 0);
+        var at = 12;
+        while (at + 8 <= wav.Length)
+        {
+            var size = BitConverter.ToInt32(wav, at + 4);
+            if (Encoding.ASCII.GetString(wav, at, 4) == "data") return (at + 8, Math.Clamp(size, 0, wav.Length - at - 8));
+            at += 8 + size;
+        }
+        return (0, 0);
+    }
+
+    /// <summary>How long a WAV plays.</summary>
+    internal static TimeSpan Duration(byte[] wav)
+    {
+        var (_, length) = DataChunk(wav);
+        var bytesPerSecond = length == 0 ? 0 : BitConverter.ToInt32(wav, 28);
+        return bytesPerSecond <= 0 ? TimeSpan.Zero : TimeSpan.FromSeconds((double)length / bytesPerSecond);
+    }
+
+    /// <summary>Piper barely stops at a comma (about 0.1 s): each short pause between words gets longer, so the
+    /// clauses read apart. 16-bit mono only; anything else comes back as it was.</summary>
+    internal static byte[] StretchPauses(byte[] wav, double extraSeconds = 0.17)
+    {
+        var (start, length) = DataChunk(wav);
+        if (length == 0 || BitConverter.ToInt16(wav, 22) != 1 || BitConverter.ToInt16(wav, 34) != 16) return wav;
+        var rate = BitConverter.ToInt32(wav, 24);
+        var window = rate / 100 * 2; // 10 ms
+        const int quietPeak = 600, shortest = 7, longest = 18;
+        var inserts = new List<int>();
+        int quiet = 0, runStart = 0;
+        var heard = false;
+        for (var at = start; at + window <= start + length; at += window)
+        {
+            var peak = 0;
+            for (var i = at; i < at + window; i += 2) peak = Math.Max(peak, Math.Abs((int)BitConverter.ToInt16(wav, i)));
+            if (peak < quietPeak)
+            {
+                if (quiet++ == 0) runStart = at;
+                continue;
+            }
+            // a short pause between two stretches of speech (sentence ends already have their own silence)
+            if (heard && quiet is >= shortest and <= longest) inserts.Add(runStart + quiet / 2 * window);
+            quiet = 0;
+            heard = true;
+        }
+        if (inserts.Count == 0) return wav;
+        var gap = (int)(rate * extraSeconds) * 2;
+        var output = new byte[wav.Length + inserts.Count * gap];
+        var from = 0;
+        var to = 0;
+        foreach (var at in inserts)
+        {
+            Buffer.BlockCopy(wav, from, output, to, at - from);
+            to += at - from + gap; // zeros: silence
+            from = at;
+        }
+        Buffer.BlockCopy(wav, from, output, to, wav.Length - from);
+        BitConverter.GetBytes(output.Length - 8).CopyTo(output, 4);
+        BitConverter.GetBytes(length + inserts.Count * gap).CopyTo(output, start - 4);
+        return output;
+    }
+
     /// <summary>Says the text with the Piper voice, or the Windows Portuguese voice without it (stops what was being
     /// said). False when there is no voice.</summary>
     public static async Task<bool> SpeakAsync(string text)
@@ -424,19 +489,33 @@ public static class Jarvis
         var wave = Path.Combine(Path.GetTempPath(), $"jarvis-voice-{Environment.ProcessId}-{Guid.NewGuid():N}.wav");
         try
         {
-            if (dir != null) await SynthesizeAsync(dir, text, wave, cancel.Token);
+            if (dir != null)
+            {
+                await SynthesizeAsync(dir, text, wave, cancel.Token);
+                await Task.Run(() => File.WriteAllBytes(wave, StretchPauses(File.ReadAllBytes(wave))));
+            }
             else if (!await WindowsVoiceAsync(text, wave)) return false;
             if (cancel.IsCancellationRequested) return true;
+            // played asynchronously and waited on the clock: stopping it never races a blocking PlaySync
+            using var player = new System.Media.SoundPlayer(wave);
+            var length = TimeSpan.Zero;
             await Task.Run(() =>
             {
-                using var player = new System.Media.SoundPlayer(wave);
-                _player = player;
+                player.Load();
+                length = Duration(File.ReadAllBytes(wave));
                 try { _envelope = Envelope(wave); } catch { _envelope = []; }
-                SpeechClock.Restart();
-                using (cancel.Token.Register(player.Stop)) player.PlaySync();
+            });
+            if (cancel.IsCancellationRequested) return true;
+            _player = player;
+            player.Play();
+            SpeechClock.Restart();
+            try { await Task.Delay(length + TimeSpan.FromMilliseconds(150), cancel.Token); }
+            finally
+            {
+                if (cancel.IsCancellationRequested) try { player.Stop(); } catch { }
                 SpeechClock.Reset();
                 _player = null;
-            });
+            }
             return true;
         }
         catch (OperationCanceledException) { return true; }
