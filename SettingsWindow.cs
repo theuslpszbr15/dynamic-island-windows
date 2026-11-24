@@ -1070,13 +1070,29 @@ public sealed partial class SettingsWindow : DarkWindow
     {
         var copy = new Button { Content = "Copiar hooks", Style = (Style)Resources["Action"] };
         copy.Click += (_, _) => _app.CopyClaudeHooks();
-        page.Children.Add(Card("Conexões",
+        var exe = Environment.ProcessPath ?? "DynamicIsland.exe";
+        var rows = new List<UIElement>
+        {
+            Note("Ligue o agente que você usa: a ilha escreve os hooks na configuração dele (guardando uma cópia do arquivo antes) " +
+                 "e mostra cada sessão ao vivo. Desligar tira só o que a ilha colocou. Vale para sessões novas."),
             Toggle("GitHub Copilot (VS Code e CLI)", "Cria ~/.copilot/hooks/dynamic-island.json. Vale para chats novos.",
                 App.CopilotConnected, _ => _app.ToggleCopilotHooks()),
-            Row("Claude Code", "Copia os hooks para colar em ~/.claude/settings.json. Inclui o PermissionRequest: os pedidos de permissão aparecem na ilha (e no celular) com Permitir / Negar.", copy),
-            Toggle("Pedido de permissão discreto", "O pedido aparece como uma pílula pequena, sem abrir a ilha. Passe o mouse ou clique nela para ver o comando e responder.",
-                S.QuietApprovals, _ => _app.ToggleQuietApprovals()),
-            Row("Qualquer script", "DynamicIsland.exe agent --name \"Build\" --state working --text \"dotnet build\"", null)));
+        };
+        foreach (var agent in AgentHooks.All)
+            rows.Add(Toggle(agent.Name, agent.About + " (" + agent.File.Replace(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "~").Replace('\\', '/') + ")",
+                AgentHooks.IsInstalled(agent), on =>
+                {
+                    if (AgentHooks.Apply(agent, on, exe) is { } problem) DarkDialog.Ask(this, agent.Name, problem, "OK", null);
+                    Render();
+                }));
+        rows.Add(Toggle("Comandos do Antigravity na ilha", "Os comandos de terminal do Antigravity esperam Permitir / Negar na ilha (sem resposta, ele pergunta no terminal). " +
+            "Vale também para os que ele rodaria sozinho.", S.AntigravityApprovals, v => { S.AntigravityApprovals = v; S.Save(); },
+            enabled: AgentHooks.IsInstalled(AgentHooks.Get("antigravity"))));
+        rows.Add(Row("Claude Code à mão", "Copia os hooks para colar em ~/.claude/settings.json, se preferir não deixar a ilha mexer no arquivo.", copy));
+        rows.Add(Toggle("Pedido de permissão discreto", "O pedido aparece como uma pílula pequena, sem abrir a ilha. Passe o mouse ou clique nela para ver o comando e responder.",
+            S.QuietApprovals, _ => _app.ToggleQuietApprovals()));
+        rows.Add(Row("Qualquer script", "DynamicIsland.exe agent --name \"Build\" --state working --text \"dotnet build\"", null));
+        page.Children.Add(Card("Conexões", [.. rows]));
 
         page.Children.Add(PlansCard());
         page.Children.Add(GitHubCard());

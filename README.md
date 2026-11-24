@@ -49,9 +49,11 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
 - **Sem internet também:** IA (Qwen 2.5), voz (Piper) e microfone (whisper.cpp) rodando no próprio PC, opcionais.
 
 **Para quem programa com IA**
-- **Agentes ao vivo:** Copilot (VS Code e CLI) e Claude Code na ilha: trabalhando, esperando você ou concluído, com os
-  passos e o diff da última edição; vários agentes ao mesmo tempo.
-- **Permitir / Negar** os pedidos de permissão do Claude Code na própria ilha, ou **no celular** com a digital.
+- **Agentes ao vivo:** Copilot (VS Code e CLI), Claude Code, **Codex CLI**, **Gemini CLI**, **Antigravity** e **OpenCode** na
+  ilha: trabalhando, esperando você ou concluído, com os passos e o diff da última edição; vários agentes ao mesmo tempo.
+  Liga com um clique em *Configurações → Agentes* (a ilha guarda uma cópia do arquivo antes de mexer).
+- **Permitir / Negar** na própria ilha, ou **no celular** com a digital: Claude Code, Codex, OpenCode e os comandos de
+  terminal do Antigravity.
 - **Uso do plano** do Copilot, Claude e Codex ao lado do relógio.
 - **GitHub na ilha:** CI que falhou ou voltou a passar, PRs novos e versões novas dos repositórios que você escolher.
 - **Resumo da semana:** tempo dos agentes, edições, comandos e projeto mais ativo, para salvar como imagem.
@@ -172,10 +174,22 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true 
 
 ## Agentes de IA
 
-- **Copilot (VS Code / CLI):** menu da bandeja → *Conectar Copilot (VS Code)*. Cria
-  `~/.copilot/hooks/dynamic-island.json`; vale para chats novos.
-- **Claude Code:** menu da bandeja → *Copiar hooks do Claude Code* e cole em `~/.claude/settings.json`
-  (inclui o hook `PermissionRequest`, que leva os pedidos de permissão para a ilha).
+Em **Configurações → Agentes → Conexões**, ligue o agente que você usa. A ilha escreve os hooks na configuração dele,
+guarda antes uma cópia datada do arquivo (`.bak`), não mexe nos seus hooks e, ao desligar, tira só o que colocou.
+
+| Agente | Arquivo | Na ilha |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | passos, diff, Permitir / Negar (também no celular) |
+| Codex CLI | `~/.codex/hooks.json` (no Codex, rode `/hooks` uma vez e confie) | passos, Permitir / Negar |
+| Gemini CLI | `~/.gemini/settings.json` | passos e quando ele pede permissão (a resposta é no terminal) |
+| Antigravity (`agy`) | `~/.gemini/config/hooks.json` | passos; com *Comandos do Antigravity na ilha*, Permitir / Negar nos comandos de terminal |
+| OpenCode | `~/.config/opencode/plugins/dynamic-island.js` (reinicie o OpenCode) | passos, Permitir / Negar |
+| Copilot (VS Code / CLI) | `~/.copilot/hooks/dynamic-island.json` | passos (vale para chats novos) |
+
+Sem resposta na ilha (ou com a ilha fechada), cada agente pergunta no próprio terminal, como sempre: a ilha nunca
+permite nada sozinha.
+
+- **Claude Code à mão:** menu da bandeja → *Copiar hooks do Claude Code* e cole em `~/.claude/settings.json`.
 - **Qualquer script:**
 
   ```powershell

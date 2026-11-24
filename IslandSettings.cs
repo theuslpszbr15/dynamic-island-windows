@@ -128,6 +128,8 @@ public sealed class IslandSettings
     public bool ComputerUse { get; set; }
     /// <summary>"cada" asks before every action; "perigosas" only before typing, Enter/Delete and clicks on buy, send, delete…</summary>
     public string ComputerUseApproval { get; set; } = "cada";
+    /// <summary>Antigravity's shell commands wait for Allow / Deny on the island (read by the hook process too).</summary>
+    public bool AntigravityApprovals { get; set; }
     /// <summary>A new install offers the demo once.</summary>
     public bool DemoPending { get; set; }
     /// <summary>Listen on the local network for the paired Android app (off by default).</summary>
