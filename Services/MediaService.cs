@@ -473,4 +473,15 @@ public sealed class MediaService(Dispatcher ui, IslandSettings? settings = null)
         if (UsingFallback) { Native.PressKey(Native.VK_MEDIA_PREV_TRACK); return; }
         try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { }
     }
+
+    public async void Seek(TimeSpan position)
+    {
+        try
+        {
+            if (UsingFallback || _session is not { } session) return;
+            var timeline = session.GetTimelineProperties();
+            await session.TryChangePlaybackPositionAsync((timeline.StartTime + position).Ticks);
+        }
+        catch { }
+    }
 }

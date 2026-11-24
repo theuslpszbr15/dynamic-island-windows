@@ -213,7 +213,9 @@ public sealed class JarvisBrain
         try
         {
             var messages = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = SystemPrompt() } };
-            var tools = new JsonArray([.. Tools.Select(t => t!.DeepClone()), .. (await _host.PluginToolsAsync()).Select(t => t!.DeepClone())]);
+            // the plugins' tools are thousands of tokens: only sent when the request needs them (the free plan's per-minute cap)
+            var plugins = NeedsPlugins(text) ? await _host.PluginToolsAsync() : [];
+            var tools = new JsonArray([.. Tools.Select(t => t!.DeepClone()), .. plugins.Select(t => t!.DeepClone())]);
             var past = LastTurns(_history, TurnsSent);
             foreach (var m in past) messages.Add(m.DeepClone());
             var turn = new List<JsonObject> { new() { ["role"] = "user", ["content"] = text } };
@@ -282,6 +284,10 @@ public sealed class JarvisBrain
         }
         finally { _busy.Release(); }
     }
+
+    static bool NeedsPlugins(string text) =>
+        Regex.IsMatch(text, @"https?://|www\.|\.com|\.br\b|\bsite|navegador|p[áa]gina|formul[áa]rio|\blogin|\bbaix(e|ar)|\bentr(e|ar) no|youtube|google|chrome|edge|plugin",
+            RegexOptions.IgnoreCase);
 
     sealed class LimitException(double? wait) : Exception
     {

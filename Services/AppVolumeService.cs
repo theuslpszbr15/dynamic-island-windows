@@ -21,7 +21,8 @@ public sealed class AppVolumeService : IDisposable
     {
         _ui = ui;
         _processName = processName;
-        _poll = new DispatcherTimer(DispatcherPriority.Background, ui) { Interval = TimeSpan.FromSeconds(1) };
+        // Background priority starves while the island animates every frame
+        _poll = new DispatcherTimer(DispatcherPriority.Normal, ui) { Interval = TimeSpan.FromSeconds(1) };
         _poll.Tick += (_, _) => Sample();
     }
 
@@ -137,7 +138,7 @@ public sealed class AppVolumeService : IDisposable
     List<ISimpleAudioVolume> FindVolumes()
     {
         var found = new List<ISimpleAudioVolume>();
-        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        var enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"))!)!;
         try
         {
             if (enumerator.EnumAudioEndpoints(eRender, 1 /* DEVICE_STATE_ACTIVE */, out var devices) != 0 || devices == null) return found;
@@ -174,8 +175,7 @@ public sealed class AppVolumeService : IDisposable
                     if (sessions.GetSession(i, out var control) != 0 || control == null) continue;
                     try
                     {
-                        var control2 = (IAudioSessionControl2)control;
-                        if (control2.GetProcessId(out var pid) != 0 || pid == 0) continue;
+                        if (control.GetProcessId(out var pid) != 0 || pid == 0) continue;
                         if (!ProcessNameOf(pid).Equals(_processName, StringComparison.OrdinalIgnoreCase)) continue;
                         found.Add((ISimpleAudioVolume)control);
                     }
@@ -192,10 +192,6 @@ public sealed class AppVolumeService : IDisposable
         try { return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; }
         catch { return ""; }
     }
-
-    [ComVisible(true)]
-    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-    class MMDeviceEnumeratorCom { }
 
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IMMDeviceEnumerator
@@ -223,7 +219,7 @@ public sealed class AppVolumeService : IDisposable
         [PreserveSig] int GetState(out int state);
     }
 
-    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A7B7F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IAudioSessionManager2
     {
         // IAudioSessionManager first (the vtable is shared)
@@ -241,25 +237,22 @@ public sealed class AppVolumeService : IDisposable
     interface IAudioSessionEnumerator
     {
         [PreserveSig] int GetCount(out int count);
-        [PreserveSig] int GetSession(int index, out IAudioSessionControl session);
+        [PreserveSig] int GetSession(int index, out IAudioSessionControl2 session);
     }
 
-    // The full vtable matters (slots are positional): GetProcessId lives on IAudioSessionControl2,
-    // which inherits these six IAudioSessionControl methods first.
-    [ComImport, Guid("F4B0A507-916F-4F82-B88D-A1C5E58E7FE0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IAudioSessionControl
+    // slots are positional: IAudioSessionControl's nine methods come first
+    [ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionControl2
     {
+        [PreserveSig] int GetState(out int state);
         [PreserveSig] int GetDisplayName(out IntPtr name);
         [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid context);
         [PreserveSig] int GetIconPath(out IntPtr path);
         [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid context);
-        [PreserveSig] int GetState(out int state);
-        [PreserveSig] int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
-    }
-
-    [ComImport, Guid("B3EA8B37-B612-4F60-A0B8-8F58CE1B4037"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IAudioSessionControl2
-    {
+        [PreserveSig] int GetGroupingParam(out Guid param);
+        [PreserveSig] int SetGroupingParam(ref Guid param, ref Guid context);
+        [PreserveSig] int RegisterAudioSessionNotification(IntPtr client);
+        [PreserveSig] int UnregisterAudioSessionNotification(IntPtr client);
         [PreserveSig] int GetSessionIdentifier(out IntPtr id);
         [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr id);
         [PreserveSig] int GetProcessId(out uint pid);
@@ -267,7 +260,7 @@ public sealed class AppVolumeService : IDisposable
         [PreserveSig] int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
     }
 
-    [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47F880D8E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface ISimpleAudioVolume
     {
         [PreserveSig] int SetMasterVolume(float level, ref Guid context);

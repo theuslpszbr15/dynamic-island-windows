@@ -1154,7 +1154,7 @@ public partial class IslandWindow : Window
     {
         var m = _mediaSnap;
         if (m == null) return;
-        var position = m.PositionNow();
+        var position = _seekDrag is { } drag ? m.Duration * drag : m.PositionNow();
         var hasTimeline = m.Duration > TimeSpan.FromSeconds(1);
         MediaPos.Text = hasTimeline ? Format(position) : "";
         MediaDur.Text = hasTimeline ? "-" + Format(m.Duration - position) : "";
@@ -1164,6 +1164,42 @@ public partial class IslandWindow : Window
     }
 
     static string Format(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+
+    double? _seekDrag;
+
+    void MediaTrack_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_mediaSnap is not { } m || m.Duration <= TimeSpan.FromSeconds(1)) return;
+        MediaTrack.CaptureMouse();
+        SeekPreview(e);
+    }
+
+    void MediaTrack_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_seekDrag != null) SeekPreview(e);
+    }
+
+    void MediaTrack_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_seekDrag is not { } fraction) return;
+        e.Handled = true;
+        MediaTrack.ReleaseMouseCapture();
+        _seekDrag = null;
+        if (_mediaSnap is { } m)
+        {
+            var target = m.Duration * fraction;
+            _mediaSnap = m with { Position = target, LastUpdated = DateTimeOffset.Now };
+            _media.Seek(target);
+        }
+        UpdateMediaProgress();
+    }
+
+    void SeekPreview(MouseEventArgs e)
+    {
+        _seekDrag = Math.Clamp(e.GetPosition(MediaTrack).X / Math.Max(1, MediaTrack.ActualWidth), 0, 1);
+        UpdateMediaProgress();
+    }
 
     void Play_Click(object sender, RoutedEventArgs e) => _media.PlayPause();
     void Next_Click(object sender, RoutedEventArgs e) => _media.Next();

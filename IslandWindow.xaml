@@ -658,7 +658,8 @@
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock x:Name="MediaPos" FontSize="10.5" Foreground="{DynamicResource Muted}" MinWidth="30" VerticalAlignment="Center" />
-                                                <Grid x:Name="MediaTrack" Grid.Column="1" Height="12" Margin="6,0">
+                                                <Grid x:Name="MediaTrack" Grid.Column="1" Height="12" Margin="6,0" Background="Transparent" Cursor="Hand"
+                                                      MouseLeftButtonDown="MediaTrack_MouseDown" MouseMove="MediaTrack_MouseMove" MouseLeftButtonUp="MediaTrack_MouseUp">
                                                     <Border Height="4" CornerRadius="2" Background="{DynamicResource Track}" ClipToBounds="True">
                                                         <Border x:Name="MediaProgress" Background="{DynamicResource Ink}" CornerRadius="2" RenderTransformOrigin="0,0.5">
                                                             <Border.RenderTransform>
