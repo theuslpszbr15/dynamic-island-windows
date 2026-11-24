@@ -11,6 +11,73 @@ atrapalhar: os cliques passam por ela.
   <img src="docs/demo.gif" width="640" alt="Animação mostrando como a Dynamic Island funciona">
 </p>
 
+## Tudo o que ela faz
+
+Grátis, código aberto (MIT), em português, sem conta e sem anúncio. Um executável, instala sem administrador e se
+atualiza sozinha (conferindo o SHA-256 de cada versão).
+
+**Na ilha do PC**
+- **Música:** capa, controles e progresso de qualquer player (Spotify, YouTube, apps do Windows), cor tirada da capa,
+  **letra sincronizada** na ilha e em tela cheia (modo karaokê), vários players ao mesmo tempo.
+- **Sistema:** volume (role o mouse para ajustar), brilho do monitor (DDC/CI), CPU, memória, disco, bateria do notebook
+  e dos fones/mouses **Bluetooth**, queda e volta da **internet**, **progresso dos downloads** do navegador.
+- **Avisos:** notificações do Windows com o ícone do app (WhatsApp, Teams, e-mail…), **microfone e câmera em uso** e por
+  qual app, quem entra e sai da **call do Discord** com foto, Caps Lock e Num Lock, e o que você copiou.
+- **Produtividade:** timer e Pomodoro com **modo foco** (segura as notificações), tarefas com prazo, lembrete de água,
+  nota rápida, textos de 1 clique (PIX, e-mail), **agenda** do mês com clima e **"reunião em 5 min"** com botão Entrar
+  (Google Agenda, Outlook, Teams, Meet, Zoom, Webex), bandeja de arquivos para arrastar e soltar.
+- **Histórico do que você copiou** (os últimos 20, com fixar e busca; os fixados ficam cifrados no disco).
+- **OCR:** `Ctrl+Alt+O`, arraste sobre qualquer parte da tela e o texto vai para a área de transferência (OCR do próprio
+  Windows, sem internet); um clique pede para o Jarvis explicar.
+- **Tradução rápida:** selecione um texto em qualquer app e aperte `Ctrl+Alt+L` (português ↔ inglês e outros idiomas),
+  com "Trocar o texto" para colar a tradução no lugar.
+- **Ditado em qualquer app:** segure `Ctrl+Alt+F`, fale e solte: o texto é colado onde você está digitando
+  (Whisper), já corrigido ou formal se quiser.
+
+**Jarvis, o assistente de IA dentro da ilha**
+- `Ctrl+Alt+J`: tocar abre para escrever, segurar para falar; ou diga **"Ei Jarvis"** (reconhecimento do Windows, offline).
+  Responde na ilha e em voz alta, com o brilho de voz subindo da borda.
+- **Faz coisas, não só conversa** (com uma chave grátis da Groq): abre apps e sites, controla música e volume, cria
+  timer, lembrete e tarefa, escreve no Bloco de Notas, cria pastas, lê arquivos, mostra RAM e disco, busca na Wikipedia,
+  dá o clima, **lê a tela** ("o que é esse erro?") e roda scripts do PowerShell que você aprova antes. Tem **memória
+  permanente** (como te chamar, suas preferências).
+- **Plugins (MCP):** qualquer servidor MCP vira ferramenta do Jarvis; o **navegador (Playwright)** já vem pronto para ele
+  pesquisar, ler páginas e preencher formulários sozinho.
+- **Usa o computador por você:** olha a tela e mexe o mouse e o teclado, com travas: você aprova antes (cada ação ou só
+  as importantes, como digitar, Enter, comprar, enviar, excluir), **Esc para tudo na hora**, a ilha mostra "Jarvis no
+  controle", ele **nunca digita em campo de senha** e para em 20 passos ou 5 minutos. Desligado até você ligar.
+- **Sem internet também:** IA (Qwen 2.5), voz (Piper) e microfone (whisper.cpp) rodando no próprio PC, opcionais.
+
+**Para quem programa com IA**
+- **Agentes ao vivo:** Copilot (VS Code e CLI) e Claude Code na ilha: trabalhando, esperando você ou concluído, com os
+  passos e o diff da última edição; vários agentes ao mesmo tempo.
+- **Permitir / Negar** os pedidos de permissão do Claude Code na própria ilha, ou **no celular** com a digital.
+- **Uso do plano** do Copilot, Claude e Codex ao lado do relógio.
+- **GitHub na ilha:** CI que falhou ou voltou a passar, PRs novos e versões novas dos repositórios que você escolher.
+- **Resumo da semana:** tempo dos agentes, edições, comandos e projeto mais ativo, para salvar como imagem.
+- Qualquer script avisa a ilha: `DynamicIsland.exe agent --name "Build" --state working`.
+
+**Com o celular (app Android incluso)**
+- Pareamento por QR, ligação cifrada (TLS com o certificado do PC fixado); funciona no Wi-Fi de casa e **de fora**
+  (4G, trabalho) por um repasse que só vê bytes cifrados.
+- **Área de transferência** nos dois sentidos, **arquivos, fotos, vídeos e textos** entre PC e celular (estilo
+  LocalSend), **ditar no celular e o texto aparecer no PC**, notificações do PC no celular.
+- **Controle remoto do PC:** música, volume, bloquear, desligar com timer, abrir apps fixados e **ligar o PC**
+  (Wake-on-LAN).
+- **Ligações do celular aparecem na ilha do PC** com o nome do contato.
+- **Ilha flutuante no celular** com timers, bateria, foco e os agentes do PC; aprovar comandos do Claude com a digital.
+- O PC manda a atualização do app para o celular com um clique.
+
+**Do seu jeito**
+- Mascotes animados (o **Bit**, Coco, Pipoca, Bu ou um PNG seu) que reagem à música e aos agentes, com roupinhas por
+  estação, **PatPat** (Shift + clique) e um mascote que pode morar na área de trabalho.
+- Temas: **vidro desfocado** estilo iOS 26, 8 cores sólidas, tema claro, cor própria; formato pílula ou **notch**;
+  temas compartilháveis num arquivo `.ilha.json`.
+- **Não atrapalha:** os cliques passam por ela, vira uma barrinha quando ociosa, some em tela cheia e em vídeos, não
+  rouba o foco, segue a janela ativa em vários monitores (cada um com sua escala).
+- Atalhos para tudo (`Ctrl+Alt+D/M/T/A/C/K/J/F/L/O`), trocáveis nas configurações.
+- **Demonstração** guiada na primeira vez.
+
 ## Baixar
 
 Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.github.io/dynamic-island-windows/)** (dá para testar a ilha no navegador).
@@ -39,7 +106,7 @@ Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.g
 | **Letra sincronizada** — a linha que está sendo cantada aparece na ilha (letras do [LRCLIB](https://lrclib.net), guardadas no PC). Precisa de um player que informe a posição da música, como o app do Spotify. | <img src="docs/img/31-compact-lyrics.png" width="380"> |
 | **Volume** — barra ao mudar o volume (role o mouse sobre ela para ajustar). | <img src="docs/img/04-volume.png" width="380"> |
 | **Agentes de IA** — azul trabalhando, laranja precisa de você, verde concluído. | <img src="docs/img/09-agent-alert.png" width="380"> |
-| **Jarvis** — o assistente [JARVIS](https://github.com/theuslpszbr15/JARVIS) dentro da ilha: aperte **Ctrl+Alt+J** e a ilha abre na página dele, com o brilho de voz do QuickVoice (as cores sobem da borda seguindo a sua voz e a do Jarvis, e varrem a ilha enquanto ele pensa); segure para falar ou toque para escrever. Também abre programas ("abre a calculadora") e pesquisa no Google. IA (Qwen 2.5 1.5B), voz (Piper) e microfone (whisper.cpp) rodam neste PC; baixe em *Configurações → Jarvis* (cada arquivo conferido por SHA-256). | <img src="docs/img/46-jarvis-page.png" width="380"> |
+| **Jarvis** — o assistente [JARVIS](https://github.com/theuslpszbr15/JARVIS) dentro da ilha: toque **Ctrl+Alt+J** para escrever, segure para falar, ou diga "Ei Jarvis". A ilha abre na página dele, com o brilho de voz do QuickVoice (as cores sobem da borda seguindo a sua voz e a do Jarvis). Com a chave grátis da Groq ele executa tarefas (apps, sites, música, timer, lembretes, tarefas, Bloco de Notas, arquivos, ler a tela, scripts aprovados, plugins MCP e controle do computador com travas) e lembra das suas preferências. Sem chave, IA (Qwen 2.5 1.5B), voz (Piper) e microfone (whisper.cpp) rodam neste PC; baixe em *Configurações → Jarvis* (cada arquivo conferido por SHA-256). | <img src="docs/img/46-jarvis-page.png" width="380"> |
 | **Sistema** — CPU, memória, disco, bateria, **brilho da tela** (arraste a barra) e bateria dos fones/mouses **Bluetooth** (avisa quando está acabando). | <img src="docs/img/32-system-brightness-bt.png" width="380"> |
 | **Agenda** — calendário do mês e o clima de agora na sua cidade (wttr.in). | <img src="docs/img/33-calendar-weather.png" width="380"> |
 | **Reunião em 5 min** — com o link secreto iCal do Google Agenda ou do Outlook (ou o Outlook clássico aberto no PC), a ilha avisa 10, 5 e 1 minuto antes de cada reunião, com o botão **Entrar** (Teams, Meet, Zoom, Webex), e mostra as próximas na página Agenda. Reuniões que se repetem entram certinho. | |
@@ -58,7 +125,7 @@ Site: **[theuslpszbr15.github.io/dynamic-island-windows](https://theuslpszbr15.g
 - **Vários monitores:** fica na tela principal, numa tela escolhida ou segue a janela ativa (respeita a escala de cada monitor).
 - Some sozinha com app em tela cheia e não rouba o foco.
 - **Atalhos:** `Ctrl+Alt+D` esconde/mostra a ilha, `Ctrl+Alt+M` mídia, `Ctrl+Alt+T` timer, `Ctrl+Alt+A` agentes, `Ctrl+Alt+C` agenda,
-  `Ctrl+Alt+K` tarefas e foco.
+  `Ctrl+Alt+K` tarefas e foco, `Ctrl+Alt+J` Jarvis, `Ctrl+Alt+F` ditado, `Ctrl+Alt+L` tradução, `Ctrl+Alt+O` texto da tela (OCR).
   Dá para trocar as teclas em *Configurações → Geral*; se outro app já usa um atalho, a ilha avisa.
 - **Esconder:** `Ctrl+Alt+D`, clique no ícone da bandeja ou *Esconder por 1 hora* no menu. Escondida, nada aparece (nem avisos).
 - **Vídeos não incomodam:** YouTube, Netflix, Prime Video, Twitch… não abrem aviso nem deixam a pílula aberta (dá para ligar em *Mostrar na ilha → Vídeos*).
@@ -121,7 +188,7 @@ Serve para qualquer Android 11+.
 1. Baixe `DynamicIsland-Android.apk` da página de Releases no celular e instale (o Android pede para permitir
    instalações do navegador uma vez).
 2. No PC: **Configurações → Celular → Ligação com o celular**. Aparece um QR code.
-3. No app: **Escanear código do PC**. Celular e PC precisam estar na **mesma rede Wi-Fi**.
+3. No app: **Escanear código do PC**. No mesmo Wi-Fi a ligação é direta; fora de casa ela passa pelo repasse (veja abaixo).
 
 <img src="docs/img/41-android-approval.png" width="220"> <img src="docs/img/42-android-tray.png" width="220">
 
