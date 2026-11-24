@@ -77,6 +77,17 @@ public sealed class VolumeService : IDisposable
         _deviceId = null;
     }
 
+    /// <summary>The master volume (0..1) and mute right now; null without an output device.</summary>
+    public (float Level, bool Muted)? Current()
+    {
+        if (_volume == null) return null;
+        try
+        {
+            return _volume.GetMasterVolumeLevelScalar(out var level) == 0 && _volume.GetMute(out var muted) == 0 ? (level, muted) : null;
+        }
+        catch { return null; }
+    }
+
     public void Nudge(float delta)
     {
         if (_volume == null) return;

@@ -177,6 +177,7 @@ public partial class IslandWindow : Window
         }, _privacyWatch.Token);
 
         _volume.Start();
+        if (_volume.Current() is { } volume) (_volumeLevel, _volumeMuted) = volume;
         _spotifyVolume.Start();
         _battery.Start();
         _hub.Start();

@@ -279,6 +279,7 @@ public sealed class JarvisBrain
     async Task<JsonObject> CallAsync(string key, JsonArray messages, JsonArray tools)
     {
         double? wait = null;
+        var badCall = false;
         foreach (var model in Models)
         {
             var body = new JsonObject
@@ -297,10 +298,22 @@ public sealed class JarvisBrain
                 continue;
             }
             if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException();
+            if (response.StatusCode == HttpStatusCode.BadRequest)
+            {
+                var problem = await response.Content.ReadAsStringAsync();
+                Log.Warn("JarvisBrain", $"{model}: 400 {problem[..Math.Min(300, problem.Length)]}");
+                // the model wrote a tool call Groq couldn't parse: the next model gets a try
+                if (problem.Contains("tool_use_failed") || problem.Contains("failed_generation"))
+                {
+                    badCall = true;
+                    continue;
+                }
+            }
             response.EnsureSuccessStatusCode();
             var json = JsonNode.Parse(await response.Content.ReadAsStringAsync());
             return json?["choices"]?[0]?["message"] as JsonObject ?? throw new InvalidDataException("Resposta vazia da Groq.");
         }
+        if (badCall && wait == null) throw new InvalidDataException("O modelo se confundiu com as ferramentas. Tente pedir de outro jeito.");
         if (wait is <= 12)
         {
             await Task.Delay(TimeSpan.FromSeconds(wait.Value));

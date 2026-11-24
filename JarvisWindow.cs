@@ -71,8 +71,12 @@ public sealed class JarvisWindow : Window
         };
 
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+        var closing = false;
+        Closing += (_, _) => closing = true;
         Deactivated += (_, _) =>
         {
+            // closing (Esc) also deactivates; a second Close() there throws
+            if (closing) return;
             // clicking elsewhere while talking sends what was said
             if (_island.JarvisListening) _ = _island.StopListeningAsync();
             Close();
