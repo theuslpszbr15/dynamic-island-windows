@@ -146,24 +146,30 @@ public partial class IslandWindow : IJarvisHost
             return;
         }
         var key = Hotkeys.Parse(Hotkeys.Keys(_settings, "jarvis"))?.Key ?? 0;
-        var since = DateTime.Now;
-        var shown = false;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // opening the microphone can hold up this thread for half a second, so the key is timed on another one
+        var released = Task.Run(async () =>
+        {
+            while (Native.IsKeyDown(key) && clock.Elapsed < ListenLimit) await Task.Delay(15);
+            return clock.Elapsed;
+        });
         // records from the first moment, but only says "Ouvindo…" once it's clearly a hold and not a tap
         StartListening(quiet: true);
         _holdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
         _holdTimer.Tick += (_, _) =>
         {
-            var held = DateTime.Now - since;
-            if (Native.IsKeyDown(key) && held < ListenLimit)
-            {
-                if (!shown && held >= TapLimit) { shown = true; ShowListening(); }
-                return;
-            }
+            if (released.IsCompleted || clock.Elapsed < TapLimit) return;
             _holdTimer!.Stop();
-            _ = StopListeningAsync(discard: held < TapLimit);
-            if (held < TapLimit) OpenJarvis();
+            ShowListening();
         };
         _holdTimer.Start();
+        released.ContinueWith(t =>
+        {
+            _holdTimer?.Stop();
+            var tap = t.Result < TapLimit;
+            _ = StopListeningAsync(discard: tap);
+            if (tap) OpenJarvis();
+        }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     public void OpenJarvis()
