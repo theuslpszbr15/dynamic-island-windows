@@ -51,6 +51,12 @@ android {
                 signingConfigs.getByName("debug")
             }
         }
+        // assembleFull: the same app plus the notification listener and the accessibility service
+        // (src/full/AndroidManifest.xml). Play Protect blocks it when sideloaded, so it's for adb installs only.
+        create("full") {
+            initWith(getByName("release"))
+            matchingFallbacks += "release"
+        }
     }
 
     compileOptions {

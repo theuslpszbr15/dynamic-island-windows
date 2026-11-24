@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only in the "full" build: Play Protect blocks sideloaded APKs that declare these (Brazil's fraud protection),
+     so the APK in the releases leaves them out and the app hides what depends on them. Install with adb. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- music, the Discord call and the Claude app's notices, once the person turns on notification access -->
+        <service
+            android:name=".DiscordListener"
+            android:exported="false"
+            android:label="Ilha: música e call do Discord"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- draws the island above the status bar (reads nothing, see res/xml/island_accessibility.xml) -->
+        <service
+            android:name=".IslandAccessibility"
+            android:exported="false"
+            android:label="Ilha por cima da barra"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/island_accessibility" />
+        </service>
+    </application>
+</manifest>

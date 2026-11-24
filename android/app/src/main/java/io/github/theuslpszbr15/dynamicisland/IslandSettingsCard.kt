@@ -56,6 +56,8 @@ fun IslandSettingsCard() {
     val above = remember(tick) { IslandOverlay.isAbove() }
     val aboveOn = remember(tick) { IslandAccessibility.enabled(context) }
     val access = remember(tick) { DiscordListener.enabled(context) }
+    // the APK from the releases leaves it out (Play Protect blocks sideloaded apps that declare it)
+    val hasAbove = remember { IslandAccessibility.available(context) }
     val look by IslandLook.state.collectAsState()
     val focus by Focus.state.collectAsState()
     val seen by Focus.seen.collectAsState()
@@ -131,6 +133,7 @@ fun IslandSettingsCard() {
         }
         TextButton(onClick = { change(Look(media = look.media, hide = look.hide, dock = look.dock, scroll = look.scroll)) }) { Text("Voltar ao padrão") }
 
+        if (hasAbove) {
         Section("Por cima da barra de notificações")
         Text(
             if (above) "Ligado: a ilha fica na câmera, por cima da barra, e dá para tocar nela lá em cima."
@@ -149,6 +152,7 @@ fun IslandSettingsCard() {
                     else "Só aparece com \"Por cima da barra\" ligado.", color = MutedColor, fontSize = 12.sp)
             }
             Switch(checked = look.dock, onCheckedChange = { change(look.copy(dock = it)) }, modifier = Modifier.padding(start = 12.dp))
+        }
         }
 
         Section("Foco")

@@ -63,7 +63,7 @@ private fun needs(): List<Need> = buildList {
             catch (_: Exception) { it.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }))
     add(Need("Acessibilidade", R.drawable.ic_access,
-        { IslandAccessibility.enabled(it) }, { it.startActivity(IslandAccessibility.settingsIntent()) }))
+        { !IslandAccessibility.available(it) || IslandAccessibility.enabled(it) }, { it.startActivity(IslandAccessibility.settingsIntent()) }))
     add(Need("Telefone e contatos", R.drawable.ic_phone,
         { PhoneRings.canSee(it) }, { PermissionActivity.ask(it, PhoneRings.permissions) }))
     add(Need("Agenda", R.drawable.ic_calendar,

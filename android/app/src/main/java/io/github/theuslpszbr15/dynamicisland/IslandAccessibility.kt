@@ -31,6 +31,14 @@ class IslandAccessibility : AccessibilityService() {
     }
 
     companion object {
+        /** Only the "full" build declares it (see src/full/AndroidManifest.xml). */
+        fun available(context: Context): Boolean = try {
+            context.packageManager.getServiceInfo(ComponentName(context, IslandAccessibility::class.java), 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
         /** The person turned it on in Android's settings (it may still be starting). */
         fun enabled(context: Context): Boolean {
             val list = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
