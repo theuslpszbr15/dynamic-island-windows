@@ -102,6 +102,17 @@ public partial class IslandWindow : IJarvisHost
         };
         JarvisTalkText.Text = _mic != null ? "Enviar" : "Falar";
         JarvisTalkIcon.Text = _mic != null ? "\uE724" : "\uE720";
+        var busy = ComputerBusy;
+        JarvisSteps.Visibility = Vis(busy);
+        JarvisAnswer.Visibility = Vis(!busy);
+        JarvisStop.Visibility = Vis(busy);
+        JarvisTalk.Visibility = Vis(!busy);
+        JarvisType.Visibility = Vis(!busy);
+        if (busy)
+        {
+            JarvisStateText.Text = $"Usando o computador · {_computerSteps.Count + (_computerNow != null ? 1 : 0)} passo(s)";
+            RenderComputerSteps();
+        }
     }
 
     /// <summary>Shows the island open on Jarvis's page, as if the mouse were over it.</summary>

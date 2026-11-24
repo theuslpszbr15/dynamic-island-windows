@@ -325,11 +325,15 @@ public sealed class JarvisBrain
     // models that see images, in order (Groq retires models: a 404 moves on to the next)
     static readonly string[] VisionModels = ["qwen/qwen3.8-27b", "meta-llama/llama-4-scout-17b-16e-instruct"];
 
+    /// <summary>How long Groq said to wait the last time vision hit the free limit (null: it didn't).</summary>
+    public static TimeSpan? VisionLimitWait { get; private set; }
+
     /// <summary>A model that sees: <paramref name="jpeg"/> plus the text, answered as JSON (computer use). Null without a
     /// key, at the limit or offline.</summary>
     public static async Task<JsonObject?> VisionJsonAsync(string system, string text, byte[] jpeg, int tries = 0)
     {
         if (LoadKey() is not { } key) return null;
+        VisionLimitWait = null;
         foreach (var model in VisionModels)
             try
             {
@@ -361,6 +365,8 @@ public sealed class JarvisBrain
                     await Task.Delay(TimeSpan.FromSeconds(Math.Max(2, wait)));
                     return await VisionJsonAsync(system, text, jpeg, tries + 1);
                 }
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                    VisionLimitWait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromMinutes(1);
                 if (!response.IsSuccessStatusCode)
                 {
                     Log.Warn("Groq vision", $"{model}: HTTP {(int)response.StatusCode}");

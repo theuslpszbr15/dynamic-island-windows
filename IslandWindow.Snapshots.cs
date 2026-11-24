@@ -459,6 +459,22 @@ public partial class IslandWindow
         }
         ask.Finish(ComputerAnswer.Stop);
         if (_transient == Transient.Info) TransientEnded();
+        // the Jarvis page while it works on the screen
+        _computer = new CancellationTokenSource();
+        JarvisHistory.Add((true, "No Bloco de Notas, escreva a lista de compras"));
+        _computerSteps.AddRange(["Clicar em “Bloco de Notas”", "Clicar em “Sem título”", "Apertar ctrl+a"]);
+        _computerNow = "Esperando sua permissão: Digitar “arroz, feijão, café”";
+        SetJarvisState("Pensando…");
+        ShowJarvisPage();
+        Retarget();
+        UpdateJarvisUi();
+        await Shot("58-computer-steps");
+        _computer = null;
+        _computerSteps.Clear();
+        _computerNow = null;
+        JarvisHistory.Clear();
+        SetJarvisState("Pronto");
+        SetExpanded(false);
         _plans =
         [
             new PlanUse("Copilot", PlanUsage.CopilotColor, 52, "mês", DateTimeOffset.Now.AddDays(8)),

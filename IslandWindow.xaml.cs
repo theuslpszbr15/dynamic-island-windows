@@ -330,7 +330,8 @@ public partial class IslandWindow : Window
         PageCalendar => new(520, 236),
         PagePending => new(520, 236),
         PageTasks => new(520, 236),
-        PageJarvis => new(520, 236),
+        // the island's window is 290 tall: the steps page uses nearly all of it
+        PageJarvis => ComputerBusy ? new(560, 272) : new(520, 236),
         PageClipboard => new(520, 236),
         PageSystem => new(450, 236),
         _ => ExpandedSize,
@@ -609,7 +610,7 @@ public partial class IslandWindow : Window
         if (over && answering && ApprovalQuiet && !button && !_dwellBlocked && (now - hoverStart).TotalSeconds >= dwell)
             OpenApproval();
 
-        var interactive = over && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
+        var interactive = over && !_computerClicking && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
                                    || (_transient == Transient.Info && _infoAction != null)
                                    || (_transient == Transient.Notification && _notifyAction != null)
                                    || _transient == Transient.Translation

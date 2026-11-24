@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using DynamicIsland.Services;
 using Drawing = System.Drawing;
 using WinForms = System.Windows.Forms;
@@ -15,6 +18,48 @@ public partial class IslandWindow
     string? _computerStop;
 
     public bool ComputerBusy => _computer != null;
+
+    // what the Jarvis page lists while Jarvis works on the screen: the steps done and the one under way
+    readonly List<string> _computerSteps = [];
+    string? _computerNow;
+    bool _computerClicking;
+
+    /// <summary>Shows what Jarvis is doing now: on the open Jarvis page, else in the pill.</summary>
+    void ComputerShow(string? now, int step)
+    {
+        _computerNow = now;
+        if (JarvisOnScreen) UpdateJarvisUi();
+        else ComputerPill($"Jarvis no controle · passo {step}");
+    }
+
+    void RenderComputerSteps()
+    {
+        JarvisSteps.Children.Clear();
+        var shown = _computerSteps.TakeLast(_computerNow == null ? 5 : 4).ToList();
+        if (_computerSteps.Count > shown.Count)
+            JarvisSteps.Children.Add(StepLine("…", $"{_computerSteps.Count - shown.Count} passo(s) antes", false));
+        foreach (var text in shown) JarvisSteps.Children.Add(StepLine("✓", text, false));
+        if (_computerNow != null) JarvisSteps.Children.Add(StepLine("●", _computerNow, true));
+    }
+
+    TextBlock StepLine(string mark, string text, bool current)
+    {
+        var line = new TextBlock { FontSize = current ? 14 : 13, Margin = new Thickness(0, 0, 0, 5), TextTrimming = TextTrimming.CharacterEllipsis };
+        line.Inlines.Add(new System.Windows.Documents.Run(mark + "  ")
+        {
+            Foreground = new SolidColorBrush(current ? JarvisColor : mark == "✓" ? Color.FromRgb(0x30, 0xD1, 0x58) : Color.FromRgb(0x8E, 0x8E, 0x93)),
+        });
+        line.Inlines.Add(new System.Windows.Documents.Run(text));
+        if (current) line.FontWeight = FontWeights.SemiBold;
+        else line.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        return line;
+    }
+
+    void JarvisStop_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        StopComputer();
+    }
 
     /// <summary>--try-computer: each step's picture, answer and approval card go here, and the card is allowed by itself.</summary>
     public string? ComputerTestFolder { get; init; }
@@ -54,6 +99,13 @@ public partial class IslandWindow
         var esc = WatchEscAsync(cts);
         string Stopped() => _computerStop ?? $"Parei no limite de {ComputerUse.MaxTime.TotalMinutes:0} minutos.";
         string Summary() => done.Count == 0 ? "" : " Feito: " + string.Join("; ", done) + ".";
+        _computerSteps.Clear();
+        _computerNow = "Começando…";
+        // Jarvis's screenshots see what is under the island, not the island
+        if (_hwnd != IntPtr.Zero) Native.SetWindowDisplayAffinity(_hwnd, Native.WDA_EXCLUDEFROMCAPTURE);
+        ShowJarvisPage();
+        Retarget();
+        UpdateJarvisUi();
         try
         {
             // the window the task names, else the one the person was in when they asked (not the Jarvis box)
@@ -68,7 +120,7 @@ public partial class IslandWindow
             {
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
                 if (Native.IsInputDesktopLocked()) return "Parei: a tela do PC foi bloqueada." + Summary();
-                ComputerPill($"Jarvis no controle · passo {step}");
+                ComputerShow("Olhando a tela…", step);
 
                 var front = Native.GetForegroundWindow();
                 var screen = WinForms.Screen.FromHandle(front != IntPtr.Zero ? front : _hwnd).Bounds;
@@ -82,14 +134,24 @@ public partial class IslandWindow
                 else stuck = 0;
                 lastPrint = print;
                 var lines = await ScreenOcr.ReadLinesAsync(shot) ?? [];
+                var items = await ComputerUse.ItemsAsync(front, screen);
                 var scale = Math.Min(1.0, (double)ComputerUse.ImageWidth / shot.Width);
-                var jpeg = ComputerUse.Jpeg(shot, scale);
+                byte[] jpeg;
+                using (var marked = new Drawing.Bitmap(shot))
+                {
+                    ComputerUse.Mark(marked, items, screen);
+                    jpeg = ComputerUse.Jpeg(marked, scale);
+                }
                 var json = await JarvisBrain.VisionJsonAsync(ComputerUse.SystemPrompt,
-                    ComputerUse.StepText(task, step, done, lines, scale, (int)(shot.Width * scale), (int)(shot.Height * scale)),
+                    ComputerUse.StepText(task, step, done, lines, scale, (int)(shot.Width * scale), (int)(shot.Height * scale),
+                        ComputerUse.ItemsText(items, screen, scale)),
                     jpeg);
                 TestLog(step, "modelo: " + (json?.ToJsonString() ?? "(nada)"), jpeg);
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
-                if (json == null) return "Não consegui ver a tela (sem internet ou no limite grátis da Groq; tente de novo em um minuto)." + Summary();
+                if (json == null)
+                    return (JarvisBrain.VisionLimitWait is { } wait
+                        ? $"Parei: o limite grátis da Groq acabou por agora; volta em uns {Math.Max(1, (int)Math.Ceiling(wait.TotalMinutes))} min."
+                        : "Não consegui ver a tela (sem internet?).") + Summary();
 
                 var action = ComputerUse.Parse(json);
                 if (action == null)
@@ -103,7 +165,17 @@ public partial class IslandWindow
                 // where on the screen (physical pixels), and the text there
                 Drawing.Point? point = null;
                 string? near = null;
-                if (action.IsClick || action is { Kind: "rolar", X: >= 0, Y: >= 0 })
+                if (action.Kind == "clicar_item")
+                {
+                    if (items.FirstOrDefault(i => i.Id == action.Item) is not { } item)
+                    {
+                        done.Add($"não existe o item {action.Item}");
+                        continue;
+                    }
+                    point = new Drawing.Point(item.Box.X + item.Box.Width / 2, item.Box.Y + item.Box.Height / 2);
+                    near = item.Name.Length > 0 ? item.Name : item.Kind;
+                }
+                else if (action.IsClick || action is { Kind: "rolar", X: >= 0, Y: >= 0 })
                 {
                     Drawing.PointF spot;
                     if (action.Kind == "clicar_texto" || (action.X < 0 && action.Text.Length > 0))
@@ -134,7 +206,9 @@ public partial class IslandWindow
 
                 var what = ComputerUse.Describe(action, near);
                 var risky = ComputerUse.IsRisky(action, near);
-                if (risky || (askAll && !allowRest))
+                var asking = risky || (askAll && !allowRest);
+                ComputerShow(asking ? "Esperando sua permissão: " + what : what, step);
+                if (asking)
                 {
                     _computerAsk = new ComputerAskWindow(what + (action.Reason.Length > 0 ? $"\n{action.Reason}" : ""), risky, offerRest: !risky && askAll, screen, point);
                     _computerAsk.Show();
@@ -160,9 +234,20 @@ public partial class IslandWindow
                 }
 
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
-                await PerformAsync(action, point, screen);
+                ComputerShow(what, step);
+                // the island may sit right where Jarvis clicks: let the click go through it
+                _computerClicking = true;
+                SetClickThrough(true);
+                try
+                {
+                    await PerformAsync(action, point, screen);
+                    await Task.Delay(250);
+                }
+                finally { _computerClicking = false; }
                 TestLog(step, "feito: " + what + (point is { } at ? $" @ {at.X},{at.Y}" : ""));
                 done.Add(what);
+                _computerSteps.Add(what);
+                ComputerShow(null, step);
                 try { await Task.Delay(action.Kind == "esperar" ? 2500 : 900, cts.Token); }
                 catch (OperationCanceledException) { }
             }
@@ -175,7 +260,11 @@ public partial class IslandWindow
             cts.Cancel();
             await esc;
             _computer = null;
-            ShowInfo("\uE7F4", "Jarvis devolveu o controle", "", glyphColor: JarvisColor, seconds: 2.5);
+            _computerNow = null;
+            if (_hwnd != IntPtr.Zero) Native.SetWindowDisplayAffinity(_hwnd, Glass ? Native.WDA_EXCLUDEFROMCAPTURE : 0);
+            UpdateJarvisUi();
+            Retarget();
+            if (!JarvisOnScreen) ShowInfo("\uE7F4", "Jarvis devolveu o controle", "", glyphColor: JarvisColor, seconds: 2.5);
         }
     }
 
@@ -201,7 +290,7 @@ public partial class IslandWindow
     {
         switch (action.Kind)
         {
-            case "clicar" or "clicar_texto" when point is { } p:
+            case "clicar" or "clicar_texto" or "clicar_item" when point is { } p:
                 Native.Click(p.X, p.Y);
                 break;
             case "clique_duplo" when point is { } p:

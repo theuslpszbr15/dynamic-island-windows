@@ -43,7 +43,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
   permanente** (como te chamar, suas preferências).
 - **Plugins (MCP):** qualquer servidor MCP vira ferramenta do Jarvis; o **navegador (Playwright)** já vem pronto para ele
   pesquisar, ler páginas e preencher formulários sozinho.
-- **Usa o computador por você:** olha a tela e mexe o mouse e o teclado, com travas: você aprova antes (cada ação ou só
+- **Usa o computador por você:** olha a tela e mexe o mouse e o teclado, mostrando cada passo ao vivo na ilha. Para clicar
+  certo, numera os botões e caixas da janela (pelo próprio Windows) e escolhe pelo número. Travas: você aprova antes (cada ação ou só
   as importantes, como digitar, Enter, comprar, enviar, excluir), **Esc para tudo na hora**, a ilha mostra "Jarvis no
   controle", ele **nunca digita em campo de senha** e para em 20 passos ou 5 minutos. Desligado até você ligar.
 - **Sem internet também:** IA (Qwen 2.5), voz (Piper) e microfone (whisper.cpp) rodando no próprio PC, opcionais.

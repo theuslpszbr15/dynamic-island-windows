@@ -7,11 +7,14 @@ using Drawing = System.Drawing;
 namespace DynamicIsland.Services;
 
 /// <summary>One step Jarvis wants to take on the screen. X/Y are pixels of the picture it saw (-1 = not given);
-/// Key holds the key for "tecla" and "cima"/"baixo" for "rolar".</summary>
-public sealed record ComputerAction(string Kind, int X, int Y, string Text, string Key, string Reason)
+/// Key holds the key for "tecla" and "cima"/"baixo" for "rolar"; Item is a numbered control ("clicar_item").</summary>
+public sealed record ComputerAction(string Kind, int X, int Y, string Text, string Key, string Reason, int Item = -1)
 {
-    public bool IsClick => Kind is "clicar" or "clicar_texto" or "clique_duplo" or "clique_direito";
+    public bool IsClick => Kind is "clicar" or "clicar_texto" or "clicar_item" or "clique_duplo" or "clique_direito";
 }
+
+/// <summary>A control of the window in front, numbered on Jarvis's screenshot (physical screen pixels).</summary>
+public sealed record UiItem(int Id, string Kind, string Name, Drawing.Rectangle Box);
 
 /// <summary>The rules of Jarvis's computer use: what it may do, what needs the person's OK, and what it never does.</summary>
 public static partial class ComputerUse
@@ -21,7 +24,7 @@ public static partial class ComputerUse
     /// <summary>The screenshot is shrunk to this width before it goes to the model.</summary>
     public const int ImageWidth = 1280;
 
-    static readonly string[] Kinds = ["clicar", "clicar_texto", "clique_duplo", "clique_direito", "digitar", "tecla", "rolar", "esperar", "concluir", "desistir"];
+    static readonly string[] Kinds = ["clicar", "clicar_texto", "clicar_item", "clique_duplo", "clique_direito", "digitar", "tecla", "rolar", "esperar", "concluir", "desistir"];
 
     const byte Ctrl = 0x11, Shift = 0x10, Alt = 0x12;
 
@@ -50,9 +53,11 @@ public static partial class ComputerUse
     public const string SystemPrompt =
         "Você controla o mouse e o teclado de um PC Windows para cumprir a tarefa do usuário, um passo por vez. " +
         "Você recebe a captura da tela e os textos lidos nela com o centro de cada linha (em pixels da imagem). " +
-        "Responda só com JSON: {\"acao\":\"clicar|clicar_texto|clique_duplo|clique_direito|digitar|tecla|rolar|esperar|concluir|desistir\"," +
-        "\"x\":0,\"y\":0,\"texto\":\"\",\"tecla\":\"\",\"motivo\":\"curto\"}. " +
-        "clicar_texto clica no texto visível dado em texto: prefira ele sempre que o alvo tem texto. clicar usa x,y da imagem. " +
+        "Os controles da janela (botões, caixas de texto, abas, links) aparecem na imagem com um número amarelo e na lista " +
+        "de elementos: para clicar num deles use clicar_item com o número em item — é o jeito mais preciso. " +
+        "Responda só com JSON: {\"acao\":\"clicar_item|clicar_texto|clicar|clique_duplo|clique_direito|digitar|tecla|rolar|esperar|concluir|desistir\"," +
+        "\"item\":0,\"x\":0,\"y\":0,\"texto\":\"\",\"tecla\":\"\",\"motivo\":\"curto\"}. " +
+        "Sem item para o alvo: clicar_texto clica no texto visível dado em texto; clicar usa x,y da imagem (último recurso). " +
         "digitar escreve texto no campo que está com o cursor (clique no campo antes). " +
         "tecla aceita só: enter, tab, shift+tab, espaco, backspace, delete, cima, baixo, esquerda, direita, home, end, pageup, pagedown, " +
         "ctrl+a, ctrl+c, ctrl+v, ctrl+x, ctrl+z, ctrl+f, ctrl+l, ctrl+t, ctrl+w, ctrl+s, alt+tab, win. " +
@@ -76,6 +81,10 @@ public static partial class ComputerUse
         if (reason.Length > 200) reason = reason[..200];
         switch (kind)
         {
+            case "clicar_item":
+                var item = Int(json, "item");
+                if (item < 1) return null;
+                return new ComputerAction(kind, -1, -1, "", "", reason, item);
             case "clicar" or "clique_duplo" or "clique_direito":
                 if ((x < 0 || y < 0) && text.Trim().Length == 0) return null;
                 break;
@@ -174,7 +183,7 @@ public static partial class ComputerUse
         var on = string.IsNullOrWhiteSpace(target) ? "" : $" em “{Cut(target, 60)}”";
         return action.Kind switch
         {
-            "clicar" or "clicar_texto" => "Clicar" + on,
+            "clicar" or "clicar_texto" or "clicar_item" => "Clicar" + on,
             "clique_duplo" => "Clicar duas vezes" + on,
             "clique_direito" => "Clicar com o botão direito" + on,
             "digitar" => $"Digitar “{Cut(action.Text, 80)}”",
@@ -187,7 +196,7 @@ public static partial class ComputerUse
 
     /// <summary>What the model reads besides the picture: the task, the steps so far and the text on screen.</summary>
     public static string StepText(string task, int step, IReadOnlyList<string> done, IEnumerable<(string Text, Drawing.RectangleF Box)> lines,
-        double scale, int width, int height)
+        double scale, int width, int height, string items = "")
     {
         var text = new StringBuilder();
         text.Append("Tarefa: ").AppendLine(task);
@@ -197,6 +206,7 @@ public static partial class ComputerUse
             text.AppendLine("Feito até agora:");
             foreach (var item in done.TakeLast(8)) text.Append("- ").AppendLine(item);
         }
+        if (items.Length > 0) text.AppendLine("Elementos numerados (número = tipo “nome” @ centro):").Append(items);
         text.AppendLine("Textos na tela (texto @ x,y):");
         // the free plan counts tokens per minute: the picture already carries most of the screen
         var budget = 2500;
@@ -210,28 +220,31 @@ public static partial class ComputerUse
         return text.ToString();
     }
 
-    /// <summary>A tiny grayscale copy of the screen, to tell whether an action changed anything.</summary>
+    const int PrintW = 192, PrintH = 108;
+
+    /// <summary>A small grayscale copy of the screen, to tell whether an action changed anything (fine enough to see
+    /// a few typed words).</summary>
     public static byte[] Thumbprint(Drawing.Bitmap shot)
     {
-        using var small = new Drawing.Bitmap(shot, 64, 36);
-        var print = new byte[64 * 36];
-        for (var y = 0; y < 36; y++)
-            for (var x = 0; x < 64; x++)
+        using var small = new Drawing.Bitmap(shot, PrintW, PrintH);
+        var print = new byte[PrintW * PrintH];
+        for (var y = 0; y < PrintH; y++)
+            for (var x = 0; x < PrintW; x++)
             {
                 var c = small.GetPixel(x, y);
-                print[y * 64 + x] = (byte)((c.R * 3 + c.G * 6 + c.B) / 10);
+                print[y * PrintW + x] = (byte)((c.R * 3 + c.G * 6 + c.B) / 10);
             }
         return print;
     }
 
-    /// <summary>The two screens look the same (a clock, a blinking cursor or the island's own pill don't count).</summary>
+    /// <summary>The two screens look the same (a ticking clock doesn't count).</summary>
     public static bool Unchanged(byte[]? before, byte[] after)
     {
         if (before == null || before.Length != after.Length) return false;
         var moved = 0;
         for (var i = 0; i < after.Length; i++)
-            if (Math.Abs(before[i] - after[i]) > 12) moved++;
-        return moved <= 10;
+            if (Math.Abs(before[i] - after[i]) > 6) moved++;
+        return moved <= 8;
     }
 
     /// <summary>The screenshot as JPEG, shrunk by <paramref name="scale"/>.</summary>
@@ -244,6 +257,87 @@ public static partial class ComputerUse
         options.Param[0] = new Drawing.Imaging.EncoderParameter(Drawing.Imaging.Encoder.Quality, 70L);
         small.Save(stream, codec, options);
         return stream.ToArray();
+    }
+
+    /// <summary>The clickable controls of <paramref name="window"/> that are on <paramref name="screen"/>, numbered from 1
+    /// (UI Automation, at most 60 and about 1.5 s: a browser's tree can be huge).</summary>
+    public static Task<List<UiItem>> ItemsAsync(IntPtr window, Drawing.Rectangle screen) => Task.Run(() =>
+    {
+        var items = new List<UiItem>();
+        try
+        {
+            if (window == IntPtr.Zero) return items;
+            var root = System.Windows.Automation.AutomationElement.FromHandle(window);
+            var walker = System.Windows.Automation.TreeWalker.ControlViewWalker;
+            var queue = new Queue<System.Windows.Automation.AutomationElement>();
+            queue.Enqueue(root);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var visited = 0;
+            while (queue.Count > 0 && items.Count < 60 && visited < 2000 && clock.ElapsedMilliseconds < 1500)
+            {
+                var node = queue.Dequeue();
+                visited++;
+                try
+                {
+                    var current = node.Current;
+                    if (!current.IsOffscreen && Kind(current.ControlType) is { } kind && current.IsEnabled)
+                    {
+                        var r = current.BoundingRectangle;
+                        var box = new Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
+                        if (box.Width >= 6 && box.Height >= 6 && screen.Contains(new Drawing.Point(box.X + box.Width / 2, box.Y + box.Height / 2)))
+                            items.Add(new UiItem(items.Count + 1, kind, Cut(current.Name ?? "", 50), box));
+                    }
+                    for (var child = walker.GetFirstChild(node); child != null; child = walker.GetNextSibling(child))
+                        queue.Enqueue(child);
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return items;
+    });
+
+    static string? Kind(System.Windows.Automation.ControlType type)
+    {
+        if (type == System.Windows.Automation.ControlType.Button || type == System.Windows.Automation.ControlType.SplitButton) return "botão";
+        if (type == System.Windows.Automation.ControlType.Edit || type == System.Windows.Automation.ControlType.Document) return "caixa de texto";
+        if (type == System.Windows.Automation.ControlType.TabItem) return "aba";
+        if (type == System.Windows.Automation.ControlType.Hyperlink) return "link";
+        if (type == System.Windows.Automation.ControlType.MenuItem) return "menu";
+        if (type == System.Windows.Automation.ControlType.CheckBox) return "caixa de seleção";
+        if (type == System.Windows.Automation.ControlType.RadioButton) return "opção";
+        if (type == System.Windows.Automation.ControlType.ComboBox) return "lista";
+        if (type == System.Windows.Automation.ControlType.ListItem || type == System.Windows.Automation.ControlType.TreeItem) return "item";
+        return null;
+    }
+
+    /// <summary>Draws each item's number (yellow tag) and outline on the screenshot the model sees.</summary>
+    public static void Mark(Drawing.Bitmap shot, IReadOnlyList<UiItem> items, Drawing.Rectangle screen)
+    {
+        using var g = Drawing.Graphics.FromImage(shot);
+        using var pen = new Drawing.Pen(Drawing.Color.FromArgb(230, 255, 200, 0), 2);
+        using var font = new Drawing.Font("Segoe UI", Math.Max(11, shot.Width / 110f), Drawing.FontStyle.Bold, Drawing.GraphicsUnit.Pixel);
+        using var tag = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 255, 200, 0));
+        foreach (var item in items)
+        {
+            var box = item.Box with { X = item.Box.X - screen.X, Y = item.Box.Y - screen.Y };
+            g.DrawRectangle(pen, box);
+            var label = item.Id.ToString(CultureInfo.InvariantCulture);
+            var size = g.MeasureString(label, font);
+            var spot = new Drawing.RectangleF(box.X, Math.Max(0, box.Y - size.Height + 2), size.Width + 2, size.Height - 2);
+            g.FillRectangle(tag, spot);
+            g.DrawString(label, font, Drawing.Brushes.Black, spot.X + 1, spot.Y - 1);
+        }
+    }
+
+    /// <summary>The numbered items for the model: "7 = caixa de texto “Pesquisar” @ 640,88".</summary>
+    public static string ItemsText(IReadOnlyList<UiItem> items, Drawing.Rectangle screen, double scale)
+    {
+        var text = new StringBuilder();
+        foreach (var item in items)
+            text.Append(CultureInfo.InvariantCulture,
+                $"{item.Id} = {item.Kind}{(item.Name.Length > 0 ? $" “{item.Name}”" : "")} @ {(int)((item.Box.X - screen.X + item.Box.Width / 2) * scale)},{(int)((item.Box.Y - screen.Y + item.Box.Height / 2) * scale)}\n");
+        return text.ToString();
     }
 
     /// <summary>The control with the keyboard focus is a password box (UI Automation; false when it can't tell).</summary>

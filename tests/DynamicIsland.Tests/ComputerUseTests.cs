@@ -76,6 +76,22 @@ public class ComputerUseTests
     }
 
     [Fact]
+    public void ClicksANumberedItem()
+    {
+        Assert.Equal(7, Parse("""{"acao":"clicar_item","item":7,"motivo":"caixa de texto"}""")?.Item);
+        Assert.True(Parse("""{"acao":"clicar_item","item":"3"}""")!.IsClick);
+        Assert.Null(Parse("""{"acao":"clicar_item"}"""));
+        var screen = new Drawing.Rectangle(1920, 0, 1920, 1080);
+        var items = new List<UiItem> { new(1, "botão", "Enviar", new Drawing.Rectangle(2020, 100, 80, 30)) };
+        Assert.Equal("1 = botão “Enviar” @ 70,57\n", ComputerUse.ItemsText(items, screen, 0.5));
+        Assert.True(ComputerUse.IsRisky(Parse("""{"acao":"clicar_item","item":1}""")!, "Enviar"));
+        using var shot = new Drawing.Bitmap(1920, 1080);
+        ComputerUse.Mark(shot, items, screen);
+        Assert.NotEqual(0, shot.GetPixel(100, 115).A); // the outline is drawn where the button is
+        Assert.Equal(0, shot.GetPixel(140, 115).A); // and the button itself stays readable
+    }
+
+    [Fact]
     public void FindsTheWindowTheTaskNames()
     {
         var windows = new List<(IntPtr, string)>
@@ -97,9 +113,16 @@ public class ComputerUseTests
         using var screen = new Drawing.Bitmap(1280, 720);
         using (var g = Drawing.Graphics.FromImage(screen)) g.Clear(Drawing.Color.FromArgb(30, 30, 30));
         var before = ComputerUse.Thumbprint(screen);
-        // a clock ticking in a corner is no change
-        using (var g = Drawing.Graphics.FromImage(screen)) g.FillRectangle(Drawing.Brushes.White, 1240, 700, 30, 15);
+        // a clock's digit ticking in a corner is no change
+        using (var g = Drawing.Graphics.FromImage(screen)) g.FillRectangle(Drawing.Brushes.White, 1240, 700, 8, 12);
         Assert.True(ComputerUse.Unchanged(before, ComputerUse.Thumbprint(screen)));
+        // a few typed words are
+        using (var g = Drawing.Graphics.FromImage(screen))
+        {
+            using var font = new Drawing.Font("Segoe UI", 14);
+            g.DrawString("lista de compras", font, Drawing.Brushes.White, 300, 300);
+        }
+        Assert.False(ComputerUse.Unchanged(before, ComputerUse.Thumbprint(screen)));
         // a window opening is
         using (var g = Drawing.Graphics.FromImage(screen)) g.FillRectangle(Drawing.Brushes.White, 300, 200, 600, 300);
         Assert.False(ComputerUse.Unchanged(before, ComputerUse.Thumbprint(screen)));
