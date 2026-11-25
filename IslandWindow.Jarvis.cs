@@ -157,7 +157,7 @@ public partial class IslandWindow : IJarvisHost
         var busy = ComputerBusy;
         JarvisSteps.Visibility = Vis(busy);
         JarvisAnswer.Visibility = Vis(!busy);
-        JarvisStop.Visibility = Vis(busy);
+        JarvisStop.Visibility = Vis(busy || JarvisState is "Pensando…" or "Falando…");
         JarvisTalk.Visibility = Vis(!busy);
         JarvisType.Visibility = Vis(!busy);
         if (busy)

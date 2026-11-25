@@ -205,11 +205,21 @@ public sealed class JarvisBrain
         return prompt;
     }
 
+    CancellationTokenSource? _stop;
+
+    /// <summary>Stops the request under way: no more model calls or tools; it answers that it stopped.</summary>
+    public void Stop()
+    {
+        try { _stop?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
     /// <summary>Answers, calling tools as the model asks (up to five rounds). Never throws: problems come back as text.</summary>
     public async Task<string> RespondAsync(string text)
     {
         if (LoadKey() is not { } key) return "Falta a chave da Groq: Configurações › Jarvis.";
         if (!await _busy.WaitAsync(0)) return "Ainda estou cuidando do pedido anterior.";
+        using var stop = _stop = new CancellationTokenSource();
+        var cancel = stop.Token;
         try
         {
             var messages = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = SystemPrompt() } };
@@ -223,15 +233,16 @@ public sealed class JarvisBrain
             var lean = false;
             for (var step = 0; step < MaxSteps; step++)
             {
+                cancel.ThrowIfCancellationRequested();
                 JsonObject message;
-                try { message = await CallAsync(key, messages, tools); }
+                try { message = await CallAsync(key, messages, tools, cancel); }
                 catch (TooLargeException) when (!lean)
                 {
                     // the free plan caps tokens per request: drop the plugins' tools and the old turns
                     lean = true;
                     tools = new JsonArray([.. Tools.Select(t => t!.DeepClone())]);
                     for (var i = 0; i < past.Count; i++) messages.RemoveAt(1);
-                    message = await CallAsync(key, messages, tools);
+                    message = await CallAsync(key, messages, tools, cancel);
                 }
                 var calls = message["tool_calls"] as JsonArray;
                 if (calls is not { Count: > 0 })
@@ -251,6 +262,7 @@ public sealed class JarvisBrain
                 turn.Add((JsonObject)asked.DeepClone());
                 foreach (var call in calls.OfType<JsonObject>())
                 {
+                    cancel.ThrowIfCancellationRequested();
                     var result = await RunToolAsync(call["function"]?["name"]?.GetValue<string>() ?? "", call["function"]?["arguments"]?.GetValue<string>());
                     var done = new JsonObject
                     {
@@ -265,6 +277,7 @@ public sealed class JarvisBrain
             }
             return "Não consegui concluir isso. Tenta de novo de outro jeito.";
         }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return "Parei, como você pediu."; }
         catch (LimitException ex)
         {
             return ex.Wait is { } wait ? $"Os modelos grátis da Groq estão no limite agora. Tenta de novo em {Math.Ceiling(wait)} segundos."
@@ -282,7 +295,11 @@ public sealed class JarvisBrain
             Log.Error("JarvisBrain", ex);
             return "Algo deu errado: " + ex.Message;
         }
-        finally { _busy.Release(); }
+        finally
+        {
+            _stop = null;
+            _busy.Release();
+        }
     }
 
     static bool NeedsPlugins(string text) =>
@@ -296,7 +313,7 @@ public sealed class JarvisBrain
 
     sealed class TooLargeException : Exception;
 
-    async Task<JsonObject> CallAsync(string key, JsonArray messages, JsonArray tools)
+    async Task<JsonObject> CallAsync(string key, JsonArray messages, JsonArray tools, CancellationToken cancel)
     {
         double? wait = null;
         bool badCall = false, tooLarge = false;
@@ -310,7 +327,7 @@ public sealed class JarvisBrain
             if (model.StartsWith("openai/gpt-oss", StringComparison.Ordinal)) body["reasoning_effort"] = "low";
             using var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            using var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request, cancel);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var retry = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 10;
@@ -336,15 +353,15 @@ public sealed class JarvisBrain
                 }
             }
             response.EnsureSuccessStatusCode();
-            var json = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+            var json = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancel));
             return json?["choices"]?[0]?["message"] as JsonObject ?? throw new InvalidDataException("Resposta vazia da Groq.");
         }
         if (tooLarge && wait == null) throw new TooLargeException();
         if (badCall && wait == null) throw new InvalidDataException("O modelo se confundiu com as ferramentas. Tente pedir de outro jeito.");
         if (wait is <= 12)
         {
-            await Task.Delay(TimeSpan.FromSeconds(wait.Value));
-            return await CallAsync(key, messages, tools);
+            await Task.Delay(TimeSpan.FromSeconds(wait.Value), cancel);
+            return await CallAsync(key, messages, tools, cancel);
         }
         throw new LimitException(wait);
     }
@@ -357,7 +374,7 @@ public sealed class JarvisBrain
 
     /// <summary>A model that sees: <paramref name="jpeg"/> plus the text, answered as JSON (computer use). Null without a
     /// key, at the limit or offline.</summary>
-    public static async Task<JsonObject?> VisionJsonAsync(string system, string text, byte[] jpeg, int tries = 0)
+    public static async Task<JsonObject?> VisionJsonAsync(string system, string text, byte[] jpeg, CancellationToken cancel = default, int tries = 0)
     {
         if (LoadKey() is not { } key) return null;
         VisionLimitWait = null;
@@ -383,14 +400,14 @@ public sealed class JarvisBrain
                 };
                 using var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-                using var response = await Http.SendAsync(request);
+                using var response = await Http.SendAsync(request, cancel);
                 if (response.StatusCode == HttpStatusCode.NotFound) continue;
                 // the free plan's per-minute limit: wait it out once if it's short
                 if (response.StatusCode == HttpStatusCode.TooManyRequests && tries < 3
                     && (response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 8) is var wait and <= 30)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(2, wait)));
-                    return await VisionJsonAsync(system, text, jpeg, tries + 1);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(2, wait)), cancel);
+                    return await VisionJsonAsync(system, text, jpeg, cancel, tries + 1);
                 }
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                     VisionLimitWait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromMinutes(1);

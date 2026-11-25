@@ -47,6 +47,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
   certo, numera os botões e caixas da janela (pelo próprio Windows) e escolhe pelo número. Travas: você aprova antes (cada ação ou só
   as importantes, como digitar, Enter, comprar, enviar, excluir), **Esc para tudo na hora**, a ilha mostra "Jarvis no
   controle", ele **nunca digita em campo de senha** e para em 20 passos ou 5 minutos. Desligado até você ligar.
+- **Parar** na ilha interrompe tudo na hora: o uso do computador, o pedido que ainda está pensando e a voz.
+- **Escolha do microfone** que o Jarvis e o ditado escutam (Configurações → Jarvis).
 - **Sem internet também:** IA (Qwen 2.5), voz (Piper) e microfone (whisper.cpp) rodando no próprio PC, opcionais.
 
 **Para quem programa com IA**
@@ -257,7 +259,7 @@ celular) ou você quiser um sem limites, crie o seu em **Configurações → Cel
 Detalhes técnicos e o jeito manual: [relay/README.md](relay/README.md).
 
 **Arquivos, fotos, vídeos e textos entre o PC e o celular** (até 30 MB por arquivo, vídeo até 60 MB, até 20 de uma
-vez, texto até 100 mil caracteres):
+vez, texto até 100 mil caracteres; pela internet, até 60 MB por envio):
 - PC → celular: a aba **Enviar e receber** das Configurações (ou menu da bandeja → **Enviar pro celular…**), no estilo do LocalSend, tem **Arquivo**,
   **Pasta**, **Texto** e **Colar**, e as listas **Recebidos** e **Enviados**. Também dá para arrastar arquivos ou um texto até
   a ilha e soltar no lado **Mandar pro celular**, ou usar o botão de celular num item da bandeja. O celular

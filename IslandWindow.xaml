@@ -1044,7 +1044,7 @@
                                             <Button x:Name="JarvisStop" Style="{StaticResource Chip}" Margin="0,0,8,0" Click="JarvisStop_Click" Visibility="Collapsed">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE71A;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                    <TextBlock Text="Parar (Esc)" FontSize="12.5" />
+                                                    <TextBlock Text="Parar" FontSize="12.5" />
                                                 </StackPanel>
                                             </Button>
                                             <Button x:Name="JarvisTalk" Style="{StaticResource Chip}" Margin="0,0,8,0" Click="JarvisTalk_Click">

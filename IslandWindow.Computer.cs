@@ -58,7 +58,15 @@ public partial class IslandWindow
     void JarvisStop_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
+        StopJarvis();
+    }
+
+    /// <summary>"Parar": the screen work, the request still thinking and the voice, all at once.</summary>
+    public void StopJarvis()
+    {
         StopComputer();
+        if (JarvisBrain.HasKey) Brain.Stop();
+        Jarvis.StopSpeaking();
     }
 
     /// <summary>--try-computer: each step's picture, answer and approval card go here, and the card is allowed by itself.</summary>
@@ -78,6 +86,10 @@ public partial class IslandWindow
         _computerStop ??= why;
         _computer.Cancel();
         _computerAsk?.Finish(ComputerAnswer.Stop);
+        // the model doesn't get to start another round on its own
+        if (JarvisBrain.HasKey) Brain.Stop();
+        _computerNow = "Parando…";
+        if (JarvisOnScreen) UpdateJarvisUi();
     }
 
     async Task<string> IJarvisHost.UseComputerAsync(string task)
@@ -145,7 +157,7 @@ public partial class IslandWindow
                 var json = await JarvisBrain.VisionJsonAsync(ComputerUse.SystemPrompt,
                     ComputerUse.StepText(task, step, done, lines, scale, (int)(shot.Width * scale), (int)(shot.Height * scale),
                         ComputerUse.ItemsText(items, screen, scale)),
-                    jpeg);
+                    jpeg, cts.Token);
                 TestLog(step, "modelo: " + (json?.ToJsonString() ?? "(nada)"), jpeg);
                 if (cts.IsCancellationRequested) return Stopped() + Summary();
                 if (json == null)
@@ -269,14 +281,15 @@ public partial class IslandWindow
     }
 
     void ComputerPill(string text) =>
-        ShowInfo("\uE7F4", text, "Esc · Parar", glyphColor: JarvisColor, seconds: 120, action: () => StopComputer());
+        ShowInfo("\uE7F4", text, "Esc · Parar", glyphColor: JarvisColor, seconds: 120, action: StopJarvis);
 
     /// <summary>Esc, pressed anywhere, stops at once (polled: it works whatever app has the focus).</summary>
     async Task WatchEscAsync(CancellationTokenSource cts)
     {
+        Native.WasKeyPressed(0x1B); // forget an Esc from before
         while (!cts.IsCancellationRequested)
         {
-            if (Native.IsKeyDown(0x1B))
+            if (Native.WasKeyPressed(0x1B))
             {
                 StopComputer("O usuário apertou Esc e parou.");
                 return;

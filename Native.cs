@@ -49,6 +49,9 @@ static class Native
 
     public static bool IsKeyDown(uint virtualKey) => (GetAsyncKeyState((int)virtualKey) & 0x8000) != 0;
 
+    /// <summary>Down now, or pressed since the last time anyone asked (a quick tap between two polls).</summary>
+    public static bool WasKeyPressed(uint virtualKey) => (GetAsyncKeyState((int)virtualKey) & 0x8001) != 0;
+
     public const long WS_EX_TRANSPARENT = 0x20;
 
     [DllImport("shell32.dll")]
