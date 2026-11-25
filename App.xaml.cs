@@ -16,6 +16,7 @@ public partial class App : Application
     TrayIcon _tray = null!;
 
     public string? SnapshotFolder { get; init; }
+    public string? RecordFolder { get; init; }
     public string? PerfFolder { get; init; }
     public string? ComputerTask { get; init; }
     public string? ComputerFolder { get; init; }
@@ -34,7 +35,18 @@ public partial class App : Application
         // the GPU driver's D3D9 stack (hundreds of MB on some Intel drivers) for a tiny overlay.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
-        if (SnapshotFolder != null || PerfFolder != null) PhoneLink.DemoMode = true;
+        if (SnapshotFolder != null || PerfFolder != null || RecordFolder != null) PhoneLink.DemoMode = true;
+
+        if (RecordFolder != null)
+        {
+            Settings = new IslandSettings { ReadOnly = true, DiscreetIdle = false };
+            _window = new IslandWindow(Settings) { SnapshotMode = true };
+            _window.Show();
+            await _window.RunRecordingAsync(RecordFolder);
+            try { File.Delete(PhoneLink.SecretFile); } catch { }
+            Shutdown();
+            return;
+        }
 
         if (SnapshotFolder != null)
         {

@@ -18,6 +18,13 @@ public static class Program
             return devApp.Run();
         }
 
+        if (args.Length > 1 && args[0] == "--record")
+        {
+            var recordApp = new App { RecordFolder = args[1] };
+            recordApp.InitializeComponent();
+            return recordApp.Run();
+        }
+
         if (args.Length > 2 && args[0] == "--try-computer")
         {
             var tryApp = new App { ComputerTask = args[1], ComputerFolder = args[2] };
