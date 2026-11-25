@@ -11,6 +11,11 @@ atrapalhar: os cliques passam por ela.
   <img src="docs/demo.gif" width="640" alt="Animação mostrando como a Dynamic Island funciona">
 </p>
 
+<p align="center">
+  ▶ <a href="docs/video/dynamic-island.mp4">Vídeo completo (50 s, com som)</a> ·
+  <a href="docs/video/dynamic-island-vertical.mp4">versão vertical</a>
+</p>
+
 ## Tudo o que ela faz
 
 Grátis, código aberto (MIT), em português, sem conta e sem anúncio. Um executável, instala sem administrador e se

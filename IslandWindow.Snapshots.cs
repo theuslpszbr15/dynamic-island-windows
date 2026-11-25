@@ -17,21 +17,33 @@ public partial class IslandWindow
         PetView.Still = true;
         PetView.SetDefaultOutfit(PetOutfit.None);
 
+        // DI_SNAPSHOT_ALPHA=1: also the island alone on transparency (alpha\<name>.png), for videos
+        var alpha = Environment.GetEnvironmentVariable("DI_SNAPSHOT_ALPHA") == "1";
+        if (alpha) Directory.CreateDirectory(System.IO.Path.Combine(folder, "alpha"));
+
         async Task Shot(string name)
         {
             await Task.Delay(1100);
             const double scale = 2;
             var bounds = new Rect(0, 0, Root.ActualWidth, Root.ActualHeight);
-            var visual = new DrawingVisual();
-            using (var dc = visual.RenderOpen())
-                dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x1F, 0x4E, 0x8C), Color.FromRgb(0x6A, 0x8F, 0xC9), 90), null, bounds);
-            var bitmap = new RenderTargetBitmap((int)(bounds.Width * scale), (int)(bounds.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
-            bitmap.Render(visual);
-            bitmap.Render(Root);
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            await using var stream = File.Create(System.IO.Path.Combine(folder, name + ".png"));
-            encoder.Save(stream);
+            async Task Save(string path, bool backdrop)
+            {
+                var bitmap = new RenderTargetBitmap((int)(bounds.Width * scale), (int)(bounds.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+                if (backdrop)
+                {
+                    var visual = new DrawingVisual();
+                    using (var dc = visual.RenderOpen())
+                        dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x1F, 0x4E, 0x8C), Color.FromRgb(0x6A, 0x8F, 0xC9), 90), null, bounds);
+                    bitmap.Render(visual);
+                }
+                bitmap.Render(Root);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                await using var stream = File.Create(path);
+                encoder.Save(stream);
+            }
+            await Save(System.IO.Path.Combine(folder, name + ".png"), backdrop: true);
+            if (alpha) await Save(System.IO.Path.Combine(folder, "alpha", name + ".png"), backdrop: false);
         }
 
         await Shot("01-compact-clock");
@@ -149,6 +161,26 @@ public partial class IslandWindow
         _settings.Theme = "ocean";
         ApplyShape();
         await Shot("23-theme-oceano-dance");
+
+        // every solid colour and the Aurora rim, the same song open (the promo film's theme montage)
+        foreach (var (id, _, _) in IslandThemes.All)
+        {
+            if (id is IslandThemes.Glass or IslandThemes.Custom) continue;
+            _settings.Theme = id;
+            ApplyShape();
+            _transient = Transient.None;
+            SetExpanded(true, PageMedia);
+            await Shot("70-theme-" + id);
+            SetExpanded(false);
+        }
+        _settings.Theme = IslandThemes.Default;
+        _settings.AuroraLook = true;
+        ApplyShape();
+        SetExpanded(true, PageMedia);
+        await Shot("70-aurora");
+        SetExpanded(false);
+        _settings.AuroraLook = false;
+        ApplyShape();
 
         _settings.Theme = IslandThemes.Default;
         _mediaSnap = null;

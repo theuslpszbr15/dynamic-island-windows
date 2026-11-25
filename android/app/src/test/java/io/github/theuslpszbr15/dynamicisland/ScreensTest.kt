@@ -34,9 +34,17 @@ class ScreensTest {
         pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 2,
     ))
 
-    @Test fun history() = shot("08-historico", LinkUi(
-        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 3,
-    ))
+    @Test fun history() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val now = System.currentTimeMillis()
+        History.add(context, TransferRecord("r1", now - 3_600_000, sent = false, title = "relatorio.pdf", bytes = 840_000, count = 1,
+            status = "Recebido", uris = listOf("content://media/external/downloads/1"), mimes = listOf("application/pdf")))
+        History.add(context, TransferRecord("r2", now - 600_000, sent = false, title = "print da tela.png", bytes = 1_900_000, count = 1,
+            status = "Copiado", uris = listOf("content://io.github.theuslpszbr15.dynamicisland.updates/received/r2/print.png"), mimes = listOf("image/png")))
+        History.add(context, TransferRecord("r3", now - 60_000, sent = false, title = "Texto", bytes = 60, count = 1,
+            status = "Copiado", text = "Senha do Wi-Fi da sala: visitas2026"))
+        shot("08-historico", LinkUi(pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 3))
+    }
 
     @Test fun pair() = shot("01-parear", LinkUi())
 
