@@ -13,7 +13,9 @@ atrapalhar: os cliques passam por ela.
 
 <p align="center">
   ▶ <a href="docs/video/dynamic-island.mp4">Vídeo completo (50 s, com som)</a> ·
-  <a href="docs/video/dynamic-island-vertical.mp4">versão vertical</a>
+  <a href="docs/video/dynamic-island-vertical.mp4">versão vertical</a> ·
+  <a href="docs/video/dynamic-island-motion.mp4">teaser em 20 s</a>
+  (<a href="docs/video/dynamic-island-motion-vertical.mp4">vertical</a>)
 </p>
 
 ## Tudo o que ela faz
