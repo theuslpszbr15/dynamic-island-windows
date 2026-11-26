@@ -35,6 +35,7 @@ public partial class IslandWindow : Window
     readonly AppVolumeService _spotifyVolume;
     readonly BatteryService _battery;
     readonly AgentHub _hub;
+    SendPipe? _sendPipe;
     readonly NotificationService _notifications;
     readonly SystemMonitor _monitor = new();
     PrivacyState _privacy = PrivacyState.None;
@@ -176,6 +177,13 @@ public partial class IslandWindow : Window
         _spotifyVolume.SetWatching(false);
         _battery.Start();
         _hub.Start();
+        if (!SnapshotMode)
+        {
+            _sendPipe = new SendPipe(Dispatcher);
+            _sendPipe.Files += paths => SendToPhone(paths);
+            _sendPipe.Start();
+            LoadJarvisConversation();
+        }
         StartExtras();
         ApplyPlanUsage();
         ApplyGitHub();
@@ -254,6 +262,7 @@ public partial class IslandWindow : Window
         StopComputer();
         StopPlugins();
         _hub.Dispose();
+        _sendPipe?.Dispose();
         _media.Dispose();
         _volume.Dispose();
         _spotifyVolume.Dispose();

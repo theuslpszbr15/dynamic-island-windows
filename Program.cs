@@ -11,6 +11,10 @@ public static class Program
         if (args.Length > 0 && args[0] is "hook" or "agent")
             return AgentCli.Run(args);
 
+        // DynamicIsland.exe send <files>: the running island offers them to the paired phone
+        if (args.Length > 1 && args[0] == "send")
+            return SendPipe.Run(args[1..]);
+
         if (args.Length > 1 && args[0] == "--snapshot")
         {
             var devApp = new App { SnapshotFolder = args[1] };

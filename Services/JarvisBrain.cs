@@ -29,6 +29,12 @@ public interface IJarvisHost
     Task<string?> CallPluginAsync(string name, JsonObject arguments);
     /// <summary>Mouse and keyboard on the person's screen for <paramref name="task"/>, under their watch; what happened.</summary>
     Task<string> UseComputerAsync(string task);
+    /// <summary>Takes back a task <see cref="AddTask"/> added.</summary>
+    void RemoveTask(string text);
+    /// <summary>Brings an open window (by title or app name) to the front; what happened.</summary>
+    Task<string> FocusWindowAsync(string name);
+    /// <summary>A shortcut (desfazer = Ctrl+Z, salvar = Ctrl+S…) in the window the person was using; what happened.</summary>
+    Task<string> ShortcutAsync(string action);
 }
 
 /// <summary>
@@ -42,7 +48,7 @@ public sealed class JarvisBrain
     const string WhisperUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
     // each model has its own free limit; on 429 the next one answers
     static readonly string[] Models = ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"];
-    const int MaxSteps = 14, TurnsSent = 4, TurnsKept = 8, MaxFacts = 60, ToolResultChars = 5000;
+    const int MaxSteps = 14, TurnsSent = 6, TurnsKept = 12, MaxFacts = 60, ToolResultChars = 5000, MaxUndo = 20;
 
     static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     /// <summary>Tests keep the memory and the notes here instead of the settings folder.</summary>
@@ -62,6 +68,16 @@ public sealed class JarvisBrain
     List<string> _facts = [];
     List<JsonObject> _history = [];
     readonly SemaphoreSlim _busy = new(1, 1);
+
+    /// <summary>Something Jarvis did that it can take back, newest last.</summary>
+    sealed record Undoable(string What, Func<string> Undo);
+    readonly List<Undoable> _undo = [];
+
+    void Did(string what, Func<string> undo)
+    {
+        _undo.Add(new Undoable(what, undo));
+        if (_undo.Count > MaxUndo) _undo.RemoveAt(0);
+    }
 
     public JarvisBrain(IJarvisHost host, Func<string> name)
     {
@@ -179,6 +195,14 @@ public sealed class JarvisBrain
         SaveMemory();
     }
 
+    /// <summary>A fresh conversation: the past turns go, the permanent memory stays.</summary>
+    public void ClearConversation()
+    {
+        _history = [];
+        _undo.Clear();
+        SaveMemory();
+    }
+
     // ───────────────────────── answering ─────────────────────────
 
     string SystemPrompt()
@@ -191,6 +215,12 @@ public sealed class JarvisBrain
                      "Para informações atuais use buscar_web ou clima. Se pedirem um resumo do dia, combine hora_data, clima e ler_notas. " +
                      "Para escrever um texto no Bloco de Notas use escrever_no_bloco_de_notas; anotar guarda uma nota rápida na memória. " +
                      "Nunca revele chaves ou senhas. Você só executa as ações das ferramentas disponíveis. " +
+                     "Não peça desculpas e não diga que não consegue antes de tentar as ferramentas: se algo falhar, diga em uma frase o que houve " +
+                     "e o que você pode fazer em seguida. " +
+                     "Os textos de escrever_no_bloco_de_notas ficam salvos (lista abaixo): para voltar a um texto anterior, abra o arquivo com " +
+                     "abrir_arquivo; para ler o conteúdo, ler_arquivo. Para mudar um texto, escreva a versão nova. " +
+                     "Para desfazer o que você mesmo fez (texto escrito, pasta criada, tarefa, lembrança, anotação) chame desfazer. " +
+                     "Ctrl+Z, Ctrl+S e outros atalhos dentro de um programa: atalho. Trazer uma janela aberta para frente: trazer_janela. " +
                      "Quando o usuário pedir para você lembrar algo, mudar como o chama, ou adotar um comportamento daqui pra frente, chame a ferramenta lembrar. " +
                      "Scripts só com executar_script (o usuário aprova antes). " +
                      "Quando perguntarem sobre algo que está na tela (um erro, uma mensagem, uma página), chame ver_tela antes de responder. " +
@@ -202,6 +232,13 @@ public sealed class JarvisBrain
         if (_facts.Count > 0)
             prompt += "\n\nMEMÓRIA PERMANENTE (preferências e fatos que o usuário pediu; siga SEMPRE, inclusive como chamar o usuário):\n" +
                       string.Join("\n", _facts.Select(f => "- " + f));
+        var written = WrittenTexts();
+        if (written.Count > 0)
+            prompt += "\n\nTEXTOS QUE VOCÊ ESCREVEU (mais novo primeiro):\n" +
+                      string.Join("\n", written.Select(f => $"- {f.LastWriteTime:dd/MM HH:mm} {f.FullName}"));
+        if (_undo.Count > 0)
+            prompt += "\n\nO QUE VOCÊ FEZ HÁ POUCO E DÁ PARA DESFAZER (mais novo primeiro):\n" +
+                      string.Join("\n", _undo.AsEnumerable().Reverse().Select(u => "- " + u.What));
         return prompt;
     }
 
@@ -358,7 +395,7 @@ public sealed class JarvisBrain
         }
         if (tooLarge && wait == null) throw new TooLargeException();
         if (badCall && wait == null) throw new InvalidDataException("O modelo se confundiu com as ferramentas. Tente pedir de outro jeito.");
-        if (wait is <= 12)
+        if (wait is <= 25)
         {
             await Task.Delay(TimeSpan.FromSeconds(wait.Value), cancel);
             return await CallAsync(key, messages, tools, cancel);
@@ -542,6 +579,14 @@ public sealed class JarvisBrain
         Tool("ler_notas", "Lê as anotações salvas."),
         Tool("escrever_no_bloco_de_notas", "Escreve um texto num arquivo novo e abre no Bloco de Notas, para o usuário ver ou editar.",
             new() { ["texto"] = Str(), ["titulo"] = Str("Nome curto para o arquivo") }, "texto"),
+        Tool("abrir_arquivo", "Abre um arquivo (ou pasta) que já existe dentro da pasta do usuário: textos no Bloco de Notas, o resto no programa padrão.",
+            new() { ["caminho"] = Str() }, "caminho"),
+        Tool("desfazer", "Desfaz as últimas ações que você mesmo fez: textos escritos (vão para a Lixeira), pastas criadas, tarefas, lembranças e anotações.",
+            new() { ["quantas"] = new JsonObject { ["type"] = "number", ["description"] = "Quantas ações, da mais nova para a mais velha (padrão 1; 99 = todas)." } }),
+        Tool("atalho", "Aperta um atalho de teclado na janela que o usuário estava usando (ex.: desfazer = Ctrl+Z dentro do programa).",
+            new() { ["acao"] = Enum("desfazer", "refazer", "salvar", "selecionar_tudo", "copiar", "colar", "localizar", "nova_aba", "fechar_aba", "atualizar") }, "acao"),
+        Tool("trazer_janela", "Traz para frente uma janela já aberta, pelo título ou nome do programa (ex.: Bloco de Notas, Chrome).",
+            new() { ["nome"] = Str() }, "nome"),
         Tool("criar_pasta", "Cria uma pasta na área de trabalho.", new() { ["nome"] = Str() }, "nome"),
         Tool("listar_pasta", "Lista arquivos de uma pasta dentro do usuário (ex: Desktop, Downloads).", new() { ["caminho"] = Str() }),
         Tool("ler_arquivo", "Lê um arquivo de texto dentro da pasta do usuário.", new() { ["caminho"] = Str() }, "caminho"),
@@ -589,6 +634,10 @@ public sealed class JarvisBrain
                 "anotar" => Note(S("texto")),
                 "ler_notas" => ReadNotes(),
                 "escrever_no_bloco_de_notas" => WriteInNotepad(S("texto"), S("titulo")),
+                "abrir_arquivo" => OpenFile(S("caminho")),
+                "desfazer" => Undo((int)Math.Round(N("quantas"))),
+                "atalho" => await _host.ShortcutAsync(S("acao")),
+                "trazer_janela" => await _host.FocusWindowAsync(S("nome")),
                 "criar_pasta" => CreateFolder(S("nome")),
                 "listar_pasta" => ListFolder(S("caminho")),
                 "ler_arquivo" => ReadFile(S("caminho")),
@@ -601,7 +650,7 @@ public sealed class JarvisBrain
                 "clima" => await Weather(S("cidade")),
                 "lembrete" => Reminder(N("minutos"), S("texto")),
                 "timer" => OnHost(() => _host.StartTimer((int)Math.Clamp(Math.Round(N("minutos")), 1, 600)), $"Timer de {Math.Clamp(Math.Round(N("minutos")), 1, 600)} minuto(s) ligado."),
-                "adicionar_tarefa" => OnHost(() => _host.AddTask(S("texto")), "Tarefa adicionada."),
+                "adicionar_tarefa" => AddTask(S("texto")),
                 "lembrar" => Remember(S("fato")),
                 "esquecer" => Forget(S("trecho")),
                 "executar_script" => await RunScriptAsync(S("codigo"), S("descricao")),
@@ -643,11 +692,90 @@ public sealed class JarvisBrain
         return $"Abri {app.Name}.";
     }
 
-    static string Note(string text)
+    string Note(string text)
     {
         Directory.CreateDirectory(IslandSettings.Folder);
-        File.AppendAllText(NotesFile, $"- [{DateTime.Now:dd/MM/yyyy HH:mm}] {text.Trim()}\n");
+        var line = $"- [{DateTime.Now:dd/MM/yyyy HH:mm}] {Regex.Replace(text, @"\s+", " ").Trim()}";
+        File.AppendAllText(NotesFile, line + "\n");
+        Did($"anotou \"{Short(text)}\"", () =>
+        {
+            var lines = File.Exists(NotesFile) ? File.ReadAllLines(NotesFile).ToList() : [];
+            if (lines.LastIndexOf(line) is var at and >= 0) lines.RemoveAt(at);
+            File.WriteAllLines(NotesFile, lines);
+            return $"Apaguei a anotação \"{Short(text)}\".";
+        });
         return "Anotado.";
+    }
+
+    static string Short(string text)
+    {
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        return text.Length > 50 ? text[..49] + "…" : text;
+    }
+
+    string AddTask(string text)
+    {
+        OnHost(() => _host.AddTask(text), "");
+        Did($"adicionou a tarefa \"{Short(text)}\"", () => OnHost(() => _host.RemoveTask(text), $"Tirei a tarefa \"{Short(text)}\"."));
+        return "Tarefa adicionada.";
+    }
+
+    /// <summary>Takes back the last <paramref name="count"/> things Jarvis did, newest first.</summary>
+    string Undo(int count)
+    {
+        if (_undo.Count == 0)
+            return "Não há nenhuma ação sua para desfazer (sites, apps e scripts não se desfazem). Para o Ctrl+Z de um programa, use atalho.";
+        var done = new List<string>();
+        for (var i = 0; i < Math.Clamp(count, 1, MaxUndo) && _undo.Count > 0; i++)
+        {
+            var last = _undo[^1];
+            _undo.RemoveAt(_undo.Count - 1);
+            try { done.Add(last.Undo()); }
+            catch (Exception ex) { done.Add($"Não deu para desfazer \"{last.What}\": {ex.Message}"); }
+        }
+        return string.Join("\n", done);
+    }
+
+    static readonly HashSet<string> OpenableFiles = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mp3", ".wav", ".docx", ".xlsx", ".pptx"];
+
+    static string OpenFile(string path)
+    {
+        var full = InsideHome(path);
+        if (Directory.Exists(full))
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { full }, UseShellExecute = false });
+            return $"Abri a pasta {full}";
+        }
+        if (!File.Exists(full)) return $"Não existe o arquivo {full}. Veja os nomes com listar_pasta.";
+        var extension = Path.GetExtension(full).ToLowerInvariant();
+        if (TextFiles.Contains(extension))
+            Process.Start(new ProcessStartInfo("notepad.exe") { ArgumentList = { full }, UseShellExecute = false });
+        // never a program or a script: only documents, pictures and media
+        else if (OpenableFiles.Contains(extension)) Process.Start(new ProcessStartInfo(full) { UseShellExecute = true });
+        else return "Esse tipo de arquivo eu não abro (só textos, documentos, imagens e mídia).";
+        return $"Abri {full}";
+    }
+
+    static string WrittenFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Jarvis");
+
+    static List<FileInfo> WrittenTexts()
+    {
+        try
+        {
+            return Directory.Exists(WrittenFolder)
+                ? new DirectoryInfo(WrittenFolder).EnumerateFiles("*.txt").OrderByDescending(f => f.LastWriteTimeUtc).Take(8).ToList()
+                : [];
+        }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
+    }
+
+    static string Recycle(string path)
+    {
+        if (!File.Exists(path)) return $"{Path.GetFileName(path)} já não existe.";
+        Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(path, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+            Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        return $"Mandei {Path.GetFileName(path)} para a Lixeira (se ainda está aberto no Bloco de Notas, é só fechar).";
     }
 
     static string ReadNotes()
@@ -656,9 +784,9 @@ public sealed class JarvisBrain
         return notes.Length == 0 ? "Nenhuma anotação." : notes.Length > 4000 ? notes[^4000..] : notes;
     }
 
-    static string WriteInNotepad(string text, string title)
+    string WriteInNotepad(string text, string title)
     {
-        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Jarvis");
+        var folder = WrittenFolder;
         Directory.CreateDirectory(folder);
         var name = Regex.Replace(title, @"[<>:""/\\|?*\x00-\x1f]", "").Trim();
         if (name.Length == 0) name = $"Nota {DateTime.Now:yyyy-MM-dd HH'h'mm}";
@@ -667,16 +795,26 @@ public sealed class JarvisBrain
         for (var i = 2; File.Exists(file); i++) file = Path.Combine(folder, $"{name} ({i}).txt");
         File.WriteAllText(file, text.Replace("\r\n", "\n").Replace("\n", "\r\n"), new UTF8Encoding(true));
         Process.Start(new ProcessStartInfo("notepad.exe") { ArgumentList = { file }, UseShellExecute = false });
+        Did($"escreveu {file}", () => Recycle(file));
         return $"Escrevi no Bloco de Notas: {file}";
     }
 
-    static string CreateFolder(string name)
+    string CreateFolder(string name)
     {
         var clean = Regex.Replace(name, @"[<>:""/\\|?*\x00-\x1f]", "").Trim();
         if (clean.Length == 0) clean = "Nova pasta";
         if (clean.Length > 80) clean = clean[..80];
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), clean);
+        if (Directory.Exists(path)) return $"A pasta já existia: {path}";
         Directory.CreateDirectory(path);
+        Did($"criou a pasta {path}", () =>
+        {
+            if (!Directory.Exists(path)) return $"A pasta {clean} já não existe.";
+            // something was put in it since: that stays
+            if (Directory.EnumerateFileSystemEntries(path).Any()) return $"A pasta {clean} já tem arquivos; deixei como está.";
+            Directory.Delete(path);
+            return $"Apaguei a pasta {clean}.";
+        });
         return $"Pasta criada: {path}";
     }
 
@@ -790,6 +928,12 @@ public sealed class JarvisBrain
             _facts.Add(fact);
             if (_facts.Count > MaxFacts) _facts.RemoveRange(0, _facts.Count - MaxFacts);
             SaveMemory();
+            Did($"guardou na memória \"{Short(fact)}\"", () =>
+            {
+                _facts.Remove(fact);
+                SaveMemory();
+                return $"Esqueci \"{Short(fact)}\".";
+            });
         }
         return $"Guardado para sempre: {fact}";
     }

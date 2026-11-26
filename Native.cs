@@ -141,6 +141,12 @@ static class Native
 
     public static bool IsWindowVisibleNow(IntPtr hwnd) => IsWindowVisible(hwnd);
 
+    public static int ProcessOf(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return (int)pid;
+    }
+
     /// <summary>Visible top-level windows that have a title, front to back.</summary>
     public static List<(IntPtr Hwnd, string Title)> TitledWindows()
     {

@@ -124,6 +124,9 @@ public class JarvisTests
         public Task<System.Text.Json.Nodes.JsonArray> PluginToolsAsync() => Task.FromResult(new System.Text.Json.Nodes.JsonArray());
         public Task<string?> CallPluginAsync(string name, System.Text.Json.Nodes.JsonObject arguments) => Task.FromResult<string?>(null);
         public Task<string> UseComputerAsync(string task) { Done.Add("computador " + task); return Task.FromResult("O usuário parou."); }
+        public void RemoveTask(string text) => Done.Add("sem tarefa " + text);
+        public Task<string> FocusWindowAsync(string name) { Done.Add("janela " + name); return Task.FromResult("Trouxe para frente."); }
+        public Task<string> ShortcutAsync(string action) { Done.Add("atalho " + action); return Task.FromResult("Apertei."); }
     }
 
     /// <summary>JARVIS_E2E_GROQ=1 with a Groq key saved (or a Project.Jarvis to import it from): the brain calls its
@@ -141,16 +144,34 @@ public class JarvisTests
         if (!JarvisBrain.HasKey && JarvisBrain.ProjectFolder() is { } project) brain.ImportProject(project);
         Assert.True(JarvisBrain.HasKey, "sem chave da Groq");
 
+        // the free plan's per-minute cap is not what this test is about
+        async Task<string> Ask(string text)
+        {
+            for (var i = 0; ; i++)
+            {
+                var answer = await brain.RespondAsync(text);
+                if (!answer.Contains("no limite") || i == 3) return answer;
+                await Task.Delay(TimeSpan.FromSeconds(30));
+            }
+        }
+
         try
         {
-            var reply = await brain.RespondAsync("Quanto de memória RAM o meu PC está usando agora? Use a ferramenta.");
+            var reply = await Ask("Quanto de memória RAM o meu PC está usando agora? Use a ferramenta.");
             Assert.True(reply.Contains('%') || reply.Contains("GB"), "respondeu: " + reply);
-            reply = await brain.RespondAsync("Põe um timer de 3 minutos.");
+            reply = await Ask("Põe um timer de 3 minutos.");
             Assert.True(host.Done.Contains("timer 3"), "respondeu: " + reply);
             // asked again: it must act again, not just repeat the earlier answer
-            reply = await brain.RespondAsync("Põe outro timer de 3 minutos.");
+            reply = await Ask("Põe outro timer de 3 minutos.");
             Assert.True(host.Done.Count(d => d == "timer 3") == 2, "respondeu: " + reply);
             Assert.DoesNotContain(host.Done, d => d.StartsWith("script"));
+            // it takes back what it did, and Ctrl+Z goes to the program
+            reply = await Ask("Adiciona a tarefa comprar pão.");
+            Assert.Contains(host.Done, d => d.StartsWith("tarefa "));
+            reply = await Ask("Desfaz isso.");
+            Assert.True(host.Done.Any(d => d.StartsWith("sem tarefa ")), "respondeu: " + reply);
+            reply = await Ask("Dá um ctrl z.");
+            Assert.True(host.Done.Contains("atalho desfazer"), "respondeu: " + reply);
         }
         finally { JarvisBrain.MemoryOverride = null; }
     }

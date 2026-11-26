@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DynamicIsland.Services;
@@ -11,7 +12,7 @@ namespace DynamicIsland;
 public partial class IslandWindow : IJarvisHost
 {
     static readonly Color JarvisColor = Color.FromRgb(0x83, 0xD4, 0xB4);
-    const int JarvisHistoryMax = 20;
+    const int JarvisHistoryMax = 60;
     static readonly TimeSpan TapLimit = TimeSpan.FromMilliseconds(400), ListenLimit = TimeSpan.FromSeconds(30);
 
     /// <summary>The conversation, oldest first (true = said by the person).</summary>
@@ -67,6 +68,63 @@ public partial class IslandWindow : IJarvisHost
         }
     }
 
+    void IJarvisHost.RemoveTask(string text)
+    {
+        var trimmed = text.Trim();
+        var at = _settings.Tasks.FindLastIndex(t => t.Text == trimmed);
+        if (at < 0) return;
+        _settings.Tasks.RemoveAt(at);
+        _settings.Save();
+        UpdateTasksUi();
+    }
+
+    async Task<string> IJarvisHost.FocusWindowAsync(string name)
+    {
+        name = name.Trim();
+        if (name.Length == 0) return "Diga qual janela.";
+        var own = Environment.ProcessId;
+        var windows = Native.TitledWindows().Where(w => Native.ProcessOf(w.Hwnd) != own).ToList();
+        var compare = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+        const System.Globalization.CompareOptions Loose = System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace;
+        var found = windows.FirstOrDefault(w => compare.IndexOf(w.Title, name, Loose) >= 0);
+        // "bloco de notas" → notepad.exe, whatever the window is called
+        if (found.Hwnd == IntPtr.Zero && Jarvis.FindApp(name) is { } app && Path.GetFileNameWithoutExtension(app.Target) is { Length: > 0 } exe)
+            found = windows.FirstOrDefault(w =>
+            {
+                try { return Process.GetProcessById(Native.ProcessOf(w.Hwnd)).ProcessName.Equals(exe, StringComparison.OrdinalIgnoreCase); }
+                catch (ArgumentException) { return false; }
+            });
+        if (found.Hwnd == IntPtr.Zero) return $"Não há nenhuma janela aberta de \"{name}\". Dá para abrir com abrir_app.";
+        _jarvisWindow?.Close();
+        await Task.Delay(80);
+        var front = Native.BringForward(found.Hwnd);
+        _jarvisTarget = found.Hwnd;
+        return front ? $"Trouxe \"{found.Title}\" para frente." : $"O Windows não deixou trazer \"{found.Title}\" para frente; ela está piscando na barra de tarefas.";
+    }
+
+    static readonly Dictionary<string, (byte Modifier, byte Key, string Name)> JarvisShortcuts = new()
+    {
+        ["desfazer"] = (0x11, 0x5A, "Ctrl+Z"), ["refazer"] = (0x11, 0x59, "Ctrl+Y"), ["salvar"] = (0x11, 0x53, "Ctrl+S"),
+        ["selecionar_tudo"] = (0x11, 0x41, "Ctrl+A"), ["copiar"] = (0x11, 0x43, "Ctrl+C"), ["colar"] = (0x11, 0x56, "Ctrl+V"),
+        ["localizar"] = (0x11, 0x46, "Ctrl+F"), ["nova_aba"] = (0x11, 0x54, "Ctrl+T"), ["fechar_aba"] = (0x11, 0x57, "Ctrl+W"),
+        ["atualizar"] = (0, 0x74, "F5"),
+    };
+
+    async Task<string> IJarvisHost.ShortcutAsync(string action)
+    {
+        if (!JarvisShortcuts.TryGetValue(action, out var shortcut)) return "Atalho desconhecido.";
+        var target = _jarvisTarget;
+        if (target == IntPtr.Zero || !Native.IsWindowVisibleNow(target)) return "Não sei em qual janela: use trazer_janela antes.";
+        var title = Native.TitledWindows().FirstOrDefault(w => w.Hwnd == target).Title ?? "a janela";
+        _jarvisWindow?.Close();
+        await Task.Delay(80);
+        if (!Native.BringForward(target)) return $"O Windows não deixou voltar para \"{title}\", então não apertei nada.";
+        await Task.Delay(120);
+        if (shortcut.Modifier == 0) RemoteInput.Key("f5");
+        else RemoteInput.Combo(shortcut.Modifier, shortcut.Key);
+        return $"Apertei {shortcut.Name} em \"{title}\".";
+    }
+
     Task<bool> IJarvisHost.ConfirmScriptAsync(string description, string code) =>
         Task.FromResult(DarkDialog.Ask(null, "O Jarvis quer rodar um script",
             (description.Length > 0 ? description : "Sem descrição.") + "\n\nLeia o código inteiro antes de permitir: ele roda com as suas permissões.",
@@ -86,7 +144,7 @@ public partial class IslandWindow : IJarvisHost
     }
 
     bool _following;
-    double _scrollAt;
+    double _scrollAt, _followFrom;
 
     // A long answer scrolls down as the voice reads it, a little ahead of the spoken line.
     void FollowVoice(bool on)
@@ -95,8 +153,7 @@ public partial class IslandWindow : IJarvisHost
         _following = on;
         if (on)
         {
-            _scrollAt = 0;
-            JarvisScroll.ScrollToVerticalOffset(0);
+            _scrollAt = _followFrom = JarvisScroll.VerticalOffset;
             System.Windows.Media.CompositionTarget.Rendering += FollowFrame;
         }
         else System.Windows.Media.CompositionTarget.Rendering -= FollowFrame;
@@ -108,10 +165,90 @@ public partial class IslandWindow : IJarvisHost
         if (!JarvisOnScreen) return;
         var room = JarvisScroll.ScrollableHeight;
         UpdateAnswerFade();
-        if (room <= 0 || Jarvis.SpeechProgress is not { } progress) return;
-        var target = Math.Clamp(progress * JarvisScroll.ExtentHeight - JarvisScroll.ViewportHeight * 0.45, 0, room);
+        if (room <= 0 || Jarvis.SpeechProgress is not { } progress || _lastAnswer is not { IsVisible: true } answer) return;
+        var top = answer.TranslatePoint(new Point(0, 0), (UIElement)JarvisScroll.Content).Y;
+        var target = Math.Clamp(top + progress * answer.ActualHeight - JarvisScroll.ViewportHeight * 0.45, Math.Min(_followFrom, room), room);
         _scrollAt += (target - _scrollAt) * 0.08;
         JarvisScroll.ScrollToVerticalOffset(_scrollAt);
+    }
+
+    // ───────────────────────── the conversation ─────────────────────────
+
+    static string ConversationFile => Path.Combine(IslandSettings.Folder, "jarvis-conversa.json");
+
+    sealed record SavedTurn(bool User, string Text);
+
+    void LoadJarvisConversation()
+    {
+        try
+        {
+            if (!File.Exists(ConversationFile)) return;
+            var turns = System.Text.Json.JsonSerializer.Deserialize<List<SavedTurn>>(File.ReadAllText(ConversationFile)) ?? [];
+            JarvisHistory.AddRange(turns.Where(t => !string.IsNullOrWhiteSpace(t.Text)).TakeLast(JarvisHistoryMax).Select(t => (t.User, t.Text)));
+        }
+        catch (Exception ex) { Log.Error("Jarvis conversation", ex); }
+    }
+
+    void SaveJarvisConversation()
+    {
+        if (SnapshotMode) return;
+        try
+        {
+            Directory.CreateDirectory(IslandSettings.Folder);
+            AtomicFile.WriteAllText(ConversationFile, System.Text.Json.JsonSerializer.Serialize(JarvisHistory.Select(h => new SavedTurn(h.User, h.Text))));
+        }
+        catch (Exception ex) { Log.Error("Jarvis conversation", ex); }
+    }
+
+    void JarvisClear_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        JarvisHistory.Clear();
+        SaveJarvisConversation();
+        if (JarvisBrain.HasKey) Brain.ClearConversation();
+        UpdateJarvisUi();
+        JarvisChanged?.Invoke();
+    }
+
+    TextBlock? _lastAnswer;
+    string _chatShown = "";
+
+    // Rebuilt only when the conversation changed: the person's lines as bubbles on the right, Jarvis's as text.
+    void RenderJarvisChat()
+    {
+        var signature = JarvisHistory.Count == 0 ? "" : $"{JarvisHistory.Count}|{JarvisHistory[0].Text.GetHashCode()}|{JarvisHistory[^1].Text.GetHashCode()}";
+        if (signature == _chatShown) return;
+        _chatShown = signature;
+        JarvisChat.Children.Clear();
+        _lastAnswer = null;
+        FrameworkElement? lastAsked = null;
+        foreach (var (user, text) in JarvisHistory)
+        {
+            if (user)
+            {
+                var bubble = new Border
+                {
+                    CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 5, 10, 6), Margin = new Thickness(48, 6, 0, 6),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Child = new TextBlock { Text = text, FontSize = 12.5, TextWrapping = TextWrapping.Wrap },
+                };
+                bubble.SetResourceReference(Border.BackgroundProperty, "Track");
+                JarvisChat.Children.Add(bubble);
+                lastAsked = bubble;
+            }
+            else
+            {
+                _lastAnswer = new TextBlock { Text = text, FontSize = 15, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
+                JarvisChat.Children.Add(_lastAnswer);
+            }
+        }
+        // the newest question at the top of the view, its answer right under it
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (lastAsked is { IsVisible: true })
+                JarvisScroll.ScrollToVerticalOffset(Math.Max(0, lastAsked.TranslatePoint(new Point(0, 0), (UIElement)JarvisScroll.Content).Y - 6));
+            else JarvisScroll.ScrollToEnd();
+        }, DispatcherPriority.Loaded);
     }
 
     void JarvisScroll_ScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e) => UpdateAnswerFade();
@@ -141,22 +278,26 @@ public partial class IslandWindow : IJarvisHost
     void UpdateJarvisUi()
     {
         JarvisStateText.Text = JarvisState == "Pronto" ? "" : JarvisState;
-        var asked = JarvisHistory.LastOrDefault(h => h.User).Text;
-        var answer = JarvisHistory.Count > 0 && !JarvisHistory[^1].User ? JarvisHistory[^1].Text : null;
-        JarvisAsked.Text = asked != null ? "Você: " + asked : JarvisBrain.HasKey ? "Peça o que quiser: o Jarvis age no PC"
+        RenderJarvisChat();
+        var empty = JarvisHistory.Count == 0;
+        JarvisAsked.Text = JarvisBrain.HasKey ? "Peça o que quiser: o Jarvis age no PC"
             : Jarvis.Folder(Jarvis.Engine.Ai) == null ? "Sem a IA: hora, data, contas, pesquisas e abrir programas" : "Pergunte o que quiser: tudo roda neste PC";
+        JarvisAsked.Visibility = Vis(empty);
         JarvisAnswer.Text = JarvisState switch
         {
             "Ouvindo…" => "Estou ouvindo…",
             "Transcrevendo…" => "Entendendo o que você disse…",
             "Pensando…" => "Pensando…",
-            _ => answer ?? "À disposição. Segure " + Hotkeys.Keys(_settings, "jarvis") + " e fale, ou toque em Escrever.",
+            _ => empty ? "À disposição. Segure " + Hotkeys.Keys(_settings, "jarvis") + " e fale, ou toque em Escrever." : "",
         };
+        JarvisAnswer.Visibility = Vis(JarvisAnswer.Text.Length > 0);
+        JarvisAnswer.Opacity = empty ? 1 : 0.6;
         JarvisTalkText.Text = _mic != null ? "Enviar" : "Falar";
         JarvisTalkIcon.Text = _mic != null ? "\uE724" : "\uE720";
         var busy = ComputerBusy;
         JarvisSteps.Visibility = Vis(busy);
-        JarvisAnswer.Visibility = Vis(!busy);
+        JarvisScroll.Visibility = Vis(!busy);
+        JarvisClear.Visibility = Vis(!busy && !empty && JarvisState == "Pronto");
         JarvisStop.Visibility = Vis(busy || JarvisState is "Pensando…" or "Falando…");
         JarvisTalk.Visibility = Vis(!busy);
         JarvisType.Visibility = Vis(!busy);
@@ -379,13 +520,14 @@ public partial class IslandWindow : IJarvisHost
     public async Task<string?> AskJarvisAsync(string message, bool fromPhone = false)
     {
         if (JarvisState == "Pensando…") return null;
-        var history = JarvisHistory.ToList();
+        var history = JarvisHistory.TakeLast(10).ToList();
         JarvisHistory.Add((true, message));
         SetJarvisState("Pensando…");
         ShowInfo(fromPhone ? "\uE8EA" : "\uE99A", fromPhone ? "Pergunta do celular" : "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);
         var reply = JarvisBrain.HasKey ? new Jarvis.Reply(await Brain.RespondAsync(message)) : await Jarvis.AskAsync(message, history);
         JarvisHistory.Add((false, reply.Text));
         if (JarvisHistory.Count > JarvisHistoryMax) JarvisHistory.RemoveRange(0, JarvisHistory.Count - JarvisHistoryMax);
+        SaveJarvisConversation();
         JarvisLast = reply;
         var speak = !fromPhone && _settings.JarvisSpeak && Jarvis.CanSpeak;
         SetJarvisState(speak ? "Falando…" : "Pronto");

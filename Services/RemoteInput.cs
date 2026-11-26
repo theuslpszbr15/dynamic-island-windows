@@ -108,6 +108,10 @@ public static class RemoteInput
         Send([KeyEvent(key.Vk, key.Extended, false), KeyEvent(key.Vk, key.Extended, true)]);
     }
 
+    /// <summary>A modifier held with one key (Jarvis's Ctrl+Z and the like).</summary>
+    public static void Combo(byte modifier, byte vk) =>
+        Send([KeyEvent(modifier, false, false), KeyEvent(vk, false, false), KeyEvent(vk, false, true), KeyEvent(modifier, false, true)]);
+
     /// <summary>Types the text where the keyboard focus is; a line break is Enter.</summary>
     public static void Text(string text)
     {
