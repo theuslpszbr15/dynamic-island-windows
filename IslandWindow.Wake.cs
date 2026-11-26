@@ -7,6 +7,7 @@ namespace DynamicIsland;
 public partial class IslandWindow
 {
     WakeWord? _wake;
+    string? _wakeMic;
     DispatcherTimer? _voiceEnd;
 
     public string? WakeProblem => _wake?.Problem;
@@ -24,9 +25,11 @@ public partial class IslandWindow
                 action: () => ((App)System.Windows.Application.Current).ShowSettings("jarvis"), seconds: 6);
             return;
         }
-        if (_wake == null)
+        if (_wake == null || _wakeMic != _settings.JarvisMic)
         {
-            _wake = new WakeWord();
+            _wake?.Dispose();
+            _wakeMic = _settings.JarvisMic;
+            _wake = new WakeWord(_settings.JarvisMic) { Busy = () => _mic != null || _dictMic != null || JarvisState != "Pronto" };
             _wake.Heard += () => Dispatcher.InvokeAsync(OnWakeWord);
         }
         if (!await _wake.StartAsync() && _wake.Problem is { } problem)

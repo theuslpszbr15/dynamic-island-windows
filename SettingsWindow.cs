@@ -774,10 +774,10 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.JarvisVoiceMode, m => { S.JarvisVoiceMode = m; S.Save(); }),
             Choice("Microfone", "Qual microfone o Jarvis e o ditado escutam. Se ele só entende \"E aí!\", o microfone está errado.",
                 [("", "Padrão do Windows"), .. JarvisMic.Devices().Select(d => (d, d))],
-                S.JarvisMic, m => { S.JarvisMic = m; S.Save(); }),
+                S.JarvisMic, m => { S.JarvisMic = m; S.Save(); _app.Island.ApplyWakeWord(); }),
             Toggle("Falar as respostas", "O Jarvis lê a resposta em voz alta (voz baixada ou a voz em português do Windows).", S.JarvisSpeak, v => { S.JarvisSpeak = v; S.Save(); }),
             Toggle("\"Ei Jarvis\"", (_app.Island.WakeProblem ?? "Diga \"ei Jarvis\" e faça o pedido; ele envia quando você para de falar.") +
-                " Usa o reconhecimento de voz do Windows, sem internet. Enquanto ligado, o Windows mostra o microfone em uso.",
+                " Escuta no microfone acima e confere com o microfone local (whisper), sem internet. Enquanto ligado, o Windows mostra o microfone em uso.",
                 S.WakeWord, v => { S.WakeWord = v; S.Save(); _app.Island.ApplyWakeWord(); }),
             Choice("Brilho da voz", "As cores que sobem da borda da ilha quando você fala e quando o Jarvis responde.",
                 [.. VoiceGlow.Variants, ("off", "Desligado")],

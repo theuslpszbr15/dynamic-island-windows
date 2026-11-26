@@ -605,7 +605,7 @@ public static class Jarvis
     }
 
     /// <summary>What was said in a 16 kHz mono WAV (whisper.cpp, Portuguese). Null without the microphone engine.</summary>
-    public static async Task<string?> TranscribeAsync(string wave)
+    public static async Task<string?> TranscribeAsync(string wave, string? prompt = null)
     {
         if (Folder(Engine.Microphone) is not { } dir) return null;
         var name = $"mic-{Environment.ProcessId}.wav";
@@ -614,7 +614,7 @@ public static class Jarvis
         {
             File.Copy(wave, copy, true);
             await RunAsync(Executable(Engine.Microphone, dir)!, dir,
-                ["-m", "model.bin", "-f", name, "-l", "pt", "-nt", "-otxt", "-of", name, "-t", "4"],
+                ["-m", "model.bin", "-f", name, "-l", "pt", "-nt", "-otxt", "-of", name, "-t", "4", .. (prompt == null ? Array.Empty<string>() : ["--prompt", prompt])],
                 timeout: TimeSpan.FromMinutes(1));
             var text = await File.ReadAllTextAsync(copy + ".txt");
             return Regex.Replace(text, @"\s+", " ").Trim();

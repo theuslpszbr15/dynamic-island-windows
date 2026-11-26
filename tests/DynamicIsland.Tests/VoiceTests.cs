@@ -14,6 +14,15 @@ public class VoiceTests
     [InlineData("Ele disse “normal”, ok.", "Ele disse normal, ok.")]
     public void SpeechTextDropsMarkdown(string text, string spoken) => Assert.Equal(spoken, Jarvis.SpeechText(text));
 
+    [Theory]
+    [InlineData("Ei, Jarvis.", true)]
+    [InlineData("Ok Jarvis!", true)]
+    [InlineData("E aí, Jarbas?", true)]
+    [InlineData("Jarvis", true)]
+    [InlineData("E aí!", false)]
+    [InlineData("vamos jogar agora", false)]
+    public void WakePhrase(string heard, bool call) => Assert.Equal(call, WakeWord.IsCall(heard));
+
     // 16-bit mono WAV: (seconds, loud) pieces in a row
     static byte[] Wave(params (double Seconds, bool Loud)[] pieces)
     {

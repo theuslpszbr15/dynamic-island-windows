@@ -37,7 +37,7 @@ public class ScreenToolsTests
         Assert.True(text.Contains("404") && text.Contains("encontrada", StringComparison.OrdinalIgnoreCase), "leu: " + text);
     }
 
-    /// <summary>WAKE_E2E=1 (opens the microphone for a moment): Windows' recognizer starts listening for "ei Jarvis".</summary>
+    /// <summary>WAKE_E2E=1 (opens the microphone for a moment): the "ei Jarvis" listener starts on the microphone.</summary>
     [Fact]
     public async Task WakeWordStarts()
     {
@@ -45,6 +45,22 @@ public class ScreenToolsTests
         using var wake = new WakeWord();
         Assert.True(await wake.StartAsync(), wake.Problem);
         Assert.True(wake.Running);
+    }
+
+    /// <summary>WAKE_E2E=1 with WAKE_WAV = a 16 kHz mono recording of "ei Jarvis": the local whisper hears the call.</summary>
+    [Fact]
+    public async Task WakeWordHearsTheCall()
+    {
+        if (Environment.GetEnvironmentVariable("WAKE_E2E") != "1" || Environment.GetEnvironmentVariable("WAKE_WAV") is not { } wav) return;
+        using var wake = new WakeWord();
+        var heard = new TaskCompletionSource();
+        wake.Heard += () => heard.TrySetResult();
+        var silence = new byte[1600];
+        for (var i = 0; i < 20; i++) wake.OnAudio(silence, silence.Length);
+        var speech = File.ReadAllBytes(wav)[44..];
+        for (var at = 0; at < speech.Length; at += 1600) wake.OnAudio(speech[at..Math.Min(speech.Length, at + 1600)], Math.Min(1600, speech.Length - at));
+        for (var i = 0; i < 20; i++) wake.OnAudio(silence, silence.Length);
+        Assert.Same(heard.Task, await Task.WhenAny(heard.Task, Task.Delay(20000)));
     }
 
     /// <summary>APK_E2E=1 (downloads ~22 MB): the phone app of the latest release comes down checked against its digest.</summary>
