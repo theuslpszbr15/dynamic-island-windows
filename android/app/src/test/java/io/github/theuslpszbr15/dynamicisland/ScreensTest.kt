@@ -77,11 +77,16 @@ class ScreensTest {
     ))
 
     @Test fun jarvis() = shot("09-jarvis", LinkUi(
-        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 1,
+        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 4,
         jarvis = listOf(
             JarvisTurn("1", "que horas são?", "São 15:42.", "done"),
             JarvisTurn("2", "abre o Spotify e toca minha playlist", "", "thinking"),
         ),
+    ))
+
+    @Test fun control() = shot("16-controle", LinkUi(
+        pairing = pairing, status = LinkStatus.Connected, desktop = "PC-DO-MATHEUS", initialTab = 5,
+        pc = PcState("Blinding Lights", "The Weeknd", true, 62, false, 0),
     ))
 
     private fun touchpad(name: String, mode: Int) = captureRoboImage("build/screens/$name.png") {

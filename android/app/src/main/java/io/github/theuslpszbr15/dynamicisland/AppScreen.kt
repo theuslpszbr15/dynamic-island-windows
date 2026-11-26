@@ -316,7 +316,10 @@ private fun HomeScreen(
     var tab by remember { mutableStateOf(state.initialTab) }
     val records by History.records.collectAsState()
     LaunchedEffect(focused) { if (focused != null) tab = 0 }
-    val title = when (tab) { 2 -> "Enviar"; 3 -> "Histórico"; else -> state.desktop.ifEmpty { state.pairing?.name ?: "PC" } }
+    val title = when (tab) {
+        2 -> "Enviar"; 3 -> "Histórico"; 4 -> "Jarvis"; 5 -> "Controle"
+        else -> state.desktop.ifEmpty { state.pairing?.name ?: "PC" }
+    }
     Column(Modifier.fillMaxSize()) {
         Header(title, onSettings = onSettings) { StatusLine(state) }
         Box(Modifier.weight(1f)) {
@@ -324,42 +327,53 @@ private fun HomeScreen(
                 0 -> AgentsTab(state, focused, onAllow, onDeny, onRetry, onScan, onFixNotifications)
                 2 -> SendTab(state)
                 3 -> HistoryTab(records, state)
-                else -> PcTab(state, onOpen, onRemote)
+                4 -> JarvisTab(state)
+                5 -> ControlTab(state, onRemote)
+                else -> PcTab(state, onOpen)
             }
         }
-        NavPill(tab, state.approvals.size, onTab = { tab = it })
+        NavBar(tab, state.approvals.size, onTab = { tab = it })
     }
 }
 
-/** The floating bar: four places, the current one lit. */
+/** The bottom bar: six places; the current one has its icon filled on a lit pill. */
 @Composable
-private fun NavPill(tab: Int, approvals: Int, onTab: (Int) -> Unit) {
+private fun NavBar(tab: Int, approvals: Int, onTab: (Int) -> Unit) {
     val items = listOf(
-        Triple(0, "Agentes", R.drawable.ic_tab_agents),
-        Triple(2, "Enviar", R.drawable.ic_tab_send),
-        Triple(3, "Histórico", R.drawable.ic_tab_history),
-        Triple(1, "PC", R.drawable.ic_pc),
+        NavItem(0, "Agentes", R.drawable.ms_smart_toy, R.drawable.ms_smart_toy_fill),
+        NavItem(4, "Jarvis", R.drawable.ms_auto_awesome, R.drawable.ms_auto_awesome_fill),
+        NavItem(5, "Controle", R.drawable.ms_sports_esports, R.drawable.ms_sports_esports_fill),
+        NavItem(2, "Enviar", R.drawable.ms_send, R.drawable.ms_send_fill),
+        NavItem(3, "Histórico", R.drawable.ms_history, R.drawable.ms_history_fill),
+        NavItem(1, "PC", R.drawable.ms_computer, R.drawable.ms_computer_fill),
     )
-    Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
-        Row(Modifier.background(Ui.Card, RoundedCornerShape(30.dp)).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items.forEach { (index, label, icon) ->
-                val on = tab == index
-                Column(
-                    Modifier.width(72.dp).clip(RoundedCornerShape(22.dp))
-                        .background(if (on) Color.White.copy(alpha = 0.11f) else Color.Transparent)
-                        .clickable { onTab(index) }.padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    BadgedBox(badge = { if (index == 0 && approvals > 0) Badge { Text("$approvals") } }) {
-                        Icon(painterResource(icon), contentDescription = null, tint = if (on) Ui.Text else Ui.Muted, modifier = Modifier.size(21.dp))
+    Row(
+        Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 10.dp)
+            .background(Ui.Card, RoundedCornerShape(26.dp)).border(1.dp, Ui.Line.copy(alpha = 0.6f), RoundedCornerShape(26.dp))
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        items.forEach { item ->
+            val on = tab == item.index
+            val pill by androidx.compose.animation.animateColorAsState(if (on) Ui.Text.copy(alpha = 0.14f) else Color.Transparent, label = "pill")
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).clickable { onTab(item.index) }.padding(vertical = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(Modifier.width(48.dp).height(30.dp).background(pill, RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
+                    BadgedBox(badge = { if (item.index == 0 && approvals > 0) Badge { Text("$approvals") } }) {
+                        Icon(painterResource(if (on) item.selected else item.icon), contentDescription = null,
+                            tint = if (on) Ui.Text else Ui.Muted, modifier = Modifier.size(22.dp))
                     }
-                    Text(label, color = if (on) Ui.Text else Ui.Muted, fontSize = 11.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
                 }
+                Text(item.label, color = if (on) Ui.Text else Ui.Muted, fontSize = 11.sp, maxLines = 1,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
             }
         }
     }
 }
+
+private data class NavItem(val index: Int, val label: String, val icon: Int, val selected: Int)
 
 @Composable
 private fun AgentsTab(
@@ -436,7 +450,7 @@ private fun AgentsTab(
 }
 
 @Composable
-private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, Int) -> Unit) {
+private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit) {
     val context = LocalContext.current
     val connected = state.status == LinkStatus.Connected
     var clipOn by remember { mutableStateOf(ClipSync.enabled(context)) }
@@ -457,8 +471,6 @@ private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, 
         val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
             { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
         if (!connected) item(span = full) { WakeCard() }
-        if (connected) item(span = full) { JarvisCard(state.jarvis) }
-        if (connected) item(span = full) { RemoteCard(state.pc, onRemote) }
         item(span = full) {
             UiCard {
                 UiRow("Área de transferência", note = "Copiou num lado, aparece no outro.") {
@@ -488,10 +500,51 @@ private fun PcTab(state: LinkUi, onOpen: (TrayItem) -> Unit, onRemote: (String, 
     }
 }
 
-/** Asks the PC's Jarvis (typed or said); the answers show here, the last few. */
+/** "Controle": the PC as touchpad, movie and slides remote or game pad (each opens the controller there), music, volume, power. */
 @Composable
-private fun JarvisCard(turns: List<JarvisTurn>) {
+private fun ControlTab(state: LinkUi, onRemote: (String, Int) -> Unit) {
+    val connected = state.status == LinkStatus.Connected
     val context = LocalContext.current
+    fun open(mode: Int) = context.startActivity(android.content.Intent(context, TouchpadActivity::class.java).putExtra(TouchpadActivity.MODE, mode))
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (!connected) item { WakeCard() }
+        item { UiSection("Controlar o PC") }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ModeTile(R.drawable.ms_mouse, "Mouse e teclado", "Touchpad, clique, digitar", Modifier.weight(1f)) { open(0) }
+                    ModeTile(R.drawable.ms_sports_esports, "Jogo", "Controle de Xbox ou PS4", Modifier.weight(1f)) { open(3) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ModeTile(R.drawable.ms_movie, "Filme", "Pausar, avançar, volume", Modifier.weight(1f)) { open(1) }
+                    ModeTile(R.drawable.ms_slideshow, "Slides", "Próximo, anterior", Modifier.weight(1f)) { open(2) }
+                }
+            }
+        }
+        if (connected) item { RemoteCard(state.pc, onRemote) }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun ModeTile(icon: Int, title: String, note: String, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.heightIn(min = 118.dp).clip(Ui.CardShape).background(Ui.Card).clickable(onClick = onClick).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        UiChip(icon, size = 42.dp)
+        Column {
+            Text(title, color = Ui.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(note, color = Ui.Muted, fontSize = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** "Jarvis": a chat with the PC's Jarvis (typed or said); what it does happens on the PC. */
+@Composable
+private fun JarvisTab(state: LinkUi) {
+    val context = LocalContext.current
+    val connected = state.status == LinkStatus.Connected
     var question by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     fun ask(text: String) {
         val q = text.trim()
@@ -504,42 +557,65 @@ private fun JarvisCard(turns: List<JarvisTurn>) {
     ) { result ->
         result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let(::ask)
     }
-    UiCard {
-        UiCardTitle("Perguntar ao Jarvis", "Quem responde é o Jarvis do PC: o que ele fizer (abrir, tocar, criar) acontece no PC.")
-        turns.takeLast(3).forEach { t ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Você: ${t.question}", color = Ui.Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                when (t.state) {
-                    "sent", "thinking" -> Text("Pensando…", color = Ui.Muted, fontSize = 15.sp)
-                    "error" -> Text(t.answer, color = Ui.Warn, fontSize = 14.sp)
-                    else -> {
-                        Text(t.answer, color = Ui.Text, fontSize = 15.sp)
-                        UiLink("Copiar", {
-                            FileReceiver.copy(context, t.answer)
-                            android.widget.Toast.makeText(context, "Resposta copiada", android.widget.Toast.LENGTH_SHORT).show()
-                        })
-                    }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), reverseLayout = state.jarvis.isNotEmpty()) {
+            if (state.jarvis.isEmpty()) item {
+                UiCard {
+                    UiChip(R.drawable.ms_auto_awesome, size = 42.dp)
+                    UiCardTitle("Pergunte ao Jarvis do PC", "Quem responde é o Jarvis do PC: o que ele fizer (abrir, tocar, criar, lembrar) acontece no PC. " +
+                        "Tente: “toca minha playlist”, “que horas é a reunião?”, “abre o Spotify”.")
                 }
             }
+            items(state.jarvis.reversed(), key = { it.id }) { t -> JarvisTurnRow(t) }
         }
-        OutlinedTextField(
-            value = question, onValueChange = { question = it.take(2000) }, maxLines = 4,
-            placeholder = { Text("Pergunte ou peça algo") },
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { ask(question) }),
-            modifier = Modifier.fillMaxWidth(), shape = Ui.ButtonShape,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            UiSecondary("Falar", {
-                val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Fale com o Jarvis")
-                try { listen.launch(intent) }
-                catch (_: android.content.ActivityNotFoundException) {
-                    android.widget.Toast.makeText(context, "Este celular não tem reconhecimento de voz", android.widget.Toast.LENGTH_SHORT).show()
+        if (!connected) Text("Conecte ao PC para perguntar.", color = Ui.Warn, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+            OutlinedTextField(
+                value = question, onValueChange = { question = it.take(2000) }, maxLines = 4,
+                placeholder = { Text("Pergunte ou peça algo") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { ask(question) }),
+                modifier = Modifier.weight(1f), shape = Ui.ButtonShape,
+            )
+            Box(
+                Modifier.size(52.dp).clip(Ui.ButtonShape).background(if (question.isBlank()) Ui.Raised else Ui.Text).clickable {
+                    if (question.isNotBlank()) { ask(question); return@clickable }
+                    val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Fale com o Jarvis")
+                    try { listen.launch(intent) }
+                    catch (_: android.content.ActivityNotFoundException) {
+                        android.widget.Toast.makeText(context, "Este celular não tem reconhecimento de voz", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                // empty box: talk; something typed: send
+                Icon(painterResource(if (question.isBlank()) R.drawable.ms_mic else R.drawable.ms_send_fill), contentDescription = null,
+                    tint = if (question.isBlank()) Ui.Text else Ui.OnAction, modifier = Modifier.size(22.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun JarvisTurnRow(t: JarvisTurn) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(t.question, color = Ui.Text, fontSize = 15.sp,
+            modifier = Modifier.align(Alignment.End).background(Ui.Raised, RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)).padding(horizontal = 14.dp, vertical = 10.dp))
+        Column(Modifier.fillMaxWidth(0.92f).background(Ui.Card, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)).padding(horizontal = 14.dp, vertical = 10.dp)) {
+            when (t.state) {
+                "sent", "thinking" -> Text("Pensando…", color = Ui.Muted, fontSize = 15.sp)
+                "error" -> Text(t.answer, color = Ui.Warn, fontSize = 14.sp)
+                else -> {
+                    Text(t.answer, color = Ui.Text, fontSize = 15.sp)
+                    UiLink("Copiar", {
+                        FileReceiver.copy(context, t.answer)
+                        android.widget.Toast.makeText(context, "Resposta copiada", android.widget.Toast.LENGTH_SHORT).show()
+                    })
                 }
-            }, Modifier.weight(1f))
-            UiPrimary("Perguntar", { ask(question) }, Modifier.weight(1f), enabled = question.isNotBlank())
+            }
         }
     }
 }
@@ -586,9 +662,6 @@ private fun RemoteCard(pc: PcState?, onRemote: (String, Int) -> Unit) {
         android.widget.Toast.makeText(context, if (sent) "Digitado no PC" else "O PC não está conectado", android.widget.Toast.LENGTH_SHORT).show()
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        UiPrimary("Touchpad e teclado", {
-            context.startActivity(android.content.Intent(context, TouchpadActivity::class.java))
-        }, Modifier.fillMaxWidth())
         UiSecondary("Ditar no PC", {
             val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)

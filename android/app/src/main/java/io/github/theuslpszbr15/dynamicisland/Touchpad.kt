@@ -145,14 +145,20 @@ object Touchpad {
 }
 
 class TouchpadActivity : ComponentActivity() {
+    companion object {
+        /** Which tab opens: 0 Mouse, 1 Filme, 2 Slides, 3 Jogo. */
+        const val MODE = "mode"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val mode = intent.getIntExtra(MODE, 0).coerceIn(0, 3)
         setContent {
             val state by Link.state.collectAsStateWithLifecycle()
             AppTheme {
                 TouchpadScreen(connected = state.status == LinkStatus.Connected, viaRelay = state.viaRelay, padProblem = state.padProblem,
-                    onClose = ::finish)
+                    onClose = ::finish, initialMode = mode)
             }
         }
     }
