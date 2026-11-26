@@ -357,14 +357,30 @@ public static class Jarvis
                 // localized junctions ("Programas") deny listing; the real folders are walked anyway
                 RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint,
             }))
+            // games often only have a shortcut on the desktop (.lnk, or .url for Steam/Epic)
+            .Concat(new[]
+                {
+                    Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+                }
+                .Where(Directory.Exists)
+                .SelectMany(d => Directory.EnumerateFiles(d, "*.*", new EnumerationOptions { IgnoreInaccessible = true }))
+                .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".lnk" or ".url"))
             .Where(f => !Plain(Path.GetFileNameWithoutExtension(f)).Contains("uninstall") && !Plain(Path.GetFileNameWithoutExtension(f)).Contains("desinstalar"))
-            .Select(f => (Path: f, Name: Plain(Path.GetFileNameWithoutExtension(f))))
+            .Select(f => (Path: f, Name: Numbered(Plain(Path.GetFileNameWithoutExtension(f)))))
             .ToList();
+        name = Numbered(name);
         var best = shortcuts.FirstOrDefault(s => s.Name == name);
         if (best.Path == null && loose) best = shortcuts.Where(s => s.Name.StartsWith(name)).OrderBy(s => s.Name.Length).FirstOrDefault();
         if (best.Path == null && loose && name.Length >= 4) best = shortcuts.Where(s => s.Name.Contains(name)).OrderBy(s => s.Name.Length).FirstOrDefault();
         return best.Path == null ? null : new App("o " + Path.GetFileNameWithoutExtension(best.Path), best.Path);
     }
+
+    /// <summary>"god of war iii" and "god of war 3" alike: Roman numerals as digits.</summary>
+    static string Numbered(string name) => Regex.Replace(name, @"\b(ii|iii|iv|vi|vii|viii|ix)\b", m => m.Value switch
+    {
+        "ii" => "2", "iii" => "3", "iv" => "4", "vi" => "6", "vii" => "7", "viii" => "8", _ => "9",
+    });
 
     /// <summary>Only Google and YouTube over https, as in JARVIS.</summary>
     public static bool SafeLink(string? url) =>

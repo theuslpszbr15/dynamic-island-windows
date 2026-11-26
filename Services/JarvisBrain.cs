@@ -603,7 +603,8 @@ public sealed class JarvisBrain
         Tool("volume", "Volume da música (do Spotify quando ele toca; senão o do Windows). Responde o nível em que ficou. " +
              "'definir' usa nivel (0 a 100); 'tirar_mudo' volta o som; 'mudo' silencia.",
             new() { ["acao"] = Enum("aumentar", "diminuir", "definir", "mudo", "tirar_mudo"), ["nivel"] = new JsonObject { ["type"] = "number", ["description"] = "Porcentagem para 'definir', de 0 a 100." } }, "acao"),
-        Tool("midia", "Controla a música ou vídeo que está tocando no PC.", new() { ["acao"] = Enum("tocar_pausar", "proxima", "anterior") }, "acao"),
+        Tool("midia", "Controla a música ou vídeo do PC. 'tocar' dá play (também logo depois de abrir o Spotify, ele espera o app carregar); " +
+             "'pausar' pausa; 'tocar_pausar' só alterna.", new() { ["acao"] = Enum("tocar", "pausar", "tocar_pausar", "proxima", "anterior") }, "acao"),
         Tool("buscar_web", "Busca fatos na Wikipedia (pessoas, lugares, conceitos, tecnologia) e devolve resumos.", new() { ["consulta"] = Str() }, "consulta"),
         Tool("clima", "Previsão do tempo atual de uma cidade.", new() { ["cidade"] = Str() }, "cidade"),
         Tool("lembrete", "Agenda um lembrete que aparece na ilha depois de N minutos.",

@@ -474,6 +474,31 @@ public sealed class MediaService(Dispatcher ui, IslandSettings? settings = null)
         try { if (_session != null) await _session.TrySkipPreviousAsync(); } catch { }
     }
 
+    /// <summary>Plays (or pauses) for sure, not a toggle. A player that was just opened has no session for a few
+    /// seconds: waits up to <paramref name="wait"/> for one (Spotify first), then falls back to the media key.</summary>
+    public async Task PlayAsync(bool play, TimeSpan wait)
+    {
+        var until = DateTime.UtcNow + wait;
+        while (true)
+        {
+            try
+            {
+                var sessions = _manager?.GetSessions().Where(s => MediaFilter.IsAllowed(s.SourceAppUserModelId, _settings)).ToList() ?? [];
+                var session = sessions.FirstOrDefault(s => s.SourceAppUserModelId.Contains("spotify", StringComparison.OrdinalIgnoreCase))
+                              ?? _session ?? sessions.FirstOrDefault();
+                if (session != null)
+                {
+                    var done = play ? await session.TryPlayAsync() : await session.TryPauseAsync();
+                    if (done) return;
+                }
+            }
+            catch { }
+            if (DateTime.UtcNow >= until) break;
+            await Task.Delay(500);
+        }
+        if (play) Native.PressKey(Native.VK_MEDIA_PLAY_PAUSE);
+    }
+
     public async void Seek(TimeSpan position)
     {
         try

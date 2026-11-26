@@ -64,6 +64,8 @@ public partial class IslandWindow : IJarvisHost
         {
             case "proxima": _media.Next(); break;
             case "anterior": _media.Previous(); break;
+            case "tocar": _ = _media.PlayAsync(true, TimeSpan.FromSeconds(12)); break;
+            case "pausar": _ = _media.PlayAsync(false, TimeSpan.Zero); break;
             default: _media.PlayPause(); break;
         }
     }
