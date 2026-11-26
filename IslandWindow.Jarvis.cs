@@ -182,7 +182,12 @@ public partial class IslandWindow : IJarvisHost
     {
         try
         {
-            if (!File.Exists(ConversationFile)) return;
+            if (!File.Exists(ConversationFile))
+            {
+                // before 1.9.25 only the brain kept the conversation
+                if (JarvisBrain.HasKey) JarvisHistory.AddRange(Brain.PastConversation().TakeLast(JarvisHistoryMax));
+                return;
+            }
             var turns = System.Text.Json.JsonSerializer.Deserialize<List<SavedTurn>>(File.ReadAllText(ConversationFile)) ?? [];
             JarvisHistory.AddRange(turns.Where(t => !string.IsNullOrWhiteSpace(t.Text)).TakeLast(JarvisHistoryMax).Select(t => (t.User, t.Text)));
         }

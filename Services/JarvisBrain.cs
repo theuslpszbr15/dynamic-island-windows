@@ -195,6 +195,12 @@ public sealed class JarvisBrain
         SaveMemory();
     }
 
+    /// <summary>The saved turns as the person saw them: what they asked and what Jarvis answered (no tool calls).</summary>
+    public List<(bool User, string Text)> PastConversation() =>
+        _history.Select(m => (Role: m["role"]?.GetValue<string>(), Text: m["content"]?.GetValue<string>()?.Trim() ?? ""))
+            .Where(m => m.Role is "user" or "assistant" && m.Text.Length > 0)
+            .Select(m => (m.Role == "user", m.Text)).ToList();
+
     /// <summary>A fresh conversation: the past turns go, the permanent memory stays.</summary>
     public void ClearConversation()
     {

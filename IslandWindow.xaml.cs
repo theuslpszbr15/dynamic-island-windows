@@ -51,7 +51,7 @@ public partial class IslandWindow : Window
     // it is back to idle. _peekPinned: shown with the hide shortcut, stays until pressed again or full screen ends.
     bool _fullscreen, _peek, _peekPinned, _underTopBar;
     bool _clickThrough, _dwellBlocked, _dragCandidate;
-    DateTime _lastDragOver, _lastWheel, _hoverSince;
+    DateTime _lastDragOver, _lastWheel, _hoverSince, _jarvisWheel;
     DateTime? _buttonSince;
     Transient _transient;
     int _page, _liveTicks;
@@ -743,6 +743,16 @@ public partial class IslandWindow : Window
             return;
         }
         if ((DateTime.Now - _lastWheel).TotalMilliseconds < 280) return;
+        // the conversation scrolls first; at its top or bottom the wheel moves to the next page
+        if (_page == PageJarvis && JarvisScroll.IsVisible && JarvisScroll.ScrollableHeight > 0
+            && (e.Delta > 0 ? JarvisScroll.VerticalOffset > 0.5 : JarvisScroll.VerticalOffset < JarvisScroll.ScrollableHeight - 0.5))
+        {
+            FollowVoice(false);
+            JarvisScroll.ScrollToVerticalOffset(JarvisScroll.VerticalOffset - e.Delta * 0.6);
+            _jarvisWheel = DateTime.Now;
+            return;
+        }
+        if ((DateTime.Now - _jarvisWheel).TotalMilliseconds < 600) return;
         _lastWheel = DateTime.Now;
         var direction = e.Delta < 0 ? 1 : -1;
         ShowPage(_page + direction, direction);
