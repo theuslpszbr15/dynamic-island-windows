@@ -227,6 +227,7 @@ public partial class IslandWindow
             _heldNotifications++;
             return;
         }
+        if (HoldForGame(n)) return;
         ShowCard(n.Logo, n.Title, n.App, n.Body, seconds: claude ? 15 : 5, important: claude);
         _notifyAction = claude ? () => OpenApp(n.AppId) : null;
         // the same notification on the paired phone (what the island shows, so the same filter)

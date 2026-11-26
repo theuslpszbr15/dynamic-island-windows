@@ -17,6 +17,9 @@ public enum DiscordSource { Window, IslandApp, OwnApp }
 /// for a shortcut, also for alerts that can't wait (the default), or never hide.</summary>
 public enum FullscreenMode { Shortcuts, Alerts, Always }
 
+/// <summary>A video the phone may not play (1080p60, 4K, HEVC…) going to it: ask on the island, always convert, or send as is.</summary>
+public enum VideoFitMode { Ask, Always, Never }
+
 /// <summary>Preset for filtering which applications can appear as playing media.</summary>
 public enum MediaFilterPreset { MusicOnly, MusicAndWeb, All, Custom }
 
@@ -43,6 +46,8 @@ public sealed class IslandSettings
     public PetOutfit Outfit { get; set; } = PetOutfit.Auto;
     public bool ShowLyrics { get; set; } = true;
     public bool ShowClipboard { get; set; } = true;
+    /// <summary>A screenshot (or a copied image) shows with Copiar/Salvar, Celular, Ler texto and Traduzir.</summary>
+    public bool SmartShots { get; set; } = true;
     public bool ShowLockKeys { get; set; } = true;
     /// <summary>A permission request first shows as a small pill; hovering or clicking it opens Allow / Deny.</summary>
     public bool QuietApprovals { get; set; } = true;
@@ -178,6 +183,11 @@ public sealed class IslandSettings
     public long IslandOffAt { get; set; }
     public DiscordSource DiscordSource { get; set; } = DiscordSource.Window;
     public FullscreenMode Fullscreen { get; set; } = FullscreenMode.Alerts;
+    /// <summary>In a full-screen game, Windows notifications wait and come back as one summary when it closes.</summary>
+    public bool GameMode { get; set; } = true;
+    /// <summary>In a game, a small meter at the top: FPS, the graphics card's temperature and use, the CPU.</summary>
+    public bool GameHud { get; set; } = true;
+    public VideoFitMode FitVideos { get; set; } = VideoFitMode.Ask;
     /// <summary>Also reach the phone through the USB cable (adb reverse), for PCs whose network the phone can't see.</summary>
     public bool PhoneUsb { get; set; }
     public bool CheckUpdates { get; set; } = true;

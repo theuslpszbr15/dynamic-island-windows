@@ -64,6 +64,7 @@ public partial class IslandWindow
         HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
         RegisterHotkeys(announce: true);
         AddClipboardFormatListener(_hwnd);
+        ApplySmartShots();
         _media.SourcesChanged += BuildSourceChips;
         _lyricsTimer = MakeTimer(0.25, UpdateLyric);
         _extrasTimer = MakeTimer(60, ExtrasTick);
@@ -81,6 +82,8 @@ public partial class IslandWindow
         if (!_extrasStarted) return;
         foreach (var action in Hotkeys.All) UnregisterHotKey(_hwnd, action.Id);
         RemoveClipboardFormatListener(_hwnd);
+        _shotWatch?.Dispose();
+        _fps?.Dispose();
         _lyricsTimer?.Stop();
         _extrasTimer?.Stop();
         foreach (var approval in _approvals) _ = AgentHub.Reply(approval.Id, "none");
@@ -260,6 +263,7 @@ public partial class IslandWindow
             }
             else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
+                if (OnShotClipboard()) return;
                 if (show) ShowInfo("\uE8C8", $"Imagem {image.PixelWidth} × {image.PixelHeight}", "Copiada", image);
             }
             else if (Clipboard.ContainsText())

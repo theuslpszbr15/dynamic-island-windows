@@ -248,6 +248,7 @@
         </DataTemplate>
     </Window.Resources>
 
+    <Grid x:Name="Stage">
     <Grid x:Name="Root">
         <StackPanel x:Name="IslandHost" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0">
             <!-- Mirrors the privacy dots' width so the island stays centred -->
@@ -530,6 +531,19 @@
                                         <TextBlock Text="Trocar o texto" />
                                     </StackPanel>
                                 </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- a card with a few things to do: a screenshot (Salvar, Celular, Ler texto, Traduzir) or a question -->
+                        <Grid x:Name="ActionPanel" Height="96" VerticalAlignment="Top" Margin="14,0,16,0" Visibility="Collapsed">
+                            <Border x:Name="ActionThumb" Width="112" Height="70" CornerRadius="10" Background="#FF2C2C2E" HorizontalAlignment="Left"
+                                    VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality">
+                                <TextBlock x:Name="ActionGlyph" FontFamily="{StaticResource Icons}" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel x:Name="ActionBody" Margin="126,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="ActionTitle" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="ActionDetail" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                                <StackPanel x:Name="ActionButtons" Orientation="Horizontal" Margin="0,10,0,0" />
                             </StackPanel>
                         </Grid>
 
@@ -1103,5 +1117,12 @@
                 <Ellipse x:Name="CamDot" Width="7" Height="7" Margin="6,0,0,0" Fill="#FF30D158" Visibility="Collapsed" />
             </StackPanel>
         </StackPanel>
+    </Grid>
+
+    <!-- In a game the island hides; this small meter stays at the top (Modo jogo) -->
+    <Border x:Name="GameHud" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,6,0,0" Padding="11,3,11,4" CornerRadius="11"
+            Background="#A6000000" IsHitTestVisible="False" Visibility="Collapsed">
+        <TextBlock x:Name="GameHudText" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFF2F2F2" Typography.NumeralAlignment="Tabular" />
+    </Border>
     </Grid>
 </Window>

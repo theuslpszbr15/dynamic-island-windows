@@ -36,6 +36,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
 - **Histórico do que você copiou** (os últimos 20, com fixar e busca; os fixados ficam cifrados no disco).
 - **OCR:** `Ctrl+Alt+O`, arraste sobre qualquer parte da tela e o texto vai para a área de transferência (OCR do próprio
   Windows, sem internet); um clique pede para o Jarvis explicar.
+- **Print inteligente:** depois de um print (`Win+Shift+S`, `PrtScn` ou `Win+PrtScn`) a ilha mostra a imagem com
+  **Salvar** (ou Copiar), **Celular**, **Ler texto** e **Traduzir**.
 - **Tradução rápida:** selecione um texto em qualquer app e aperte `Ctrl+Alt+L` (português ↔ inglês e outros idiomas),
   com "Trocar o texto" para colar a tradução no lugar.
 - **Ditado em qualquer app:** segure `Ctrl+Alt+F`, fale e solte: o texto é colado onde você está digitando
@@ -77,6 +79,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
   **Celular · enviar e receber** mostra o que chegou (Copiar, Mostrar) e manda arquivos ou o que está copiado.
 - No celular, foto ou texto do PC tem **Copiar** (vai direto para a área de transferência, sem encher a galeria) e
   **Baixar** (galeria ou Downloads), na notificação, nos Pendentes, no Histórico e no visualizador.
+- **Vídeo que o celular não toca** (1080p a 60 fps, 4K, HEVC) é convertido antes de ir, pelo codificador do próprio
+  Windows, para H.264 a 30 fps: a ilha pergunta (ou converte sempre, se você preferir).
 - **Controle remoto do PC:** música, volume, bloquear, desligar com timer, abrir apps fixados e **ligar o PC**
   (Wake-on-LAN).
 - **Perguntar ao Jarvis pelo celular** (escrevendo ou falando): quem responde é o Jarvis do PC, e o que ele faz acontece
@@ -93,6 +97,8 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
   juninas a borda da ilha ganha as cores da data e o mascote se veste sozinho.
 - **Não atrapalha:** os cliques passam por ela, vira uma barrinha quando ociosa, some em tela cheia e em vídeos, não
   rouba o foco, segue a janela ativa em vários monitores (cada um com sua escala).
+- **Modo jogo:** num jogo em tela cheia as notificações esperam e voltam num resumo quando ele fecha, e um medidor
+  discreto no topo mostra **FPS**, temperatura e uso da placa de vídeo e o uso do processador.
 - Atalhos para tudo (`Ctrl+Alt+D/M/T/A/C/K/J/F/L/O`), trocáveis nas configurações.
 - **Demonstração** guiada na primeira vez.
 

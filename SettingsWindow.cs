@@ -211,6 +211,7 @@ public sealed partial class SettingsWindow : DarkWindow
                 [(FullscreenMode.Alerts, "Atalhos e avisos importantes"), (FullscreenMode.Shortcuts, "Só atalhos"),
                     (FullscreenMode.Always, "Sempre mostrar")],
                 S.Fullscreen, m => { S.Fullscreen = m; S.Save(); _app.Island.RefreshHidden(); })));
+        page.Children.Add(GameCard());
 
         var installed = Installer.IsInstalled;
         page.Children.Add(Card("Sistema",
@@ -551,6 +552,9 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.ShowLyrics, _ => _app.ToggleLyrics()),
             Toggle("O que foi copiado", "Texto, imagem ou arquivos copiados aparecem por um instante. Gerenciadores de senha são ignorados.",
                 S.ShowClipboard, _ => _app.ToggleClipboard()),
+            Toggle("Print inteligente", "Depois de um print (Win+Shift+S, PrtScn ou Win+PrtScn) a ilha mostra a imagem com Salvar ou Copiar, " +
+                   "Celular, Ler texto e Traduzir. Vale também para uma imagem copiada.",
+                S.SmartShots, v => { S.SmartShots = v; S.Save(); _app.Island.ApplySmartShots(); }),
             Toggle("Caps Lock e Num Lock", "Avisa quando liga ou desliga.", S.ShowLockKeys, _ => _app.ToggleLockKeys()),
             Toggle("Vídeos", "YouTube, Netflix, Prime Video, Twitch… Desligado: vídeo não abre aviso nem deixa a pílula aberta.",
                 !S.QuietVideos, _ => _app.ToggleQuietVideos())));
@@ -1411,6 +1415,9 @@ public sealed partial class SettingsWindow : DarkWindow
                    "ou a aba Enviar e receber, aqui ao lado. Do celular, use Compartilhar → Mandar pro PC: a ilha pergunta antes, " +
                    "e tudo vai para Downloads\\Dynamic Island. Até 30 MB por arquivo (vídeo 60 MB), criptografado de ponta a ponta.",
                 S.PhoneFiles, _ => _app.TogglePhoneFiles()),
+            Choice("Vídeos pesados", "1080p a 60 fps, 4K ou HEVC travam em muitos celulares. Convertido, vai em H.264 a 30 fps, que todo celular toca.",
+                [(VideoFitMode.Ask, "Perguntar na ilha"), (VideoFitMode.Always, "Converter sempre"), (VideoFitMode.Never, "Mandar como está")],
+                S.FitVideos, m => { S.FitVideos = m; S.Save(); }),
             Toggle("Área de transferência junto com o celular", "Texto copiado no PC vai para o celular na hora; o que você copia no celular chega aqui " +
                    "quando abre o app (ou pelo bloco rápido \"Copiado → PC\"). Gerenciadores de senha são ignorados.",
                 S.PhoneClipboard, v => { S.PhoneClipboard = v; S.Save(); }),
@@ -1443,7 +1450,40 @@ public sealed partial class SettingsWindow : DarkWindow
     }
 
     bool? _wakeArmed;
-    bool _wakeBusy;
+    bool _wakeBusy, _fpsAsked;
+
+    /// <summary>Modo jogo: hold notifications in games, the meter, and letting it count FPS (one administrator prompt).</summary>
+    Border GameCard()
+    {
+        var fpsAllowed = FpsCounter.Allowed;
+        var allow = new Button
+        {
+            Content = _fpsAsked ? "Saia e entre de novo no Windows" : "Liberar FPS", Style = (Style)Resources["Action"],
+            IsEnabled = !fpsAllowed && !_fpsAsked,
+        };
+        allow.Click += async (_, _) =>
+        {
+            allow.IsEnabled = false;
+            if (await Task.Run(FpsCounter.RequestAccess))
+            {
+                _fpsAsked = true;
+                DarkDialog.Ask(this, "Liberar FPS", "Pronto. O contador de FPS funciona depois que você sair e entrar de novo no Windows (ou reiniciar).", "OK", null);
+            }
+            else DarkDialog.Ask(this, "Liberar FPS", "O Windows precisa da sua permissão (clique em Sim na janela que aparece).", "OK", null);
+            Render();
+        };
+        return Card("Modo jogo",
+            Toggle("Modo jogo", "Num jogo em tela cheia (Steam, Epic, Xbox, Riot, Roblox…), as notificações do Windows esperam e aparecem " +
+                   "num resumo quando o jogo fecha. Pedidos de permissão dos agentes continuam passando.",
+                S.GameMode, v => { S.GameMode = v; S.Save(); _app.Island.RefreshHidden(); }),
+            Toggle("Medidor no jogo", "Um contador discreto no topo da tela: FPS, temperatura e uso da placa de vídeo, e o uso do processador.",
+                S.GameHud, v => { S.GameHud = v; S.Save(); }, enabled: S.GameMode),
+            Row("Contador de FPS", fpsAllowed
+                    ? "Liberado. O FPS aparece em jogos DirectX (a maioria); Vulkan e OpenGL mostram só GPU e CPU."
+                    : "O Windows só mostra o FPS dos jogos para quem está no grupo \"Usuários de log de desempenho\" " +
+                      "(como a Xbox Game Bar faz). Um clique entra no grupo; vale a partir do próximo login.",
+                allow));
+    }
 
     /// <summary>"Ligar o PC pelo celular" (Wake-on-LAN) in three steps: Windows (one click), BIOS (restart into it, with
     /// where the switch is on this board), phone (connect once).</summary>

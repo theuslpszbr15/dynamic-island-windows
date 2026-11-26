@@ -21,11 +21,12 @@ public partial class IslandWindow
         var alpha = Environment.GetEnvironmentVariable("DI_SNAPSHOT_ALPHA") == "1";
         if (alpha) Directory.CreateDirectory(System.IO.Path.Combine(folder, "alpha"));
 
-        async Task Shot(string name)
+        async Task Shot(string name, FrameworkElement? what = null)
         {
             await Task.Delay(1100);
             const double scale = 2;
-            var bounds = new Rect(0, 0, Root.ActualWidth, Root.ActualHeight);
+            var target = what ?? Root;
+            var bounds = new Rect(0, 0, target.ActualWidth, target.ActualHeight);
             async Task Save(string path, bool backdrop)
             {
                 var bitmap = new RenderTargetBitmap((int)(bounds.Width * scale), (int)(bounds.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
@@ -36,7 +37,7 @@ public partial class IslandWindow
                         dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x1F, 0x4E, 0x8C), Color.FromRgb(0x6A, 0x8F, 0xC9), 90), null, bounds);
                     bitmap.Render(visual);
                 }
-                bitmap.Render(Root);
+                bitmap.Render(target);
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 await using var stream = File.Create(path);
@@ -530,6 +531,23 @@ public partial class IslandWindow
         await Shot("59-phone-page");
         SetExpanded(false);
         UpdatePhoneSend();
+        // a screenshot with what to do with it, the question before a heavy video goes to the phone, the game meter
+        _shot = new ScreenShot { Image = DemoScreenshot(), InClipboard = true, IsPrint = true };
+        ShowShot(_shot);
+        await Shot("71-print");
+        TransientEnded();
+        _shot = null;
+        ShowActions("Esse vídeo pode travar no celular", "1080p a 60 fps · gameplay de sábado.mp4",
+            [new("\uE895", "Converter", () => { }, Primary: true), new("\uE724", "Mandar assim", () => { })], glyph: "\uE714");
+        await Shot("72-video-convert");
+        TransientEnded();
+        _hiddenFullscreen = true;
+        Root.Opacity = 0;
+        ShowGameHud(144, 63, 87, 41);
+        await Shot("73-game-hud", Stage);
+        GameHud.Visibility = Visibility.Collapsed;
+        _hiddenFullscreen = false;
+        Root.Opacity = 1;
         // the seasonal looks: rim colours and the mascot's outfit, by themselves
         PetView.SetDefaultOutfit(PetOutfit.Auto);
         foreach (var (day, name) in new[] { (new DateTime(2026, 10, 31), "60-season-halloween"), (new DateTime(2026, 12, 20), "60-season-natal") })

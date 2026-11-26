@@ -27,8 +27,7 @@ public partial class IslandWindow
             var text = await ScreenOcr.ReadAsync(picked);
             if (text == null)
             {
-                ShowInfo("\uE8C8", "O Windows est\u00e1 sem o idioma de OCR", "Configurar", glyphColor: Meter.Red, seconds: 6,
-                    action: () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:regionlanguage") { UseShellExecute = true }));
+                ShowOcrMissing();
                 return;
             }
             if (text.Length == 0)
@@ -36,16 +35,26 @@ public partial class IslandWindow
                 ShowInfo("\uE8C8", "N\u00e3o achei texto a\u00ed", "", glyphColor: JarvisColor, seconds: 2.5);
                 return;
             }
-            try { Clipboard.SetText(text); } catch { }
-            ShowCard(null, "Texto copiado da tela", "OCR", "Clique para o Jarvis explicar: " + Preview(text), seconds: 6, glyph: "\uE8C8");
-            if (JarvisBrain.HasKey || Jarvis.Folder(Jarvis.Engine.Ai) != null)
-                _notifyAction = () =>
-                {
-                    ShowJarvisPage();
-                    _ = AskJarvisAsync("Explique de forma simples o que \u00e9 isto que est\u00e1 na minha tela:\n" + text);
-                };
+            ShowOcrText(text, "Texto copiado da tela");
         }
         finally { _snipping = false; }
+    }
+
+    void ShowOcrMissing() =>
+        ShowInfo("\uE8C8", "O Windows est\u00e1 sem o idioma de OCR", "Configurar", glyphColor: Meter.Red, seconds: 6,
+            action: () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:regionlanguage") { UseShellExecute = true }));
+
+    /// <summary>Copies what was read and says so; a click on the card asks Jarvis to explain it.</summary>
+    void ShowOcrText(string text, string title)
+    {
+        try { Clipboard.SetText(text); } catch { }
+        ShowCard(null, title, "OCR", "Clique para o Jarvis explicar: " + Preview(text), seconds: 6, glyph: "\uE8C8");
+        if (JarvisBrain.HasKey || Jarvis.Folder(Jarvis.Engine.Ai) != null)
+            _notifyAction = () =>
+            {
+                ShowJarvisPage();
+                _ = AskJarvisAsync("Explique de forma simples o que \u00e9 isto que est\u00e1 na minha tela:\n" + text);
+            };
     }
 
     /// <summary>Remembers the window in front, so \"what is this error?\" reads that one and not the Jarvis bar.</summary>

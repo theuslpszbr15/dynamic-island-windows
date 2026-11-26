@@ -18,7 +18,7 @@ namespace DynamicIsland;
 
 public partial class IslandWindow : Window
 {
-    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info, Translation }
+    enum Transient { None, Volume, Battery, NowPlaying, AgentAlert, Notification, Privacy, Approval, Info, Translation, Action }
     enum CompactKind { Clock, Media, Timer, Agent, Download }
 
     const int PageMedia = 0, PageSystem = 1, PageFiles = 2, PageAgents = 3, PageTimer = 4, PageCalendar = 5, PagePending = 6, PageTasks = 7, PageJarvis = 8, PageClipboard = 9;
@@ -302,6 +302,7 @@ public partial class IslandWindow : Window
             case Transient.Approval: return ApprovalQuiet ? new(310, 40) : new(440, 128);
             case Transient.Info: return new(340, 40);
             case Transient.Translation: return TranslationSize();
+            case Transient.Action: return ActionSize();
         }
         if (IsHandle) return new(110, 8);
         var h = CompactHeight;
@@ -426,6 +427,7 @@ public partial class IslandWindow : Window
         }
         InfoPanel.Visibility = Vis(_transient == Transient.Info);
         TranslatePanel.Visibility = Vis(_transient == Transient.Translation);
+        ActionPanel.Visibility = Vis(_transient == Transient.Action);
 
         var kind = Kind();
         CompactClock.Visibility = Vis(kind == CompactKind.Clock);
@@ -597,7 +599,10 @@ public partial class IslandWindow : Window
 
         var dwell = IsHandle ? 0.6 : 0.4;
         var answering = _transient == Transient.Approval;
-        if (over && !_expanded && !button && !_dwellBlocked && !answering && (now - _hoverSince).TotalSeconds >= dwell)
+        // cards with buttons stay as they are under the pointer (the open island would hide them) and wait while it's there
+        var hasButtons = _transient is Transient.Translation or Transient.Action;
+        HoldWhileHovered(over && hasButtons);
+        if (over && !_expanded && !button && !_dwellBlocked && !answering && !hasButtons && (now - _hoverSince).TotalSeconds >= dwell)
             SetExpanded(true);
         // the quiet pill opens into Allow / Deny on a deliberate hover (not just because the cursor was already there)
         var hoverStart = _hoverSince > _approvalShownAt ? _hoverSince : _approvalShownAt;
@@ -607,7 +612,7 @@ public partial class IslandWindow : Window
         var interactive = over && !_computerClicking && (_expanded || _dragCandidate || _dragOver || _draggingOut || _menuOpen || answering
                                    || (_transient == Transient.Info && _infoAction != null)
                                    || (_transient == Transient.Notification && _notifyAction != null)
-                                   || _transient == Transient.Translation
+                                   || _transient == Transient.Translation || _transient == Transient.Action
                                    || (!_settings.DiscreetIdle && !IsHandle));
         SetClickThrough(!interactive);
         AdjustPollRate(bounds, local, over || button);
@@ -653,7 +658,7 @@ public partial class IslandWindow : Window
 
     void Island_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_expanded) return;
+        if (_expanded || _transient is Transient.Action or Transient.Translation) return;
         if (_transient == Transient.Approval)
         {
             if (ApprovalQuiet) OpenApproval();
@@ -888,7 +893,8 @@ public partial class IslandWindow : Window
         _underTopBar = IsTopBarUnderIsland(); // e.g. a maximized browser's tabs right under the island
         ApplyHidden();
         EndPeekIfIdle();
-        if (!_hiddenFullscreen && _hwnd != IntPtr.Zero)
+        CheckGame(state);
+        if ((!_hiddenFullscreen || GameHud.Visibility == Visibility.Visible) && _hwnd != IntPtr.Zero)
             Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
 
         var now = DateTime.Now;

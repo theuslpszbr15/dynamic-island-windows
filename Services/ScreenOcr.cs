@@ -24,6 +24,18 @@ public static class ScreenOcr
 
     public static bool Available => Engine() != null;
 
+    /// <summary>A WPF picture (a screenshot from the clipboard or a file) as a bitmap the OCR reads.</summary>
+    public static Drawing.Bitmap FromBitmapSource(System.Windows.Media.Imaging.BitmapSource source)
+    {
+        var converted = new System.Windows.Media.Imaging.FormatConvertedBitmap(source, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        var bitmap = new Drawing.Bitmap(converted.PixelWidth, converted.PixelHeight, Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var data = bitmap.LockBits(new Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height), Drawing.Imaging.ImageLockMode.WriteOnly,
+            Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try { converted.CopyPixels(System.Windows.Int32Rect.Empty, data.Scan0, data.Stride * data.Height, data.Stride); }
+        finally { bitmap.UnlockBits(data); }
+        return bitmap;
+    }
+
     /// <summary>The lines of text in the image, top to bottom; null when Windows has no OCR language installed.</summary>
     public static async Task<string?> ReadAsync(Drawing.Bitmap image) =>
         await RecognizeAsync(image) is { } result ? string.Join('\n', result.Lines.Select(line => line.Text)).Trim() : null;

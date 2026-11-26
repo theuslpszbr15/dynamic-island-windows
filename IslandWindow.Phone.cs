@@ -274,12 +274,52 @@ public partial class IslandWindow
             return NoPhone;
         }
         var label = paths.Count == 1 ? System.IO.Path.GetFileName(paths[0].TrimEnd('\\', '/')) : $"{paths.Count} arquivos";
+        if (_settings.FitVideos != VideoFitMode.Never) paths = await FitVideosAsync(paths);
         var error = await _phone.OfferFilesAsync(paths);
         if (error != null)
             ShowInfo("\uE8EA", label, error, glyphColor: Meter.Red, seconds: 3);
         else
             ShowInfo("\uE8EA", label, "Aceite no celular", seconds: 3);
         return error;
+    }
+
+    /// <summary>Videos a phone may not play (1080p60, 4K, HEVC…) converted first: asked on the island (the card running
+    /// out sends them as they are) or always, per the setting. A video that fails to convert goes as it is.</summary>
+    async Task<IReadOnlyList<string>> FitVideosAsync(IReadOnlyList<string> paths)
+    {
+        var heavy = new List<(string Path, VideoFit.Info Info, string Problem)>();
+        foreach (var path in paths.Where(VideoFit.IsVideo))
+            if (await VideoFit.ProbeAsync(path) is { } info && VideoFit.Problem(info) is { } problem) heavy.Add((path, info, problem));
+        if (heavy.Count == 0) return paths;
+        if (_settings.FitVideos == VideoFitMode.Ask)
+        {
+            var choice = new TaskCompletionSource<bool>();
+            var name = heavy.Count == 1 ? System.IO.Path.GetFileName(heavy[0].Path) : $"{heavy.Count} vídeos";
+            var card = ShowActions(heavy.Count == 1 ? "Esse vídeo pode travar no celular" : "Esses vídeos podem travar no celular",
+                $"{heavy[0].Problem} · {name}",
+                [new("\uE895", "Converter", () => choice.TrySetResult(true), Primary: true), new("\uE724", "Mandar assim", () => choice.TrySetResult(false))],
+                glyph: "\uE714", seconds: 20, important: true);
+            while (!choice.Task.IsCompleted && _transient == Transient.Action && ReferenceEquals(_actionCard, card))
+                await Task.WhenAny(choice.Task, Task.Delay(300));
+            if (!choice.Task.IsCompleted || !choice.Task.Result) return paths;
+        }
+        var result = paths.ToList();
+        foreach (var (path, info, _) in heavy)
+        {
+            var label = System.IO.Path.GetFileName(path);
+            var shown = -1;
+            var progress = new Progress<double>(p =>
+            {
+                var percent = (int)(p * 100);
+                if (percent == shown) return;
+                shown = percent;
+                ShowInfo("\uE714", $"Convertendo {label}", $"{percent}%", seconds: 30);
+            });
+            ShowInfo("\uE714", $"Convertendo {label}", "0%", seconds: 30);
+            if (await VideoFit.ConvertAsync(path, info, progress) is { } fitted) result[result.IndexOf(path)] = fitted;
+            else ShowInfo("\uE714", $"Não deu para converter {label}", "vai assim", glyphColor: Meter.Red, seconds: 3);
+        }
+        return result;
     }
 
     /// <summary>Null when sent, otherwise why not.</summary>

@@ -9,7 +9,7 @@ public partial class IslandWindow
 {
     Translation? _translation;
     string _translationSource = "";
-    bool _translating;
+    bool _translating, _translationReplace = true;
 
     async void TranslateSelection()
     {
@@ -40,9 +40,12 @@ public partial class IslandWindow
         finally { _translating = false; }
     }
 
-    void ShowTranslation(Translation translation)
+    /// <param name="replace">Offer "Trocar o texto" (the source is a selection in the app in front, not a picture).</param>
+    void ShowTranslation(Translation translation, bool replace = true)
     {
         _translation = translation;
+        _translationReplace = replace;
+        TranslateReplace.Visibility = Vis(replace);
         TranslateLangs.Text = $"{translation.From} → {translation.To}";
         TranslateText.Text = translation.Text;
         if (_expanded) SetExpanded(false);
@@ -93,7 +96,7 @@ public partial class IslandWindow
                 if (_translationSource.Length == 0) return;
                 _transientTimer.Stop();
                 TranslateLangs.Text = "Traduzindo…";
-                if (await Translator.TranslateAsync(_translationSource, target) is { } again) ShowTranslation(again);
+                if (await Translator.TranslateAsync(_translationSource, target) is { } again) ShowTranslation(again, _translationReplace);
                 else ShowInfo("\uF2B7", "Não consegui traduzir agora", "tente de novo", glyphColor: Meter.Red, seconds: 3);
             };
             menu.Items.Add(item);
