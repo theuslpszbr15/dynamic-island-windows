@@ -7,6 +7,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +71,8 @@ object Gamepad {
     private var buttons = 0
     private var lx = 0f; private var ly = 0f; private var rx = 0f; private var ry = 0f
     private var lt = false; private var rt = false
+    /** Tilt steering (the left stick's X) while it is on; a finger on the left stick still wins. */
+    private var tilt: Float? = null
     private var sent = ""
     private var sentAt = 0L
     private var pump: ScheduledFuture<*>? = null
@@ -84,10 +93,14 @@ object Gamepad {
         if (left) { lx = x; ly = y } else { rx = x; ry = y }
     }
 
+    fun steering(x: Float?) = synchronized(lock) { tilt = x }
+
     fun frame(): JSONObject = synchronized(lock) {
         fun axis(v: Float) = (v.coerceIn(-1f, 1f) * 32767).roundToInt()
+        val steer = tilt
+        val x = if (steer != null && kotlin.math.abs(lx) < 0.05f) steer else lx
         JSONObject().put("type", "pad").put("kind", if (ps4) "ps4" else "xbox").put("b", buttons)
-            .put("lx", axis(lx)).put("ly", axis(ly)).put("rx", axis(rx)).put("ry", axis(ry))
+            .put("lx", axis(x)).put("ly", axis(ly)).put("rx", axis(rx)).put("ry", axis(ry))
             .put("lt", if (lt) 255 else 0).put("rt", if (rt) 255 else 0)
     }
 
@@ -98,7 +111,7 @@ object Gamepad {
     /** Lets go of everything (the game sees the buttons come up) and stops sending. */
     fun stop() {
         val wasOn = synchronized(lock) {
-            buttons = 0; lx = 0f; ly = 0f; rx = 0f; ry = 0f; lt = false; rt = false
+            buttons = 0; lx = 0f; ly = 0f; rx = 0f; ry = 0f; lt = false; rt = false; tilt = null
             val on = pump != null
             pump?.cancel(false)
             pump = null
@@ -125,55 +138,177 @@ object Gamepad {
 private val XboxColors = mapOf(Gamepad.A to Color(0xFF5CC85A), Gamepad.B to Color(0xFFE5534B), Gamepad.X to Color(0xFF4A90E2), Gamepad.Y to Color(0xFFF2C14E))
 private val Ps4Colors = mapOf(Gamepad.A to Color(0xFF7FA7E8), Gamepad.B to Color(0xFFE8707A), Gamepad.X to Color(0xFFE59AD0), Gamepad.Y to Color(0xFF5FCFB3))
 
-/** Landscape: triggers and shoulders on top, left stick and D-pad on the left, face buttons and right stick on the right. */
+/** The game pad as laid out in [layout] ([PadLayout]); [editing] turns it into the editor. [ps4] picks names and colours. */
 @Composable
-fun GamepadMode(problem: String?, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    var ps4 by remember { mutableStateOf(Gamepad.kind(context)) }
+fun GamepadMode(ps4: Boolean, layout: PadLayout, editing: Boolean, onLayout: (PadLayout) -> Unit, modifier: Modifier = Modifier) {
     val face = if (ps4) Ps4Colors else XboxColors
-    Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PadTrigger(if (ps4) "L2" else "LT", left = true, Modifier.weight(1f))
-                PadButton(if (ps4) "L1" else "LB", Gamepad.LB, Modifier.weight(1f).height(44.dp), RoundedCornerShape(12.dp))
-            }
-            Stick(left = true, size = 128.dp)
-            DPad(Modifier.align(Alignment.End))
-        }
-        Column(Modifier.width(150.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
-            Row(Modifier.fillMaxWidth().background(Ui.Card, Ui.ButtonShape).padding(4.dp)) {
-                listOf(false to "Xbox", true to "PS4").forEach { (kind, label) ->
-                    Box(Modifier.weight(1f).height(34.dp).clip(RoundedCornerShape(12.dp)).background(if (ps4 == kind) Ui.Raised else Ui.Card)
-                        .clickable { ps4 = kind; Gamepad.setKind(context, kind) }, contentAlignment = Alignment.Center) {
-                        Text(label, color = if (ps4 == kind) Ui.Text else Ui.Muted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    }
+    var selected by remember { mutableStateOf<String?>(null) }
+    // the drag gestures outlive each change of the layout they make
+    val current by androidx.compose.runtime.rememberUpdatedState(layout)
+    val update by androidx.compose.runtime.rememberUpdatedState(onLayout)
+    if (!editing) selected = null
+    TiltSteering(on = layout.gyro && !editing)
+    BoxWithConstraints(modifier.fillMaxSize().then(if (editing) Modifier.background(Ui.Bg).drawDots() else Modifier)) {
+        val areaW = maxWidth
+        val areaH = maxHeight
+        val density = LocalDensity.current
+        if (layout.gyro && !editing) Text("Volante: incline o celular", color = Ui.Ok, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.TopCenter).background(Ui.Ok.copy(alpha = 0.14f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 6.dp))
+        for (id in PadLayout.Ids) {
+            val item = layout.item(id)
+            if (item.hidden && !editing) continue
+            val w = (item.w * layout.scale).dp
+            val h = (item.h * layout.scale).dp
+            Box(
+                Modifier.offset(areaW * item.cx - w / 2, areaH * item.cy - h / 2).size(w, h)
+                    .alpha(if (editing) (if (item.hidden) 0.3f else 1f) else layout.alpha),
+            ) {
+                PadControl(id, ps4, face, w, h)
+                if (editing) {
+                    val isSelected = selected == id
+                    Box(
+                        Modifier.matchParentSize()
+                            .border(2.dp, Edit, if (id in PadLayout.Square) CircleShape else RoundedCornerShape(12.dp))
+                            .background(if (isSelected) Edit.copy(alpha = 0.16f) else Color.Transparent)
+                            .pointerInput(id) { detectTapGestures { selected = id } }
+                            .pointerInput(id) {
+                                detectDragGestures(onDragStart = { selected = id }, onDragEnd = {
+                                    val now = current.item(id)
+                                    update(current.with(id, now.copy(cx = snap(now.cx), cy = snap(now.cy))))
+                                }) { change, drag ->
+                                    change.consume()
+                                    val now = current.item(id)
+                                    val pxW = with(density) { areaW.toPx() }
+                                    val pxH = with(density) { areaH.toPx() }
+                                    update(current.with(id, now.copy(
+                                        cx = (now.cx + drag.x / pxW).coerceIn(0f, 1f),
+                                        cy = (now.cy + drag.y / pxH).coerceIn(0f, 1f),
+                                    )))
+                                }
+                            },
+                    )
+                    if (isSelected) Box(
+                        Modifier.align(Alignment.BottomEnd).offset(8.dp, 8.dp).size(22.dp).background(Edit, RoundedCornerShape(6.dp))
+                            .pointerInput(id) {
+                                detectDragGestures { change, drag ->
+                                    change.consume()
+                                    val layoutNow = current
+                                    val now = layoutNow.item(id)
+                                    var nw = (now.w + with(density) { drag.x.toDp().value } / layoutNow.scale).coerceIn(PadLayout.MIN_SIZE, PadLayout.MAX_SIZE)
+                                    var nh = (now.h + with(density) { drag.y.toDp().value } / layoutNow.scale).coerceIn(PadLayout.MIN_SIZE, PadLayout.MAX_SIZE)
+                                    if (id in PadLayout.Square) { val s = maxOf(nw, nh); nw = s; nh = s }
+                                    update(layoutNow.with(id, now.copy(w = nw, h = nh)))
+                                }
+                            },
+                    )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PadButton(if (ps4) "Share" else "View", Gamepad.BACK, Modifier.weight(1f).height(36.dp), RoundedCornerShape(18.dp), small = true)
-                PadButton(if (ps4) "Options" else "Menu", Gamepad.START, Modifier.weight(1f).height(36.dp), RoundedCornerShape(18.dp), small = true)
-            }
-            PadButton(if (ps4) "PS" else "Xbox", Gamepad.GUIDE, Modifier.size(52.dp), CircleShape, small = true)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PadButton(if (ps4) "L3" else "LS", Gamepad.LS, Modifier.weight(1f).height(34.dp), RoundedCornerShape(17.dp), small = true)
-                PadButton(if (ps4) "R3" else "RS", Gamepad.RS, Modifier.weight(1f).height(34.dp), RoundedCornerShape(17.dp), small = true)
-            }
-            if (problem != null) Text(problem, color = Ui.Warn, fontSize = 12.sp, lineHeight = 15.sp)
         }
-        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PadButton(if (ps4) "R1" else "RB", Gamepad.RB, Modifier.weight(1f).height(44.dp), RoundedCornerShape(12.dp))
-                PadTrigger(if (ps4) "R2" else "RT", left = false, Modifier.weight(1f))
+        val chosen = selected
+        if (editing && chosen != null) {
+            val item = layout.item(chosen)
+            Row(
+                Modifier.align(Alignment.TopCenter).background(Ui.Card, RoundedCornerShape(14.dp)).border(1.dp, Edit, RoundedCornerShape(14.dp)).padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(Names(ps4)[chosen] ?: chosen, color = Ui.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                SmallChip("−") { onLayout(layout.with(chosen, item.copy(w = (item.w * 0.9f).coerceAtLeast(PadLayout.MIN_SIZE), h = (item.h * 0.9f).coerceAtLeast(PadLayout.MIN_SIZE)))) }
+                SmallChip("+") { onLayout(layout.with(chosen, item.copy(w = (item.w * 1.1f).coerceAtMost(PadLayout.MAX_SIZE), h = (item.h * 1.1f).coerceAtMost(PadLayout.MAX_SIZE)))) }
+                SmallChip(if (item.hidden) "Mostrar" else "Esconder") { onLayout(layout.with(chosen, item.copy(hidden = !item.hidden))) }
             }
-            Box(Modifier.size(132.dp).align(Alignment.End)) {
-                val size = 46.dp
-                PadButton(if (ps4) "△" else "Y", Gamepad.Y, Modifier.size(size).align(Alignment.TopCenter), CircleShape, color = face[Gamepad.Y])
-                PadButton(if (ps4) "□" else "X", Gamepad.X, Modifier.size(size).align(Alignment.CenterStart), CircleShape, color = face[Gamepad.X])
-                PadButton(if (ps4) "○" else "B", Gamepad.B, Modifier.size(size).align(Alignment.CenterEnd), CircleShape, color = face[Gamepad.B])
-                PadButton(if (ps4) "✕" else "A", Gamepad.A, Modifier.size(size).align(Alignment.BottomCenter), CircleShape, color = face[Gamepad.A])
+        } else if (editing) Text("Arraste para mover · puxe o canto azul para o tamanho · toque para escolher", color = Ui.Muted, fontSize = 13.sp,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp))
+    }
+}
+
+private val Edit = Color(0xFF5AA2FF)
+
+/** Positions land on a grid of 1/48 of the area, so things line up. */
+private fun snap(v: Float) = (v * 48).roundToInt() / 48f
+
+private fun Modifier.drawDots() = drawBehind {
+    val step = 24.dp.toPx()
+    var x = step / 2
+    while (x < size.width) {
+        var y = step / 2
+        while (y < size.height) { drawCircle(Color(0xFF2A2A29), 1.3.dp.toPx(), Offset(x, y)); y += step }
+        x += step
+    }
+}
+
+private fun Names(ps4: Boolean) = mapOf(
+    "lt" to if (ps4) "L2" else "LT", "lb" to if (ps4) "L1" else "LB", "rb" to if (ps4) "R1" else "RB", "rt" to if (ps4) "R2" else "RT",
+    "ls" to "Analógico esquerdo", "rs" to "Analógico direito", "dpad" to "Direcional", "face" to "Botões",
+    "back" to if (ps4) "Share" else "View", "start" to if (ps4) "Options" else "Menu", "guide" to if (ps4) "PS" else "Xbox",
+    "l3" to if (ps4) "L3" else "LS", "r3" to if (ps4) "R3" else "RS",
+)
+
+@Composable
+private fun SmallChip(label: String, onClick: () -> Unit) {
+    Box(Modifier.height(34.dp).clip(RoundedCornerShape(10.dp)).background(Ui.Raised).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center) { Text(label, color = Ui.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) }
+}
+
+/** One control at its size. */
+@Composable
+private fun PadControl(id: String, ps4: Boolean, face: Map<Int, Color>, w: Dp, h: Dp) {
+    val names = Names(ps4)
+    val full = Modifier.fillMaxSize()
+    val pill = RoundedCornerShape(minOf(w, h) / 2)
+    when (id) {
+        "lt" -> PadTrigger(names.getValue(id), left = true, full)
+        "rt" -> PadTrigger(names.getValue(id), left = false, full)
+        "lb" -> PadButton(names.getValue(id), Gamepad.LB, full, RoundedCornerShape(12.dp))
+        "rb" -> PadButton(names.getValue(id), Gamepad.RB, full, RoundedCornerShape(12.dp))
+        "ls" -> Stick(left = true, size = w)
+        "rs" -> Stick(left = false, size = w)
+        "dpad" -> DPad(w)
+        "face" -> FaceButtons(ps4, face, w)
+        "back" -> PadButton(names.getValue(id), Gamepad.BACK, full, pill, small = true)
+        "start" -> PadButton(names.getValue(id), Gamepad.START, full, pill, small = true)
+        "guide" -> PadButton(names.getValue(id), Gamepad.GUIDE, full, CircleShape, small = true)
+        "l3" -> PadButton(names.getValue(id), Gamepad.LS, full, pill, small = true)
+        "r3" -> PadButton(names.getValue(id), Gamepad.RS, full, pill, small = true)
+    }
+}
+
+@Composable
+private fun FaceButtons(ps4: Boolean, face: Map<Int, Color>, size: Dp) {
+    Box(Modifier.size(size)) {
+        val b = size * 0.35f
+        PadButton(if (ps4) "△" else "Y", Gamepad.Y, Modifier.size(b).align(Alignment.TopCenter), CircleShape, color = face[Gamepad.Y])
+        PadButton(if (ps4) "□" else "X", Gamepad.X, Modifier.size(b).align(Alignment.CenterStart), CircleShape, color = face[Gamepad.X])
+        PadButton(if (ps4) "○" else "B", Gamepad.B, Modifier.size(b).align(Alignment.CenterEnd), CircleShape, color = face[Gamepad.B])
+        PadButton(if (ps4) "✕" else "A", Gamepad.A, Modifier.size(b).align(Alignment.BottomCenter), CircleShape, color = face[Gamepad.A])
+    }
+}
+
+/** Tilting the phone like a steering wheel moves the left stick sideways, while [on]. */
+@Composable
+private fun TiltSteering(on: Boolean) {
+    val context = LocalContext.current
+    DisposableEffect(on) {
+        val sensors = context.getSystemService(android.hardware.SensorManager::class.java)
+        val gravity = sensors?.getDefaultSensor(android.hardware.Sensor.TYPE_GRAVITY)
+            ?: sensors?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(e: android.hardware.SensorEvent) {
+                val (dx, dy) = e.values[0] to e.values[1]
+                // the sensors use the phone's natural (portrait) axes; the screen may be turned
+                val (sx, sy) = when ((context as? android.app.Activity)?.display?.rotation ?: android.view.Surface.ROTATION_0) {
+                    android.view.Surface.ROTATION_90 -> -dy to dx
+                    android.view.Surface.ROTATION_270 -> dy to -dx
+                    android.view.Surface.ROTATION_180 -> -dx to -dy
+                    else -> dx to dy
+                }
+                Gamepad.steering(PadLayout.steer(sx, sy))
             }
-            Stick(left = false, size = 120.dp)
+            override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+        }
+        if (on && gravity != null) sensors.registerListener(listener, gravity, android.hardware.SensorManager.SENSOR_DELAY_GAME)
+        onDispose {
+            sensors?.unregisterListener(listener)
+            Gamepad.steering(null)
         }
     }
 }
@@ -206,7 +341,7 @@ private fun PadTrigger(label: String, left: Boolean, modifier: Modifier) {
     var down by remember { mutableStateOf(false) }
     val view = LocalView.current
     Box(
-        modifier.height(44.dp).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 8.dp, bottomEnd = 8.dp))
+        modifier.clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 8.dp, bottomEnd = 8.dp))
             .background(if (down) Ui.Text else Ui.Card).border(1.dp, Ui.Line, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 8.dp, bottomEnd = 8.dp))
             .pointerInput(left) {
                 awaitEachGesture {
@@ -258,9 +393,9 @@ private fun Stick(left: Boolean, size: Dp) {
 }
 
 @Composable
-private fun DPad(modifier: Modifier) {
-    val key = 38.dp
-    Box(modifier.size(key * 3)) {
+private fun DPad(size: Dp) {
+    val key = size / 3
+    Box(Modifier.size(size)) {
         val arrow = RoundedCornerShape(8.dp)
         PadButton("▲", Gamepad.UP, Modifier.size(key).align(Alignment.TopCenter), arrow, small = true)
         PadButton("▼", Gamepad.DOWN, Modifier.size(key).align(Alignment.BottomCenter), arrow, small = true)

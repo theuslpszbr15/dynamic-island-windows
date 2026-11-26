@@ -102,4 +102,18 @@ class ScreensTest {
             AppTheme { TouchpadScreen(connected = true, viaRelay = false, onClose = {}, initialMode = 3) }
         }
     }
+
+    @Test @Config(sdk = [34], qualifiers = "w891dp-h411dp-night-xxhdpi")
+    fun gamepadEditor() = captureRoboImage("build/screens/14-controle-editar.png") {
+        CompositionLocalProvider(LocalStill provides true) {
+            AppTheme { TouchpadScreen(connected = true, viaRelay = false, onClose = {}, initialMode = 3, initialEditing = true) }
+        }
+    }
+
+    @Test @Config(sdk = [34], qualifiers = "w891dp-h411dp-night-xxhdpi")
+    fun gamepadRacing() = captureRoboImage("build/screens/15-controle-corrida.png") {
+        CompositionLocalProvider(LocalStill provides true) {
+            AppTheme { TouchpadScreen(connected = true, viaRelay = false, onClose = {}, initialMode = 3, initialPad = PadLayout.Racing) }
+        }
+    }
 }

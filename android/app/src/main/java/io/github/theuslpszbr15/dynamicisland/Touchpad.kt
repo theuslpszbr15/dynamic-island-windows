@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -174,11 +175,16 @@ class TouchpadActivity : ComponentActivity() {
     }
 }
 
-/** Mouse (touchpad, buttons, keyboard), Filme, Slides and Jogo (a game controller, in landscape). */
+/** Mouse (touchpad, buttons, keyboard), Filme, Slides and Jogo (a game controller in landscape, with its layout editor). */
 @Composable
-fun TouchpadScreen(connected: Boolean, viaRelay: Boolean, onClose: () -> Unit, initialMode: Int = 0, padProblem: String? = null) {
+fun TouchpadScreen(connected: Boolean, viaRelay: Boolean, onClose: () -> Unit, initialMode: Int = 0, padProblem: String? = null,
+                   initialEditing: Boolean = false, initialPad: PadLayout? = null) {
     var mode by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(initialMode) }
-    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? android.app.Activity
+    var ps4 by remember { mutableStateOf(Gamepad.kind(context)) }
+    var pad by remember(ps4) { mutableStateOf(initialPad ?: PadLayout.load(context, ps4)) }
+    var editing by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialEditing) }
     LaunchedEffect(mode) {
         activity?.requestedOrientation = if (mode == 3) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -196,22 +202,73 @@ fun TouchpadScreen(connected: Boolean, viaRelay: Boolean, onClose: () -> Unit, i
         when {
             !connected -> UiTag("PC desconectado: os toques não chegam", Tone.Bad)
             viaRelay -> UiTag("Pela internet: o mouse pode atrasar um pouco", Tone.Warn)
+            mode == 3 && padProblem != null && !editing -> UiTag(padProblem, Tone.Warn)
         }
-        Row(Modifier.fillMaxWidth().background(Ui.Card, Ui.ButtonShape).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (mode == 3 && editing) PadToolbar(pad, { pad = it }, onSave = {
+            PadLayout.save(context, ps4, pad)
+            editing = false
+        })
+        else Row(Modifier.fillMaxWidth().background(Ui.Card, Ui.ButtonShape).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             listOf("Mouse", "Filme", "Slides", "Jogo").forEachIndexed { i, label ->
                 Box(
                     Modifier.weight(1f).height(40.dp).clip(RoundedCorner).background(if (mode == i) Ui.Raised else Ui.Card).clickable { mode = i },
                     contentAlignment = Alignment.Center,
                 ) { Text(label, color = if (mode == i) Ui.Text else Ui.Muted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) }
             }
-            if (mode == 3) UiLink("Fechar", onClose, Modifier.padding(horizontal = 8.dp))
+            if (mode == 3) {
+                listOf(false to "Xbox", true to "PS4").forEach { (kind, label) ->
+                    Box(Modifier.width(64.dp).height(40.dp).clip(RoundedCorner).background(if (ps4 == kind) Ui.Raised else Ui.Card)
+                        .clickable { ps4 = kind; Gamepad.setKind(context, kind) }, contentAlignment = Alignment.Center) {
+                        Text(label, color = if (ps4 == kind) Ui.Text else Ui.Muted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                }
+                UiLink("Editar layout", { editing = true }, Modifier.padding(horizontal = 8.dp))
+                UiLink("Fechar", onClose, Modifier.padding(end = 8.dp))
+            }
         }
         when (mode) {
             0 -> MouseMode(Modifier.weight(1f))
             1 -> MovieMode(Modifier.weight(1f))
             2 -> SlidesMode(Modifier.weight(1f))
-            else -> GamepadMode(padProblem, Modifier.weight(1f))
+            else -> GamepadMode(ps4, pad, editing, { pad = it }, Modifier.weight(1f))
         }
+    }
+}
+
+/** While editing the pad: a layout to start from, size and see-through of everything, tilt steering, back to the default, save. */
+@Composable
+private fun PadToolbar(layout: PadLayout, onLayout: (PadLayout) -> Unit, onSave: () -> Unit) {
+    var presets by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().background(Ui.Card, Ui.ButtonShape).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            KeyButton("Layout ▾", Modifier.width(104.dp), 40) { presets = true }
+            androidx.compose.material3.DropdownMenu(expanded = presets, onDismissRequest = { presets = false }) {
+                PadLayout.Presets.forEach { (name, preset) ->
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(name) }, onClick = {
+                        onLayout(preset.copy(scale = layout.scale, alpha = layout.alpha))
+                        presets = false
+                    })
+                }
+            }
+        }
+        Text("Tamanho", color = Ui.Muted, fontSize = 13.sp)
+        val sliderColors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Ui.Text, activeTrackColor = Ui.Text,
+            inactiveTrackColor = Ui.Raised, activeTickColor = Ui.Text, inactiveTickColor = Ui.Raised)
+        androidx.compose.material3.Slider(layout.scale, { onLayout(layout.copy(scale = it)) }, Modifier.width(110.dp),
+            valueRange = PadLayout.MIN_SCALE..PadLayout.MAX_SCALE, colors = sliderColors)
+        Text("Transparência", color = Ui.Muted, fontSize = 13.sp)
+        androidx.compose.material3.Slider(1f - layout.alpha + PadLayout.MIN_ALPHA, { onLayout(layout.copy(alpha = 1f - it + PadLayout.MIN_ALPHA)) },
+            Modifier.width(110.dp), valueRange = PadLayout.MIN_ALPHA..1f, colors = sliderColors)
+        Box(
+            Modifier.height(40.dp).clip(RoundedCorner).background(if (layout.gyro) Ui.Ok.copy(alpha = 0.18f) else Ui.Raised)
+                .clickable { onLayout(layout.copy(gyro = !layout.gyro)) }.padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(if (layout.gyro) "Volante: ligado" else "Volante: desligado", color = if (layout.gyro) Ui.Ok else Ui.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) }
+        Box(Modifier.weight(1f))
+        KeyButton("Restaurar", Modifier.width(96.dp), 40) { onLayout(PadLayout.Default.copy(scale = 1f, alpha = 1f)) }
+        UiPrimary("Salvar", onSave, Modifier.width(90.dp), height = 40.dp)
     }
 }
 
