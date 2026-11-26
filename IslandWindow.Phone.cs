@@ -75,6 +75,7 @@ public partial class IslandWindow
             _phone.Call += OnPhoneCall;
             _phone.FilterFromPhone += OnPhoneFilter;
             _phone.PhonesChanged += PublishPhonePc;
+            _phone.PhonesChanged += RememberPhones;
             _phone.History = History;
         }
         _phone.SetRelay(_settings.EffectivePhoneRelay, own: _settings.PhoneRelayMode == PhoneRelayMode.Own);
@@ -130,6 +131,31 @@ public partial class IslandWindow
         }
         // the phone shows it as a file to accept; tapping it opens Android's installer
         await SendFilesToPhoneAsync([apk]);
+    }
+
+    HashSet<string> _phonesOnline = [];
+
+    // saved only when a phone joins or leaves
+    void RememberPhones()
+    {
+        if (SnapshotMode || _phone == null) return;
+        var online = _phone.Running ? _phone.Phones : [];
+        var names = online.Select(p => p.Device).ToHashSet();
+        if (names.SetEquals(_phonesOnline)) return;
+        var now = DateTime.Now;
+        foreach (var phone in online)
+        {
+            var known = _settings.KnownPhones.Find(k => k.Device == phone.Device);
+            if (known == null) _settings.KnownPhones.Add(known = new KnownPhone { Device = phone.Device, FirstSeen = now });
+            known.LastSeen = now;
+            known.ViaRelay = phone.ViaRelay;
+        }
+        foreach (var gone in _phonesOnline.Except(names))
+            if (_settings.KnownPhones.Find(k => k.Device == gone) is { } known) known.LastSeen = now;
+        if (_settings.KnownPhones.Count > 20)
+            _settings.KnownPhones = _settings.KnownPhones.OrderByDescending(k => k.LastSeen).Take(20).ToList();
+        _phonesOnline = names;
+        _settings.Save();
     }
 
     void OnPhoneJoined(string device, bool viaRelay)

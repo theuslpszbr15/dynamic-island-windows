@@ -24,6 +24,14 @@ public enum VideoFitMode { Ask, Always, Never }
 public enum MediaFilterPreset { MusicOnly, MusicAndWeb, All, Custom }
 
 public sealed record TaskItem(string Id, string Text, bool Done, string? Due = null);
+
+public sealed class KnownPhone
+{
+    public string Device { get; set; } = "";
+    public DateTime FirstSeen { get; set; }
+    public DateTime LastSeen { get; set; }
+    public bool ViaRelay { get; set; }
+}
 public sealed record QuickSnippet(string Label, string Value);
 
 public sealed class IslandSettings
@@ -194,6 +202,8 @@ public sealed class IslandSettings
     public VideoFitMode FitVideos { get; set; } = VideoFitMode.Ask;
     /// <summary>Also reach the phone through the USB cable (adb reverse), for PCs whose network the phone can't see.</summary>
     public bool PhoneUsb { get; set; }
+    /// <summary>Every phone that has connected (Configurações › Celular › Celulares).</summary>
+    public List<KnownPhone> KnownPhones { get; set; } = [];
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Shortcuts the user changed, by action ("hide", "media"…), e.g. "Ctrl+Shift+D". See Hotkeys.</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];

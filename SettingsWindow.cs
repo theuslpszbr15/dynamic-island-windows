@@ -784,6 +784,7 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.JarvisGlow, v => { S.JarvisGlow = v; S.Save(); _app.Island.ApplyLook(); }),
             Row("Conversar agora", "Abre a caixa do Jarvis embaixo da ilha.", open)));
 
+        page.Children.Add(ConversationCard());
         page.Children.Add(BrainCard());
         page.Children.Add(PluginsCard());
         page.Children.Add(ComputerCard());
@@ -823,6 +824,57 @@ public sealed partial class SettingsWindow : DarkWindow
             Engine(Services.Jarvis.Engine.Ai, "Para conversar sobre qualquer assunto, sem internet."),
             Engine(Services.Jarvis.Engine.Voice, "Para o Jarvis falar as respostas."),
             Engine(Services.Jarvis.Engine.Microphone, "Para falar com o Jarvis segurando o atalho.")));
+    }
+
+    /// <summary>The conversation with Jarvis (PC and phone), newest at the bottom, kept between restarts.</summary>
+    Border ConversationCard()
+    {
+        var island = _app.Island;
+        var list = new StackPanel();
+        var scroll = new ScrollViewer
+        {
+            MaxHeight = 440, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = list, Margin = new Thickness(0, 4, 0, 10),
+        };
+        var copy = new Button { Content = "Copiar tudo", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
+        copy.Click += (_, _) =>
+        {
+            try { Clipboard.SetText(string.Join("\n\n", island.JarvisHistory.Select(t => (t.User ? "Você: " : "Jarvis: ") + t.Text))); }
+            catch { }
+        };
+        var clear = new Button { Content = "Nova conversa", Style = (Style)Resources["Action"] };
+        clear.Click += (_, _) =>
+        {
+            if (DarkDialog.Ask(this, "Nova conversa", "A conversa some daqui e o Jarvis começa do zero. O que ele lembra sobre você fica.", "Apagar", danger: true))
+                island.ClearJarvisConversation();
+        };
+
+        void Fill()
+        {
+            list.Children.Clear();
+            var turns = island.JarvisHistory.ToList();
+            if (turns.Count == 0) list.Children.Add(Note("Nenhuma conversa ainda. O que você pedir ao Jarvis, no PC ou no celular, aparece aqui."));
+            foreach (var (user, text) in turns)
+                list.Children.Add(user
+                    ? new Border
+                    {
+                        Background = Hover, CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 7, 12, 8),
+                        Margin = new Thickness(90, 4, 0, 4), HorizontalAlignment = HorizontalAlignment.Right,
+                        Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 13.5, TextWrapping = TextWrapping.Wrap },
+                    }
+                    : new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 14, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 90, 8) });
+            copy.IsEnabled = clear.IsEnabled = turns.Count > 0;
+            scroll.ScrollToEnd();
+        }
+        Fill();
+        // JarvisChanged is raised on the UI thread
+        scroll.Loaded += (_, _) => island.JarvisChanged += Fill;
+        scroll.Unloaded += (_, _) => island.JarvisChanged -= Fill;
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+        buttons.Children.Add(copy);
+        buttons.Children.Add(clear);
+        return Card("Conversa", scroll, buttons);
     }
 
     /// <summary>MCP plugins: each one's tools become Jarvis's tools. Playwright's browser comes in the list, off.</summary>
@@ -965,6 +1017,7 @@ public sealed partial class SettingsWindow : DarkWindow
         {
             if (!DarkDialog.Ask(this, "Esquecer tudo?", "O Jarvis apaga o que lembra sobre você e o histórico da conversa.", "Esquecer", danger: true)) return;
             brain.ForgetEverything();
+            _app.Island.ClearJarvisConversation();
             Render();
         };
         var actions = new WrapPanel();
@@ -1311,6 +1364,38 @@ public sealed partial class SettingsWindow : DarkWindow
             status, RelaySetupRows());
     }
 
+    /// <summary>Every phone that has connected, online or not, with when it was last seen.</summary>
+    Border KnownPhonesCard()
+    {
+        var online = _app.Island.Phone is { Running: true } link ? link.Phones.Select(p => p.Device).ToHashSet() : [];
+        var green = new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58));
+        var rows = new List<UIElement>();
+        foreach (var phone in S.KnownPhones.OrderByDescending(p => online.Contains(p.Device)).ThenByDescending(p => p.LastSeen))
+        {
+            var now = online.Contains(phone.Device);
+            var when = phone.LastSeen.Date == DateTime.Today ? $"hoje às {phone.LastSeen:HH:mm}"
+                : phone.LastSeen.Date == DateTime.Today.AddDays(-1) ? $"ontem às {phone.LastSeen:HH:mm}" : $"{phone.LastSeen:dd/MM/yyyy HH:mm}";
+            var path = phone.ViaRelay ? "pela internet" : "rede local";
+            var remove = new Button { Content = "Tirar da lista", Style = (Style)Resources["Action"], IsEnabled = !now };
+            remove.Click += (_, _) =>
+            {
+                S.KnownPhones.Remove(phone);
+                S.Save();
+                Render();
+            };
+            var row = Row(phone.Device, (now ? "Conectado agora" : "Visto por último " + when) + " · " + path + $" · pareado em {phone.FirstSeen:dd/MM/yyyy}", remove);
+            if (now && row is FrameworkElement element) element.ToolTip = "Conectado agora";
+            rows.Add(row);
+        }
+        var state = Note(online.Count > 0 ? $"✓ {online.Count} conectado agora" : "Nenhum conectado agora.");
+        if (online.Count > 0) state.Foreground = green;
+        return Card("Celulares",
+        [
+            state, .. rows,
+            Note("Todos usam o mesmo pareamento: para tirar o acesso de um celular, use \"Parear de novo\" (os outros escaneiam o código de novo)."),
+        ]);
+    }
+
     void Phone(Panel page)
     {
         var island = _app.Island;
@@ -1403,6 +1488,7 @@ public sealed partial class SettingsWindow : DarkWindow
         {
             page.Children.Add(Card("Parear", Note("A ligação não iniciou: " + (island.PhoneError ?? "erro desconhecido"))));
         }
+        if (S.KnownPhones.Count > 0) page.Children.Add(KnownPhonesCard());
 
         var download = new Button { Content = "Abrir no navegador", Style = (Style)Resources["Action"] };
         download.Click += (_, _) => Open(ReleasesUrl);

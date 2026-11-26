@@ -144,7 +144,7 @@ public partial class IslandWindow : IJarvisHost
     }
 
     bool _following;
-    double _scrollAt, _followFrom;
+    double _scrollAt;
 
     // A long answer scrolls down as the voice reads it, a little ahead of the spoken line.
     void FollowVoice(bool on)
@@ -153,7 +153,8 @@ public partial class IslandWindow : IJarvisHost
         _following = on;
         if (on)
         {
-            _scrollAt = _followFrom = JarvisScroll.VerticalOffset;
+            _scrollAt = 0;
+            JarvisScroll.ScrollToVerticalOffset(0);
             System.Windows.Media.CompositionTarget.Rendering += FollowFrame;
         }
         else System.Windows.Media.CompositionTarget.Rendering -= FollowFrame;
@@ -165,9 +166,8 @@ public partial class IslandWindow : IJarvisHost
         if (!JarvisOnScreen) return;
         var room = JarvisScroll.ScrollableHeight;
         UpdateAnswerFade();
-        if (room <= 0 || Jarvis.SpeechProgress is not { } progress || _lastAnswer is not { IsVisible: true } answer) return;
-        var top = answer.TranslatePoint(new Point(0, 0), (UIElement)JarvisScroll.Content).Y;
-        var target = Math.Clamp(top + progress * answer.ActualHeight - JarvisScroll.ViewportHeight * 0.45, Math.Min(_followFrom, room), room);
+        if (room <= 0 || Jarvis.SpeechProgress is not { } progress) return;
+        var target = Math.Clamp(progress * JarvisScroll.ExtentHeight - JarvisScroll.ViewportHeight * 0.45, 0, room);
         _scrollAt += (target - _scrollAt) * 0.08;
         JarvisScroll.ScrollToVerticalOffset(_scrollAt);
     }
@@ -205,55 +205,14 @@ public partial class IslandWindow : IJarvisHost
         catch (Exception ex) { Log.Error("Jarvis conversation", ex); }
     }
 
-    void JarvisClear_Click(object sender, RoutedEventArgs e)
+    /// <summary>A fresh conversation (Configurações › Jarvis): the past turns go, the permanent memory stays.</summary>
+    public void ClearJarvisConversation()
     {
-        e.Handled = true;
         JarvisHistory.Clear();
         SaveJarvisConversation();
         if (JarvisBrain.HasKey) Brain.ClearConversation();
         UpdateJarvisUi();
         JarvisChanged?.Invoke();
-    }
-
-    TextBlock? _lastAnswer;
-    string _chatShown = "";
-
-    // Rebuilt only when the conversation changed: the person's lines as bubbles on the right, Jarvis's as text.
-    void RenderJarvisChat()
-    {
-        var signature = JarvisHistory.Count == 0 ? "" : $"{JarvisHistory.Count}|{JarvisHistory[0].Text.GetHashCode()}|{JarvisHistory[^1].Text.GetHashCode()}";
-        if (signature == _chatShown) return;
-        _chatShown = signature;
-        JarvisChat.Children.Clear();
-        _lastAnswer = null;
-        FrameworkElement? lastAsked = null;
-        foreach (var (user, text) in JarvisHistory)
-        {
-            if (user)
-            {
-                var bubble = new Border
-                {
-                    CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 5, 10, 6), Margin = new Thickness(48, 6, 0, 6),
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    Child = new TextBlock { Text = text, FontSize = 12.5, TextWrapping = TextWrapping.Wrap },
-                };
-                bubble.SetResourceReference(Border.BackgroundProperty, "Track");
-                JarvisChat.Children.Add(bubble);
-                lastAsked = bubble;
-            }
-            else
-            {
-                _lastAnswer = new TextBlock { Text = text, FontSize = 15, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
-                JarvisChat.Children.Add(_lastAnswer);
-            }
-        }
-        // the newest question at the top of the view, its answer right under it
-        Dispatcher.BeginInvoke(() =>
-        {
-            if (lastAsked is { IsVisible: true })
-                JarvisScroll.ScrollToVerticalOffset(Math.Max(0, lastAsked.TranslatePoint(new Point(0, 0), (UIElement)JarvisScroll.Content).Y - 6));
-            else JarvisScroll.ScrollToEnd();
-        }, DispatcherPriority.Loaded);
     }
 
     void JarvisScroll_ScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e) => UpdateAnswerFade();
@@ -283,26 +242,22 @@ public partial class IslandWindow : IJarvisHost
     void UpdateJarvisUi()
     {
         JarvisStateText.Text = JarvisState == "Pronto" ? "" : JarvisState;
-        RenderJarvisChat();
-        var empty = JarvisHistory.Count == 0;
-        JarvisAsked.Text = JarvisBrain.HasKey ? "Peça o que quiser: o Jarvis age no PC"
+        var asked = JarvisHistory.LastOrDefault(h => h.User).Text;
+        var answer = JarvisHistory.Count > 0 && !JarvisHistory[^1].User ? JarvisHistory[^1].Text : null;
+        JarvisAsked.Text = asked != null ? "Você: " + asked : JarvisBrain.HasKey ? "Peça o que quiser: o Jarvis age no PC"
             : Jarvis.Folder(Jarvis.Engine.Ai) == null ? "Sem a IA: hora, data, contas, pesquisas e abrir programas" : "Pergunte o que quiser: tudo roda neste PC";
-        JarvisAsked.Visibility = Vis(empty);
         JarvisAnswer.Text = JarvisState switch
         {
             "Ouvindo…" => "Estou ouvindo…",
             "Transcrevendo…" => "Entendendo o que você disse…",
             "Pensando…" => "Pensando…",
-            _ => empty ? "À disposição. Segure " + Hotkeys.Keys(_settings, "jarvis") + " e fale, ou toque em Escrever." : "",
+            _ => answer ?? "À disposição. Segure " + Hotkeys.Keys(_settings, "jarvis") + " e fale, ou toque em Escrever.",
         };
-        JarvisAnswer.Visibility = Vis(JarvisAnswer.Text.Length > 0);
-        JarvisAnswer.Opacity = empty ? 1 : 0.6;
         JarvisTalkText.Text = _mic != null ? "Enviar" : "Falar";
         JarvisTalkIcon.Text = _mic != null ? "\uE724" : "\uE720";
         var busy = ComputerBusy;
         JarvisSteps.Visibility = Vis(busy);
         JarvisScroll.Visibility = Vis(!busy);
-        JarvisClear.Visibility = Vis(!busy && !empty && JarvisState == "Pronto");
         JarvisStop.Visibility = Vis(busy || JarvisState is "Pensando…" or "Falando…");
         JarvisTalk.Visibility = Vis(!busy);
         JarvisType.Visibility = Vis(!busy);

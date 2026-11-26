@@ -1049,11 +1049,7 @@
                                     </Grid.RowDefinitions>
                                     <TextBlock x:Name="JarvisAsked" FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
                                     <ScrollViewer x:Name="JarvisScroll" Grid.Row="1" Margin="0,4,0,6" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" ScrollChanged="JarvisScroll_ScrollChanged">
-                                        <StackPanel>
-                                            <!-- the conversation, oldest first; the last line is the live state or the welcome -->
-                                            <StackPanel x:Name="JarvisChat" />
-                                            <TextBlock x:Name="JarvisAnswer" FontSize="15" TextWrapping="Wrap" />
-                                        </StackPanel>
+                                        <TextBlock x:Name="JarvisAnswer" FontSize="15" TextWrapping="Wrap" />
                                     </ScrollViewer>
                                     <!-- computer use: the steps, live -->
                                     <StackPanel x:Name="JarvisSteps" Grid.Row="1" Margin="0,8,0,6" Visibility="Collapsed" />
@@ -1079,12 +1075,6 @@
                                             </Button>
                                         </StackPanel>
                                         <TextBlock x:Name="JarvisStateText" FontSize="12" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                        <Button x:Name="JarvisClear" Style="{StaticResource Chip}" HorizontalAlignment="Right" Click="JarvisClear_Click" ToolTip="Apaga a conversa e começa do zero (a memória do Jarvis fica)" Visibility="Collapsed">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE74D;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                <TextBlock Text="Nova conversa" FontSize="12.5" />
-                                            </StackPanel>
-                                        </Button>
                                     </Grid>
                                 </Grid>
 
