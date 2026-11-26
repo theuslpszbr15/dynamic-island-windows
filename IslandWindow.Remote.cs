@@ -70,6 +70,53 @@ public partial class IslandWindow
         PublishPhonePc();
     }
 
+    /// <summary>The phone as touchpad and keyboard. Runs on the link's thread, so the pointer doesn't wait for the UI; the
+    /// island says "Celular no controle" when it starts (again after half a minute without input).</summary>
+    void OnPhoneInput(PhoneLink.PhoneCommand c)
+    {
+        if (!_settings.PhoneRemote || !_settings.PhoneMouse || SnapshotMode) return;
+        switch (c.Action)
+        {
+            case PhoneLink.PhoneAction.Mouse: RemoteInput.Move(c.Dx, c.Dy); break;
+            case PhoneLink.PhoneAction.Button: RemoteInput.Button(c.Text!, c.State!); break;
+            case PhoneLink.PhoneAction.Scroll: RemoteInput.Scroll(c.Dy); break;
+            case PhoneLink.PhoneAction.Key: RemoteInput.Key(c.Text!); break;
+            case PhoneLink.PhoneAction.Text: RemoteInput.Text(c.Text!); break;
+            case PhoneLink.PhoneAction.Pad: OnPhonePad(c.Pad); return;
+            default: return;
+        }
+        var now = DateTime.UtcNow;
+        if (now - _phoneInputAt > TimeSpan.FromSeconds(30))
+            Dispatcher.InvokeAsync(() => ShowInfo("\uE8EA", "Celular no controle", "mouse e teclado", glyphColor: AgentSession.Done, seconds: 2.5));
+        _phoneInputAt = now;
+    }
+
+    DateTime _phoneInputAt, _padAt, _padToldAt;
+    string? _padProblemSent;
+
+    /// <summary>A frame of the phone's game controller, to the virtual Xbox / DualShock 4. When it can't work, both
+    /// the phone and the island say why (with the driver's page to install it).</summary>
+    void OnPhonePad(VirtualPad.State state)
+    {
+        var now = DateTime.UtcNow;
+        var problem = !_settings.PhoneGamepad ? "Desligado no PC: Configurações › Celular › Controle de videogame"
+            : VirtualPad.Apply(state) ? null : VirtualPad.Problem;
+        if (problem != _padProblemSent || (problem != null && now - _padToldAt > TimeSpan.FromSeconds(10)))
+        {
+            _padProblemSent = problem;
+            _padToldAt = now;
+            _phone?.PublishPad(problem);
+            if (problem != null && _settings.PhoneGamepad)
+                Dispatcher.InvokeAsync(() => ShowInfo("\uE7FC", problem, "Instalar", glyphColor: Meter.Red, seconds: 8, action: () =>
+                {
+                    try { Process.Start(new ProcessStartInfo(VirtualPad.DriverUrl) { UseShellExecute = true }); } catch { }
+                }));
+        }
+        if (problem == null && now - _padAt > TimeSpan.FromSeconds(30))
+            Dispatcher.InvokeAsync(() => ShowInfo("\uE7FC", "Celular virou controle", state.Ps4 ? "PS4" : "Xbox", glyphColor: AgentSession.Done, seconds: 2.5));
+        _padAt = now;
+    }
+
     void CancelShutdown()
     {
         if (_shutdownAt == null) return;

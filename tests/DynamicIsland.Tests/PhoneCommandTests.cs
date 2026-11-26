@@ -120,6 +120,67 @@ public class PhoneCommandTests
         Assert.Equal(32, command.Number!.Length);
         Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"call","state":"weird"}""").Action);
     }
+
+    [Fact]
+    public void TouchpadMovesAreClamped()
+    {
+        var move = Parse("""{"type":"mouse","dx":12,"dy":-99999}""");
+        Assert.Equal(PhoneLink.PhoneAction.Mouse, move.Action);
+        Assert.Equal((12, -2000), (move.Dx, move.Dy));
+        Assert.Equal(2400, Parse("""{"type":"scroll","dy":100000}""").Dy);
+    }
+
+    [Fact]
+    public void ButtonsAndKeysAreOnlyTheKnownOnes()
+    {
+        var drag = Parse("""{"type":"button","button":"left","act":"down"}""");
+        Assert.Equal(PhoneLink.PhoneAction.Button, drag.Action);
+        Assert.Equal(("left", "down"), (drag.Text, drag.State));
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"button","button":"x1","act":"click"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"button","button":"left","act":"hold"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.Key, Parse("""{"type":"key","key":"pagedown"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.Key, Parse("""{"type":"key","key":"shift+f5"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"key","key":"alt+f4"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"key","key":"ctrl+alt+delete"}""").Action);
+    }
+
+    [Fact]
+    public void PadFramesAreClampedToTheControllerRanges()
+    {
+        var pad = Parse("""{"type":"pad","kind":"ps4","b":99999999,"lx":-40000,"ly":32767,"rx":0,"ry":12,"lt":300,"rt":-4}""");
+        Assert.Equal(PhoneLink.PhoneAction.Pad, pad.Action);
+        Assert.True(pad.Pad.Ps4);
+        Assert.Equal(0, pad.Pad.Buttons & ~0x7FFF);
+        Assert.Equal((short)-32767, pad.Pad.Lx);
+        Assert.Equal(((byte)255, (byte)0), (pad.Pad.Lt, pad.Pad.Rt));
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"pad","kind":"switch"}""").Action);
+    }
+
+    [Fact]
+    public void DualShockSticksAndDpadAreMapped()
+    {
+        Assert.Equal(128, VirtualPad.ToByte(0));
+        Assert.Equal(0, VirtualPad.ToByte(short.MinValue));
+        Assert.Equal(255, VirtualPad.ToByte(short.MaxValue));
+        Assert.Equal(Nefarius.ViGEm.Client.Targets.DualShock4.DualShock4DPadDirection.Northeast, VirtualPad.DPad(true, false, false, true));
+        Assert.Equal(Nefarius.ViGEm.Client.Targets.DualShock4.DualShock4DPadDirection.None, VirtualPad.DPad(false, false, false, false));
+    }
+
+    [Fact]
+    public void WithoutTheDriverThePadSaysWhy()
+    {
+        if (VirtualPad.DriverInstalled) return;
+        Assert.False(VirtualPad.Apply(new VirtualPad.State(false, 1, 0, 0, 0, 0, 0, 0)));
+        Assert.Contains("ViGEmBus", VirtualPad.Problem);
+    }
+
+    [Fact]
+    public void TypedTextIsShort()
+    {
+        Assert.Equal("olá", Parse("""{"type":"text","text":"olá"}""").Text);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse($$"""{"type":"text","text":"{{new string('a', 201)}}"}""").Action);
+        Assert.Equal(PhoneLink.PhoneAction.None, Parse("""{"type":"text","text":""}""").Action);
+    }
 }
 
 

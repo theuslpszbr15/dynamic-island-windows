@@ -190,6 +190,9 @@ class LinkClient(
                     o.optString("title").take(120), o.optString("artist").take(120), o.optBoolean("playing"),
                     o.optInt("volume").coerceIn(0, 100), o.optBoolean("muted"), o.optLong("shutdownAt"),
                 ))
+                "padState" -> o.optString("problem").take(120).let { problem ->
+                    Link.update { it.copy(padProblem = problem.ifEmpty { null }) }
+                }
             }
         }
     }
@@ -381,6 +384,24 @@ class LinkClient(
     /** A call on the phone: ringing (with who, if known), offhook or idle. */
     fun call(state: String, name: String, number: String) =
         send(JSONObject().put("type", "call").put("state", state).put("name", name.take(64)).put("number", number.take(32)))
+
+    /** Touchpad: moves the PC's pointer by (dx, dy) of its pixels. */
+    fun mouse(dx: Int, dy: Int) = send(JSONObject().put("type", "mouse").put("dx", dx).put("dy", dy))
+
+    /** [button]: left, right or middle; [act]: click, double, down or up. */
+    fun button(button: String, act: String) = send(JSONObject().put("type", "button").put("button", button).put("act", act))
+
+    /** The wheel: 120 = a notch, positive scrolls up. */
+    fun scroll(dy: Int) = send(JSONObject().put("type", "scroll").put("dy", dy))
+
+    /** A key the PC knows by name (enter, backspace, left, f5, shift+f5…). */
+    fun key(name: String) = send(JSONObject().put("type", "key").put("key", name))
+
+    /** Typed on the phone's keyboard: the PC types it as keystrokes where the focus is. */
+    fun text(text: String) = send(JSONObject().put("type", "text").put("text", text.take(200)))
+
+    /** One frame of the game controller (see [Gamepad.frame]). */
+    fun pad(frame: JSONObject) = send(frame)
 
     /** Which notices are switched off on the island (kind names) and when that last changed; the newest change wins. */
     fun filter(off: List<String>, at: Long) =

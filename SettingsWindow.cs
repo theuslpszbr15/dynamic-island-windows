@@ -1423,6 +1423,13 @@ public sealed partial class SettingsWindow : DarkWindow
                 S.PhoneClipboard, v => { S.PhoneClipboard = v; S.Save(); }),
             Toggle("Controle remoto pelo celular", "Música, volume, bloquear e desligar daqui a X minutos (bloquear e desligar pedem a digital no celular).",
                 S.PhoneRemote, v => { S.PhoneRemote = v; S.Save(); }),
+            Toggle("Mouse e teclado pelo celular", "No app, PC › Touchpad e teclado: o celular vira mouse, teclado e controle de filme " +
+                   "e de apresentação. A ilha avisa quando o celular está no controle.",
+                S.PhoneMouse, v => { S.PhoneMouse = v; S.Save(); }, enabled: S.PhoneRemote),
+            Toggle("Controle de videogame", "No app, PC › Touchpad e teclado › Jogo: o celular vira um controle de Xbox ou de PS4 que os jogos " +
+                   "reconhecem. " + (VirtualPad.DriverInstalled ? "Driver ViGEmBus instalado."
+                       : "Precisa do driver ViGEmBus (o mesmo do DS4Windows), instalado uma vez."),
+                S.PhoneGamepad, v => { S.PhoneGamepad = v; S.Save(); }, PadDriverButton(), enabled: S.PhoneRemote),
             Toggle("Ligações do celular na ilha", "Quem está ligando aparece na ilha. Ligue também no app do celular (aba PC).",
                 S.PhoneCalls, v => { S.PhoneCalls = v; S.Save(); }),
             Row("Enviar e receber", "Enviar arquivo, pasta, texto ou o que foi copiado, e ver o que foi recebido e enviado.", window),
@@ -1451,6 +1458,15 @@ public sealed partial class SettingsWindow : DarkWindow
 
     bool? _wakeArmed;
     bool _wakeBusy, _fpsAsked;
+
+    /// <summary>The ViGEmBus page, while the driver isn't installed.</summary>
+    FrameworkElement? PadDriverButton()
+    {
+        if (VirtualPad.DriverInstalled) return null;
+        var download = new Button { Content = "Baixar o driver", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 12, 0) };
+        download.Click += (_, _) => Open(VirtualPad.DriverUrl);
+        return download;
+    }
 
     /// <summary>Modo jogo: hold notifications in games, the meter, and letting it count FPS (one administrator prompt).</summary>
     Border GameCard()

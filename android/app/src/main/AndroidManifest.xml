@@ -80,6 +80,14 @@
             android:exported="false"
             android:theme="@style/Theme.DynamicIsland" />
 
+        <!-- the phone as the PC's touchpad and keyboard (PC tab › Touchpad e teclado) -->
+        <activity
+            android:name=".TouchpadActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.DynamicIsland" />
+
         <!-- "Compartilhar → Dynamic Island": files, photos, videos or text to the PC (which asks first) -->
         <activity
             android:name=".ShareActivity"

@@ -116,6 +116,10 @@ public sealed partial class PhoneLink : IDisposable
     const int MaxJarvisChars = 8000;
     /// <summary>Raised on the UI thread: (action, minutes) from the phone's remote control.</summary>
     public event Action<string, int>? Remote;
+    /// <summary>Touchpad and keyboard (mouse, button, scroll, key, text), raised on the link's own thread, in order and
+    /// without waiting for the UI: the pointer must follow the finger.</summary>
+    internal event Action<PhoneCommand>? Input;
+    const int MaxInputText = 200;
     /// <summary>Raised on the UI thread: ("ringing" | "offhook" | "idle", contact name, number) for the phone's calls.</summary>
     public event Action<string, string, string>? Call;
     /// <summary>A phone says which notices are switched off on its island (kinds, Unix ms of the change).</summary>
@@ -442,6 +446,10 @@ public sealed partial class PhoneLink : IDisposable
     public void PublishJarvis(string id, string state, string text) =>
         Broadcast(new JsonObject { ["type"] = "jarvis", ["id"] = id, ["state"] = state, ["text"] = Cut(text, MaxJarvisChars) }.ToJsonString());
 
+    /// <summary>The game controller can't work (no ViGEmBus driver, or switched off on the PC), or null: it works.</summary>
+    public void PublishPad(string? problem) =>
+        Broadcast(new JsonObject { ["type"] = "padState", ["problem"] = problem ?? "" }.ToJsonString());
+
     /// <summary>A notification shown on the PC's island, repeated on the phone (apps from 1.5.6 show it).</summary>
     public void PublishNotification(string app, string title, string body) =>
         Broadcast(new JsonObject { ["type"] = "pcNotify", ["app"] = Cut(app, 60), ["title"] = Cut(title, 120), ["body"] = Cut(body, 400) }.ToJsonString());
@@ -603,6 +611,9 @@ public sealed partial class PhoneLink : IDisposable
                     case PhoneAction.Remote:
                         _ = _ui.InvokeAsync(() => Remote?.Invoke(command.Text!, command.Minutes));
                         break;
+                    case PhoneAction.Mouse or PhoneAction.Button or PhoneAction.Scroll or PhoneAction.Key or PhoneAction.Text or PhoneAction.Pad:
+                        Input?.Invoke(command);
+                        break;
                     case PhoneAction.Call:
                         _ = _ui.InvokeAsync(() => Call?.Invoke(command.State!, command.Name ?? "", command.Number ?? ""));
                         break;
@@ -633,6 +644,11 @@ public sealed partial class PhoneLink : IDisposable
             peer.Close();
             bool wasAuthenticated;
             lock (_gate) wasAuthenticated = _peers.Remove(peer) && peer.Authenticated;
+            if (wasAuthenticated)
+            {
+                RemoteInput.ReleaseAll(); // a drag cut off midway doesn't leave the button held
+                VirtualPad.Release();
+            }
             if (wasAuthenticated) _ = _ui.InvokeAsync(() => PhonesChanged?.Invoke());
         }
     }
@@ -687,13 +703,18 @@ public sealed partial class PhoneLink : IDisposable
 
     /// <summary>What the PC does with one JSON line from a phone. Serve's state machine, extracted so tests can
     /// drive it; <see cref="PhoneAction.None"/> means the line is fine but asks for nothing.</summary>
-    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Filter, Bye, Type, Jarvis }
+    internal enum PhoneAction { None, Ping, Decision, Open, Clip, Remote, Call, FileDecline, FileDone, SendOffer, SendCancel, Filter, Bye, Type, Jarvis,
+        Mouse, Button, Scroll, Key, Text, Pad }
 
-    /// <summary>Text is the copied text (Clip) or the remote action (Remote); State/Name/Number describe a Call.</summary>
+    /// <summary>Text is the copied text (Clip), the remote action (Remote), the button / key name or the typed text;
+    /// State/Name/Number describe a Call (State is also the button's click | double | down | up); Dx/Dy move or scroll.</summary>
     internal sealed record PhoneCommand(PhoneAction Action, string? Fingerprint = null, string? Decision = null,
         string? Id = null, bool Ok = false, JsonElement Offer = default, string? Text = null, int Minutes = 0,
         string? State = null, string? Name = null, string? Number = null,
-        IReadOnlyList<string>? Kinds = null, long At = 0);
+        IReadOnlyList<string>? Kinds = null, long At = 0, int Dx = 0, int Dy = 0, VirtualPad.State Pad = default);
+
+    static int Int(JsonElement root, string name, int limit) =>
+        root.TryGetProperty(name, out var v) && v.TryGetInt32(out var i) ? Math.Clamp(i, -limit, limit) : 0;
 
     /// <summary>Lines that don't carry every field their action needs become <see cref="PhoneAction.None"/>
     /// (nothing happens), exactly like the guards they replace.</summary>
@@ -719,6 +740,21 @@ public sealed partial class PhoneLink : IDisposable
             case "call" when Str(root, "state") is "ringing" or "offhook" or "idle":
                 return new PhoneCommand(PhoneAction.Call, State: Str(root, "state"),
                     Name: Cut(Str(root, "name") ?? "", 64), Number: Cut(Str(root, "number") ?? "", 32));
+            case "mouse":
+                return new PhoneCommand(PhoneAction.Mouse, Dx: Int(root, "dx", 2000), Dy: Int(root, "dy", 2000));
+            case "button" when Str(root, "button") is "left" or "right" or "middle" && Str(root, "act") is "click" or "double" or "down" or "up":
+                return new PhoneCommand(PhoneAction.Button, Text: Str(root, "button"), State: Str(root, "act"));
+            case "scroll":
+                return new PhoneCommand(PhoneAction.Scroll, Dy: Int(root, "dy", 2400));
+            case "key" when Str(root, "key") is { } key && RemoteInput.KnownKey(key):
+                return new PhoneCommand(PhoneAction.Key, Text: key);
+            case "text" when Str(root, "text") is { Length: > 0 and <= MaxInputText } text:
+                return new PhoneCommand(PhoneAction.Text, Text: text);
+            case "pad" when Str(root, "kind") is "xbox" or "ps4":
+                return new PhoneCommand(PhoneAction.Pad, Pad: new VirtualPad.State(Str(root, "kind") == "ps4", Int(root, "b", int.MaxValue) & 0x7FFF,
+                    (short)Int(root, "lx", short.MaxValue), (short)Int(root, "ly", short.MaxValue),
+                    (short)Int(root, "rx", short.MaxValue), (short)Int(root, "ry", short.MaxValue),
+                    (byte)Math.Clamp(Int(root, "lt", 255), 0, 255), (byte)Math.Clamp(Int(root, "rt", 255), 0, 255)));
             case "fileDecline" when id != null:
                 return new PhoneCommand(PhoneAction.FileDecline, Id: id);
             case "fileDone" when id != null:

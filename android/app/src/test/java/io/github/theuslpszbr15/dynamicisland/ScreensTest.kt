@@ -83,4 +83,23 @@ class ScreensTest {
             JarvisTurn("2", "abre o Spotify e toca minha playlist", "", "thinking"),
         ),
     ))
+
+    private fun touchpad(name: String, mode: Int) = captureRoboImage("build/screens/$name.png") {
+        CompositionLocalProvider(LocalStill provides true) {
+            AppTheme { TouchpadScreen(connected = true, viaRelay = false, onClose = {}, initialMode = mode) }
+        }
+    }
+
+    @Test fun touchpadMouse() = touchpad("10-touchpad", 0)
+
+    @Test fun touchpadMovie() = touchpad("11-touchpad-filme", 1)
+
+    @Test fun touchpadSlides() = touchpad("12-touchpad-slides", 2)
+
+    @Test @Config(sdk = [34], qualifiers = "w891dp-h411dp-night-xxhdpi")
+    fun gamepad() = captureRoboImage("build/screens/13-controle-jogo.png") {
+        CompositionLocalProvider(LocalStill provides true) {
+            AppTheme { TouchpadScreen(connected = true, viaRelay = false, onClose = {}, initialMode = 3) }
+        }
+    }
 }

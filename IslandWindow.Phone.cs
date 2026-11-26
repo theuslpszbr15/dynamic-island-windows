@@ -71,6 +71,7 @@ public partial class IslandWindow
             _phone.Type += OnPhoneType;
             _phone.AskJarvis += OnPhoneJarvis;
             _phone.Remote += OnPhoneRemote;
+            _phone.Input += OnPhoneInput;
             _phone.Call += OnPhoneCall;
             _phone.FilterFromPhone += OnPhoneFilter;
             _phone.PhonesChanged += PublishPhonePc;

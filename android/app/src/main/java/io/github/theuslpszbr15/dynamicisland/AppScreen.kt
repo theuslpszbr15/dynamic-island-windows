@@ -586,6 +586,9 @@ private fun RemoteCard(pc: PcState?, onRemote: (String, Int) -> Unit) {
         android.widget.Toast.makeText(context, if (sent) "Digitado no PC" else "O PC não está conectado", android.widget.Toast.LENGTH_SHORT).show()
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        UiPrimary("Touchpad e teclado", {
+            context.startActivity(android.content.Intent(context, TouchpadActivity::class.java))
+        }, Modifier.fillMaxWidth())
         UiSecondary("Ditar no PC", {
             val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)

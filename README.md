@@ -83,6 +83,11 @@ atualiza sozinha (conferindo o SHA-256 de cada versão).
   Windows, para H.264 a 30 fps: a ilha pergunta (ou converte sempre, se você preferir).
 - **Controle remoto do PC:** música, volume, bloquear, desligar com timer, abrir apps fixados e **ligar o PC**
   (Wake-on-LAN).
+- **Touchpad e teclado:** o celular vira o mouse do PC (tocar = clique, dois dedos = rolar e botão direito), o
+  teclado dele digita no PC, e tem controle de **filme** e de **slides**. No Wi-Fi de casa fica fluido.
+- **Controle de videogame:** um controle de **Xbox ou PS4** na tela do celular, que os jogos do PC reconhecem como
+  um de verdade (precisa do driver gratuito [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases/latest),
+  o mesmo do DS4Windows, instalado uma vez).
 - **Perguntar ao Jarvis pelo celular** (escrevendo ou falando): quem responde é o Jarvis do PC, e o que ele faz acontece
   no PC.
 - **Ligações do celular aparecem na ilha do PC** com o nome do contato.

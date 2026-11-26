@@ -167,6 +167,10 @@ public sealed class IslandSettings
     public bool PhoneCalls { get; set; } = true;
     /// <summary>The phone can control music, volume, lock and shutdown of this PC.</summary>
     public bool PhoneRemote { get; set; } = true;
+    /// <summary>The phone as touchpad and keyboard (needs <see cref="PhoneRemote"/> too).</summary>
+    public bool PhoneMouse { get; set; } = true;
+    /// <summary>The phone as a game controller (a virtual Xbox or PS4 pad; needs the ViGEmBus driver).</summary>
+    public bool PhoneGamepad { get; set; } = true;
     /// <summary>Text dictated on the phone is typed where you are on the PC.</summary>
     public bool PhoneTyping { get; set; } = true;
     /// <summary>The notifications the island shows also go to the paired phone.</summary>

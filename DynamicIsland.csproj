@@ -13,7 +13,7 @@
     <StartupObject>DynamicIsland.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\DynamicIsland.ico</ApplicationIcon>
-    <Version>1.9.21</Version>
+    <Version>1.9.22</Version>
     <Product>Dynamic Island</Product>
     <Company>theuslpszbr15</Company>
     <!-- WPF needs the manifest for Per-Monitor V2; the WinForms analyzer only applies to WinForms startup. -->
@@ -60,6 +60,7 @@
   <ItemGroup>
     <!-- laptop panel brightness (WmiMonitorBrightness) when the screen has no DDC/CI -->
     <PackageReference Include="NAudio.WinMM" Version="3.3.0" />
+    <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
     <PackageReference Include="System.Management" Version="10.0.0" />
     <!-- phone link: pairing QR code -->
     <PackageReference Include="QRCoder" Version="1.6.0" />

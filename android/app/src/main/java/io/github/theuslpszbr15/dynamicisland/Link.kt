@@ -38,6 +38,8 @@ data class LinkUi(
     val update: AppUpdate.Available? = null,
     /** The questions to the PC's Jarvis since the app opened, newest last. */
     val jarvis: List<JarvisTurn> = emptyList(),
+    /** Why the PC's virtual game controller doesn't work (no driver, switched off), or null. */
+    val padProblem: String? = null,
 )
 
 /** What the UI and the notifications show; the service feeds it, the UI answers through it. */
