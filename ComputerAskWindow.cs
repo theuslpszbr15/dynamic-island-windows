@@ -7,7 +7,7 @@ using Drawing = System.Drawing;
 
 namespace DynamicIsland;
 
-public enum ComputerAnswer { Allow, AllowRest, Stop }
+public enum ComputerAnswer { Allow, AllowRest, AllowAlways, Stop }
 
 /// <summary>"Jarvis quer: …" with Permitir / Permitir o resto / Parar, near the top of the screen Jarvis is working on,
 /// plus a ring where the click will land. Neither takes the focus away from the app Jarvis is using.</summary>
@@ -33,7 +33,7 @@ public sealed class ComputerAskWindow : Window
         Title = "Jarvis no controle";
 
         var accent = risky ? Color.FromRgb(0xFF, 0x9F, 0x0A) : Color.FromRgb(0x0A, 0x84, 0xFF);
-        var panel = new StackPanel { Width = 380 };
+        var panel = new StackPanel { Width = 460 };
         panel.Children.Add(new TextBlock
         {
             Text = risky ? "Jarvis quer fazer algo importante" : "Jarvis quer",
@@ -57,6 +57,8 @@ public sealed class ComputerAskWindow : Window
             return button;
         }
         Make("Parar", ComputerAnswer.Stop, Color.FromRgb(0x3A, 0x3A, 0x3C));
+        Make("Sempre permitir", ComputerAnswer.AllowAlways, Color.FromRgb(0x3A, 0x3A, 0x3C)).ToolTip =
+            "Não pergunta mais (nem nesta tarefa nem nas próximas). Volta a perguntar em Configurações › Jarvis › Controle do computador.";
         if (offerRest) Make("Permitir o resto", ComputerAnswer.AllowRest, Color.FromRgb(0x3A, 0x3A, 0x3C));
         Make("Permitir", ComputerAnswer.Allow, accent);
         panel.Children.Add(buttons);

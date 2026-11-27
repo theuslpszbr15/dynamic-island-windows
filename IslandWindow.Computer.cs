@@ -104,7 +104,7 @@ public partial class IslandWindow
         _computer = cts;
         _computerStop = null;
         var done = new List<string>();
-        var askAll = _settings.ComputerUseApproval != "perigosas";
+        var askAll = _settings.ComputerUseApproval == "cada";
         var allowRest = false;
         byte[]? lastPrint = null;
         var stuck = 0;
@@ -218,7 +218,7 @@ public partial class IslandWindow
 
                 var what = ComputerUse.Describe(action, near);
                 var risky = ComputerUse.IsRisky(action, near);
-                var asking = risky || (askAll && !allowRest);
+                var asking = _settings.ComputerUseApproval != "nunca" && (risky || (askAll && !allowRest));
                 ComputerShow(asking ? "Esperando sua permissão: " + what : what, step);
                 if (asking)
                 {
@@ -240,6 +240,11 @@ public partial class IslandWindow
                         return Stopped() + Summary();
                     }
                     if (answer == ComputerAnswer.AllowRest) allowRest = true;
+                    if (answer == ComputerAnswer.AllowAlways)
+                    {
+                        _settings.ComputerUseApproval = "nunca";
+                        _settings.Save();
+                    }
                     // the card never takes the focus, but a click on it can bring our process forward
                     if (front != IntPtr.Zero && Native.GetForegroundWindow() != front) Native.SetForegroundWindow(front);
                     await Task.Delay(120);

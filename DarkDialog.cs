@@ -11,9 +11,11 @@ namespace DynamicIsland;
 /// </summary>
 public sealed class DarkDialog : Window
 {
-    bool _ok;
+    public enum Choice { Cancel, Ok, Also }
 
-    DarkDialog(string title, string message, string ok, string? cancel, bool danger, string? code)
+    Choice _choice;
+
+    DarkDialog(string title, string message, string ok, string? cancel, bool danger, string? code, string? also = null)
     {
         Title = title;
         WindowStyle = WindowStyle.None;
@@ -50,9 +52,15 @@ public sealed class DarkDialog : Window
             no.Click += (_, _) => Close();
             buttons.Children.Add(no);
         }
+        if (also != null)
+        {
+            var other = new Button { Content = also, Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
+            other.Click += (_, _) => { _choice = Choice.Also; Close(); };
+            buttons.Children.Add(other);
+        }
         var yes = new Button { Content = ok, Style = (Style)Resources["Action"], IsDefault = true };
         if (danger) yes.Foreground = DarkWindow.Frozen(0xFFFF6961);
-        yes.Click += (_, _) => { _ok = true; Close(); };
+        yes.Click += (_, _) => { _choice = Choice.Ok; Close(); };
         buttons.Children.Add(yes);
         stack.Children.Add(buttons);
 
@@ -71,9 +79,14 @@ public sealed class DarkDialog : Window
     /// <summary>True when the person picks <paramref name="ok"/>. Without <paramref name="cancel"/> it is just a notice;
     /// <paramref name="code"/> is shown whole, read-only.</summary>
     public static bool Ask(Window? owner, string title, string message, string ok = "OK", string? cancel = "Cancelar", bool danger = false,
-        string? code = null)
+        string? code = null) => Show(new DarkDialog(title, message, ok, cancel, danger, code), owner) == Choice.Ok;
+
+    /// <summary>Like <see cref="Ask"/> with a third button, <paramref name="also"/>, between the other two.</summary>
+    public static Choice Choose(Window? owner, string title, string message, string ok, string cancel, string also, bool danger = false,
+        string? code = null) => Show(new DarkDialog(title, message, ok, cancel, danger, code, also), owner);
+
+    static Choice Show(DarkDialog dialog, Window? owner)
     {
-        var dialog = new DarkDialog(title, message, ok, cancel, danger, code);
         if (owner is { IsVisible: true })
         {
             dialog.Owner = owner;
@@ -81,6 +94,6 @@ public sealed class DarkDialog : Window
         }
         else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         dialog.ShowDialog();
-        return dialog._ok;
+        return dialog._choice;
     }
 }

@@ -143,8 +143,11 @@ public sealed class IslandSettings
     public List<Services.McpPlugin> Plugins { get; set; } = [Services.McpPlugin.Playwright()];
     /// <summary>Jarvis may move the mouse and type on this PC (usar_computador). Off until the person turns it on.</summary>
     public bool ComputerUse { get; set; }
-    /// <summary>"cada" asks before every action; "perigosas" only before typing, Enter/Delete and clicks on buy, send, delete…</summary>
+    /// <summary>"cada" asks before every action; "perigosas" only before typing, Enter/Delete and clicks on buy, send, delete…;
+    /// "nunca" never asks (the person chose "Sempre permitir").</summary>
     public string ComputerUseApproval { get; set; } = "cada";
+    /// <summary>Jarvis's PowerShell scripts run without showing the code first ("Sempre permitir").</summary>
+    public bool JarvisScriptsAlways { get; set; }
     /// <summary>Antigravity's shell commands wait for Allow / Deny on the island (read by the hook process too).</summary>
     public bool AntigravityApprovals { get; set; }
     /// <summary>A new install offers the demo once.</summary>

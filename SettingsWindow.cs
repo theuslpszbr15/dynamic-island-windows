@@ -920,8 +920,11 @@ public sealed partial class SettingsWindow : DarkWindow
             Toggle("Deixar o Jarvis usar o mouse e o teclado", JarvisBrain.HasKey ? "Desligado, ele só responde e usa as outras ferramentas." : "Precisa da chave da Groq.",
                 S.ComputerUse, v => { S.ComputerUse = v; S.Save(); Render(); }, enabled: JarvisBrain.HasKey || S.ComputerUse),
             Choice("Pedir permissão", "Importantes: digitar, Enter, Delete e cliques em comprar, pagar, enviar, excluir, confirmar…",
-                [("cada", "Antes de cada ação"), ("perigosas", "Só nas importantes")],
-                S.ComputerUseApproval, v => { S.ComputerUseApproval = v; S.Save(); }));
+                [("cada", "Antes de cada ação"), ("perigosas", "Só nas importantes"), ("nunca", "Nunca (sempre permitir)")],
+                S.ComputerUseApproval, v => { S.ComputerUseApproval = v; S.Save(); }),
+            Toggle("Rodar scripts sem perguntar", "Ligado, o Jarvis roda os scripts do PowerShell sem mostrar o código antes (só um aviso na ilha). " +
+                   "Eles rodam com as suas permissões: só ligue se confia no que pede.",
+                S.JarvisScriptsAlways, v => { S.JarvisScriptsAlways = v; S.Save(); }));
 
     /// <summary>The Project.Jarvis brain: a Groq key (kept with DPAPI) turns on the tools (Notepad, apps, notes, timer…).</summary>
     Border BrainCard()

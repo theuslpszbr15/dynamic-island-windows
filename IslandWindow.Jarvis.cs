@@ -127,10 +127,23 @@ public partial class IslandWindow : IJarvisHost
         return $"Apertei {shortcut.Name} em \"{title}\".";
     }
 
-    Task<bool> IJarvisHost.ConfirmScriptAsync(string description, string code) =>
-        Task.FromResult(DarkDialog.Ask(null, "O Jarvis quer rodar um script",
+    Task<bool> IJarvisHost.ConfirmScriptAsync(string description, string code)
+    {
+        if (_settings.JarvisScriptsAlways)
+        {
+            ShowInfo("\uE756", "Jarvis rodou um script", description, glyphColor: JarvisColor, seconds: 4);
+            return Task.FromResult(true);
+        }
+        var answer = DarkDialog.Choose(null, "O Jarvis quer rodar um script",
             (description.Length > 0 ? description : "Sem descrição.") + "\n\nLeia o código inteiro antes de permitir: ele roda com as suas permissões.",
-            "Permitir", "Não", danger: true, code: code));
+            "Permitir", "Não", "Sempre permitir", danger: true, code: code);
+        if (answer == DarkDialog.Choice.Also)
+        {
+            _settings.JarvisScriptsAlways = true;
+            _settings.Save();
+        }
+        return Task.FromResult(answer != DarkDialog.Choice.Cancel);
+    }
 
     void ApplyGlowLook() => _glow.Apply(_settings.JarvisGlow, IslandThemes.IsLight(_settings.Theme));
 
