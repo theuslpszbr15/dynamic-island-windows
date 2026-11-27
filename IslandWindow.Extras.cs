@@ -880,13 +880,18 @@ public partial class IslandWindow
         var active = now - _activeSince.Value;
         if (active < TimeSpan.FromMinutes(_settings.BreakAfterMinutes) || now - _breakAskedAt < BreakSnooze) return;
         _breakAskedAt = now;
-        var hours = active.TotalMinutes < 90 ? $"{(int)active.TotalMinutes} minutos" : $"{active.TotalHours:0.#} horas".Replace('.', ',');
-        ShowActions("Hora de uma pausa", $"Você está há {hours} no PC sem parar. Levanta, alonga, bebe uma água.",
+        ShowBreak(active);
+    }
+
+    void ShowBreak(TimeSpan active)
+    {
+        var hours = active.TotalMinutes < 60 ? $"{(int)active.TotalMinutes} min" : $"{(int)active.TotalHours} h{active.Minutes:00}";
+        Log.Warn("Pausa", "sugerida depois de " + hours);
+        ShowActions("Hora de uma pausa", $"{hours} no PC sem parar. Bora alongar?",
         [
             new("\uE916", "Pausa de 5 min", () => { StartTimer(5); _activeSince = null; }, Primary: true),
             new("\uE823", "Depois", () => { }),
-        ], glyph: "\uE7F8", seconds: 15);
-        if (PetOn) foreach (var p in Pets) p.React(PetView.Mood.Sleep, 3);
+        ], glyph: "\uE7F8", seconds: 15, pet: PetView.Mood.Stretch);
     }
 
     // ───────────────────────── weekly recap ─────────────────────────

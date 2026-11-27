@@ -22,7 +22,7 @@ public enum PetOutfit { None, Auto, Gorro, Festa, Noel, Palha, Oculos, Coroa, Br
 /// </summary>
 public sealed class PetView : Canvas
 {
-    public enum Mood { Idle, Dance, Working, Waiting, Sleep, Happy, Annoyed, Dizzy, Patted }
+    public enum Mood { Idle, Dance, Working, Waiting, Sleep, Happy, Annoyed, Dizzy, Patted, Stretch }
 
     // PatPat (after the Minecraft mod): a pixel hand pats the head in 5 frames over 300 ms.
     // Our own sprite; per frame: hand lift above the (squashed) head, hand squash, body squash X/Y.
@@ -657,7 +657,7 @@ public sealed class PetView : Canvas
         var eyes = mood switch
         {
             Mood.Happy or Mood.Dance or Mood.Patted => "happy",
-            Mood.Sleep => "closed",
+            Mood.Sleep or Mood.Stretch => "closed",
             Mood.Annoyed => "annoyed",
             Mood.Dizzy => "dizzy",
             _ => "open",
@@ -681,6 +681,12 @@ public sealed class PetView : Canvas
                 break;
             case Mood.Dizzy:
                 Loop(_tilt, RotateTransform.AngleProperty, -15, 15, 0.18);
+                break;
+            case Mood.Stretch:
+                // crouch, reach up tall and thin, lean side to side, settle: twice
+                _squash.BeginAnimation(ScaleTransform.ScaleYProperty, Keys(2.0, (0, 1), (0.18, 0.88), (0.7, 1.28), (1.45, 1.26), (1.85, 1)));
+                _squash.BeginAnimation(ScaleTransform.ScaleXProperty, Keys(2.0, (0, 1), (0.18, 1.1), (0.7, 0.84), (1.45, 0.86), (1.85, 1)));
+                _tilt.BeginAnimation(RotateTransform.AngleProperty, Keys(2.0, (0, 0), (0.7, 0), (0.95, -7), (1.2, 7), (1.45, 0)));
                 break;
         }
         if (!_active) return;
@@ -726,6 +732,16 @@ public sealed class PetView : Canvas
                 _z.BeginAnimation(OpacityProperty, fade);
                 break;
         }
+    }
+
+    /// <summary>Eased keyframes (seconds, value) over <paramref name="length"/> seconds, played twice.</summary>
+    static DoubleAnimationUsingKeyFrames Keys(double length, params (double At, double Value)[] keys)
+    {
+        var frames = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(length), RepeatBehavior = new RepeatBehavior(2) };
+        foreach (var (at, value) in keys)
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(value, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(at)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+        Timeline.SetDesiredFrameRate(frames, 30);
+        return frames;
     }
 
     void StopLoops()

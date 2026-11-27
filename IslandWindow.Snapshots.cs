@@ -549,6 +549,15 @@ public partial class IslandWindow
             [new("\uE895", "Converter", () => { }, Primary: true), new("\uE724", "Mandar assim", () => { })], glyph: "\uE714");
         await Shot("72-video-convert");
         TransientEnded();
+        // the break reminder: the mascot crouches, stretches up tall, leans and settles
+        ShowBreak(TimeSpan.FromMinutes(125));
+        await Task.Delay(150);
+        await Shot("74-break-a");
+        await Task.Delay(250);
+        await Shot("74-break-b");
+        await Task.Delay(350);
+        await Shot("74-break-c");
+        TransientEnded();
         _hiddenFullscreen = true;
         Root.Opacity = 0;
         ShowGameHud(144, 63, 87, 41);

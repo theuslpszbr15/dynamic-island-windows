@@ -19,7 +19,7 @@ public partial class IslandWindow
     int[]? _snapRing;
     bool GlassBlur => _glassLive || _glassSnap;
 
-    PetView[] Pets => [CompactPet, HeaderPet, AlertPet, AgentPet, ApprovalPet];
+    PetView[] Pets => [CompactPet, HeaderPet, AlertPet, AgentPet, ApprovalPet, ActionPet];
     bool PetOn => _settings.Mascot != PetSpecies.None;
     bool Glass => _settings.Theme == IslandThemes.Glass;
 

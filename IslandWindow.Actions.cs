@@ -17,7 +17,7 @@ public partial class IslandWindow
     object? _actionCard;
 
     object ShowActions(string title, string detail, IReadOnlyList<CardAction> actions, BitmapSource? thumb = null,
-        string glyph = "\uE946", double seconds = 8, bool important = false)
+        string glyph = "\uE946", double seconds = 8, bool important = false, PetView.Mood? pet = null)
     {
         var card = new object();
         if (!_ready) return card;
@@ -25,7 +25,15 @@ public partial class IslandWindow
         ActionTitle.Text = title;
         ActionDetail.Text = detail;
         ActionGlyph.Text = glyph;
-        ActionGlyph.Visibility = Vis(thumb == null);
+        var withPet = pet != null && PetOn && thumb == null;
+        ActionPetBox.Visibility = Vis(withPet);
+        ActionGlyph.Visibility = Vis(thumb == null && !withPet);
+        if (withPet)
+        {
+            ActionPet.Tint(null);
+            ActionPet.BaseMood = PetView.Mood.Idle;
+            ActionPet.React(pet!.Value, 4.2);
+        }
         ActionThumb.Width = thumb != null ? 112 : 42;
         ActionThumb.Height = thumb != null ? 70 : 42;
         ActionThumb.Background = thumb != null
