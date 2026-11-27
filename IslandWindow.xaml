@@ -458,7 +458,9 @@
                             <Grid Grid.Row="1" Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Button Style="{StaticResource Chip}" Margin="0" Background="#FF242423" Foreground="#FFF26B63" Click="ApprovalDeny_Click">
@@ -467,7 +469,14 @@
                                         <TextBlock Text="Negar" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="ApprovalAllow" Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FFF0EFEC" Foreground="#FF141416" Click="ApprovalAllow_Click">
+                                <Button x:Name="ApprovalAlways" Grid.Column="2" Style="{StaticResource Chip}" Margin="0" Background="#FF242423" Foreground="#FFF0EFEC"
+                                        Click="ApprovalAlways_Click" ToolTip="Permite agora e não pergunta mais este mesmo comando (Configurações › Agentes desfaz)">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8EE;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Text="Sempre" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="ApprovalAllow" Grid.Column="4" Style="{StaticResource Chip}" Margin="0" Background="#FFF0EFEC" Foreground="#FF141416" Click="ApprovalAllow_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <TextBlock x:Name="ApprovalAllowText" Text="Permitir" />

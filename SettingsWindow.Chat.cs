@@ -39,12 +39,98 @@ public sealed partial class SettingsWindow
         var send = new Button { Content = "Enviar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Bottom };
         var stop = new Button { Content = "Parar", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Bottom };
         stop.Click += (_, _) => island.StopJarvis();
-        var composer = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var attach = new Button
+        {
+            Content = "\uE723", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), Style = (Style)Resources["Action"],
+            Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Bottom,
+            ToolTip = "Anexar um arquivo de texto ou uma imagem (também dá para arrastar aqui ou colar um print com Ctrl+V)",
+        };
+        var composerRow = new DockPanel();
+        DockPanel.SetDock(attach, Dock.Left);
         DockPanel.SetDock(send, Dock.Right);
         DockPanel.SetDock(stop, Dock.Right);
-        composer.Children.Add(send);
-        composer.Children.Add(stop);
-        composer.Children.Add(field);
+        composerRow.Children.Add(attach);
+        composerRow.Children.Add(send);
+        composerRow.Children.Add(stop);
+        composerRow.Children.Add(field);
+
+        // the attachment waiting to go with the next message
+        string? attachName = null, attachText = null;
+        var chipText = new TextBlock { Foreground = Brushes.White, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 460 };
+        var chipClose = new TextBlock
+        {
+            Text = "\uE711", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 10, Foreground = Muted,
+            Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand, ToolTip = "Tirar o anexo",
+        };
+        var chipRow = new StackPanel { Orientation = Orientation.Horizontal };
+        chipRow.Children.Add(new TextBlock { Text = "\uE723", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 12, Foreground = Accent, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+        chipRow.Children.Add(chipText);
+        chipRow.Children.Add(chipClose);
+        var chip = new Border
+        {
+            Background = Hover, CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 6, 10, 6), Margin = new Thickness(0, 0, 0, 8),
+            HorizontalAlignment = HorizontalAlignment.Left, Child = chipRow, Visibility = Visibility.Collapsed,
+        };
+        void SetAttachment(string? name, string? text, string label)
+        {
+            attachName = name;
+            attachText = text;
+            chipText.Text = label;
+            chip.Visibility = name != null ? Visibility.Visible : Visibility.Collapsed;
+        }
+        chipClose.MouseLeftButtonUp += (_, _) => SetAttachment(null, null, "");
+
+        async Task AttachImage(System.Windows.Media.Imaging.BitmapSource image, string name)
+        {
+            SetAttachment(name, null, $"{name} · lendo o texto…");
+            string? text;
+            using (var bitmap = ScreenOcr.FromBitmapSource(image)) text = await ScreenOcr.ReadAsync(bitmap);
+            if (attachName != name) return;
+            text = text?.Trim();
+            SetAttachment(name, string.IsNullOrEmpty(text) ? "(nenhum texto encontrado na imagem)" : text,
+                string.IsNullOrEmpty(text) ? $"{name} · sem texto para ler" : $"{name} · {text.Length} letras lidas");
+        }
+
+        async Task AttachFile(string path)
+        {
+            var name = Path.GetFileName(path);
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            try
+            {
+                if (ChatImages.Contains(extension))
+                {
+                    var image = new System.Windows.Media.Imaging.BitmapImage();
+                    image.BeginInit();
+                    image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    image.UriSource = new Uri(path);
+                    image.EndInit();
+                    image.Freeze();
+                    await AttachImage(image, name);
+                }
+                else if (ChatTexts.Contains(extension) && new FileInfo(path).Length < 2_000_000)
+                {
+                    var text = await File.ReadAllTextAsync(path);
+                    var cut = text.Length > ChatAttachChars;
+                    SetAttachment(name, cut ? text[..ChatAttachChars] + "\n(…cortado)" : text, $"{name} · {(cut ? "começo do arquivo" : $"{text.Length} letras")}");
+                }
+                else DarkDialog.Ask(this, "Anexar", "Dá para anexar arquivos de texto (txt, md, código, log, csv, json…) e imagens (png, jpg).", "OK", null);
+            }
+            catch (Exception ex) { DarkDialog.Ask(this, "Anexar", "Não consegui ler " + name + ": " + ex.Message, "OK", null); }
+        }
+
+        attach.Click += (_, _) =>
+        {
+            var pick = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Anexar ao Chat",
+                Filter = "Textos e imagens|" + string.Join(";", ChatTexts.Concat(ChatImages).Select(e => "*" + e)) + "|Todos os arquivos|*.*",
+            };
+            if (pick.ShowDialog(this) == true) _ = AttachFile(pick.FileName);
+        };
+
+        var composer = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        composer.Children.Add(chip);
+        composer.Children.Add(composerRow);
 
         var copyAll = new Button { Content = "Copiar tudo", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
         copyAll.Click += (_, _) => Copy(string.Join("\n\n", island.JarvisHistory.Select(t => (t.User ? "Você: " : "Jarvis: ") + t.Text)));
@@ -60,11 +146,22 @@ public sealed partial class SettingsWindow
         actions.Children.Add(clear);
         DockPanel.SetDock(actions, Dock.Right);
         top.Children.Add(actions);
-        top.Children.Add(new TextBlock
+        var search = new TextBox
         {
-            Text = JarvisBrain.HasKey ? "No PC e no celular. Ele age no PC como pela ilha." : "Sem a chave da Groq ele só conversa (Jarvis (IA) › Cérebro).",
-            Foreground = Muted, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap,
+            FontSize = 13, Padding = new Thickness(30, 6, 10, 6), Background = Hover, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(1), BorderBrush = Line, Width = 280, HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = JarvisBrain.HasKey ? "No PC e no celular. Ele age no PC como pela ilha." : "Sem a chave da Groq ele só conversa (Jarvis (IA) › Cérebro).",
+        };
+        var searchHint = new TextBlock { Text = "Buscar na conversa", Foreground = Muted, FontSize = 13, IsHitTestVisible = false, Margin = new Thickness(31, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var searchGrid = new Grid { HorizontalAlignment = HorizontalAlignment.Left };
+        searchGrid.Children.Add(search);
+        searchGrid.Children.Add(new TextBlock
+        {
+            Text = "\uE721", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 12, Foreground = Muted, IsHitTestVisible = false,
+            Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
         });
+        searchGrid.Children.Add(searchHint);
+        top.Children.Add(searchGrid);
 
         var layout = new Grid();
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -89,9 +186,36 @@ public sealed partial class SettingsWindow
             _ = island.AskJarvisAsync(text, fromChat: true);
         }
 
-        send.Click += (_, _) => { var text = input.Text; input.Clear(); Ask(text); input.Focus(); };
+        void Send()
+        {
+            var text = input.Text.Trim();
+            if (Busy() || (text.Length == 0 && attachName == null)) return;
+            // still reading the image: wait for it
+            if (attachName != null && attachText == null) return;
+            input.Clear();
+            if (attachName == null)
+            {
+                Ask(text);
+                return;
+            }
+            if (text.Length == 0) text = "O que é isto? Explique de forma simples.";
+            var full = $"{text}\n\n[Anexo: {attachName}]\n{attachText}";
+            var shown = $"[{attachName}] {text}";
+            SetAttachment(null, null, "");
+            _ = island.AskJarvisAsync(full, fromChat: true, shown: shown);
+        }
+
+        send.Click += (_, _) => { Send(); input.Focus(); };
         input.PreviewKeyDown += (_, e) =>
         {
+            // a print in the clipboard goes in as an attachment
+            if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control && Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
+            {
+                e.Handled = true;
+                image.Freeze();
+                _ = AttachImage(image, "print colado");
+                return;
+            }
             if (e.Key != Key.Enter) return;
             e.Handled = true;
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
@@ -101,9 +225,26 @@ public sealed partial class SettingsWindow
                 input.CaretIndex = at + 1;
                 return;
             }
-            var text = input.Text;
-            input.Clear();
-            Ask(text);
+            Send();
+        };
+        layout.AllowDrop = true;
+        layout.DragOver += (_, e) =>
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        };
+        layout.Drop += (_, e) =>
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files) _ = AttachFile(files[0]);
+            e.Handled = true;
+        };
+        // TextBox handles drops itself (as text): files dropped on it come here too
+        input.PreviewDragOver += (_, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.Copy; e.Handled = true; } };
+        input.PreviewDrop += (_, e) =>
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files) return;
+            e.Handled = true;
+            _ = AttachFile(files[0]);
         };
 
         Border Small(string glyph, string tip, Action click)
@@ -182,7 +323,8 @@ public sealed partial class SettingsWindow
         {
             var turns = island.JarvisHistory.ToList();
             var busy = Busy();
-            var signature = $"{turns.Count}|{(turns.Count > 0 ? turns[^1].Text.GetHashCode() : 0)}|{busy}";
+            var query = search.Text.Trim();
+            var signature = $"{turns.Count}|{(turns.Count > 0 ? turns[^1].Text.GetHashCode() : 0)}|{busy}|{query}";
             send.IsEnabled = !busy;
             stop.Visibility = busy || island.JarvisState == "Falando…" ? Visibility.Visible : Visibility.Collapsed;
             copyAll.IsEnabled = clear.IsEnabled = turns.Count > 0;
@@ -195,6 +337,28 @@ public sealed partial class SettingsWindow
                     Text = "Nenhuma conversa ainda. Escreva abaixo, ou fale com o Jarvis pela ilha ou pelo celular: tudo aparece aqui.",
                     Foreground = Muted, FontSize = 14, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 20, 0, 0),
                 });
+            if (query.Length > 0)
+            {
+                var compare = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+                const System.Globalization.CompareOptions Loose = System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace;
+                // a match brings its pair along: the question with its answer
+                var keep = new SortedSet<int>();
+                for (var i = 0; i < turns.Count; i++)
+                    if (compare.IndexOf(turns[i].Text, query, Loose) >= 0)
+                    {
+                        keep.Add(i);
+                        var pair = turns[i].User ? i + 1 : i - 1;
+                        if (pair >= 0 && pair < turns.Count) keep.Add(pair);
+                    }
+                list.Children.Add(new TextBlock
+                {
+                    Text = keep.Count == 0 ? $"Nada encontrado para \"{query}\"." : $"Mensagens com \"{query}\":",
+                    Foreground = Muted, FontSize = 13, Margin = new Thickness(0, 4, 0, 8),
+                });
+                foreach (var i in keep) list.Children.Add(Message(i, turns[i].User, turns[i].Text, false));
+                messages.ScrollToTop();
+                return;
+            }
             for (var i = 0; i < turns.Count; i++)
                 list.Children.Add(Message(i, turns[i].User, turns[i].Text, i == turns.Count - 1 && !busy));
             if (busy)
@@ -202,7 +366,12 @@ public sealed partial class SettingsWindow
             messages.ScrollToEnd();
         }
         Fill();
-        // JarvisChanged is raised on the UI thread
+        search.TextChanged += (_, _) =>
+        {
+            searchHint.Visibility = search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            Fill();
+        };
+        search.KeyDown += (_, e) => { if (e.Key == Key.Escape) search.Clear(); };
         layout.Loaded += (_, _) =>
         {
             island.JarvisChanged += Fill;
@@ -217,6 +386,11 @@ public sealed partial class SettingsWindow
         };
         page.Children.Add(layout);
     }
+
+    static readonly HashSet<string> ChatImages = [".png", ".jpg", ".jpeg", ".bmp", ".gif"];
+    static readonly HashSet<string> ChatTexts =
+        [".txt", ".md", ".log", ".csv", ".json", ".xml", ".yaml", ".yml", ".ini", ".cs", ".js", ".ts", ".py", ".lua", ".html", ".css", ".kt", ".java", ".sql", ".ps1", ".bat"];
+    const int ChatAttachChars = 6000;
 
     static void Copy(string text)
     {

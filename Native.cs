@@ -141,6 +141,22 @@ static class Native
 
     public static bool IsWindowVisibleNow(IntPtr hwnd) => IsWindowVisible(hwnd);
 
+    [StructLayout(LayoutKind.Sequential)]
+    struct LastInputInfo
+    {
+        public uint Size, Time;
+    }
+
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LastInputInfo info);
+
+    /// <summary>How long since the last mouse or keyboard input on this session.</summary>
+    public static TimeSpan IdleTime()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        if (!GetLastInputInfo(ref info)) return TimeSpan.Zero;
+        return TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time));
+    }
+
     public static int ProcessOf(IntPtr hwnd)
     {
         GetWindowThreadProcessId(hwnd, out var pid);

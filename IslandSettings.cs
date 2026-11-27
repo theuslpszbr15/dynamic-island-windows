@@ -25,6 +25,8 @@ public enum MediaFilterPreset { MusicOnly, MusicAndWeb, All, Custom }
 
 public sealed record TaskItem(string Id, string Text, bool Done, string? Due = null);
 
+public sealed record AlwaysAllowRule(string Agent, string Command, DateTime Added);
+
 public sealed class KnownPhone
 {
     public string Device { get; set; } = "";
@@ -148,6 +150,10 @@ public sealed class IslandSettings
     public string ComputerUseApproval { get; set; } = "cada";
     /// <summary>Jarvis's PowerShell scripts run without showing the code first ("Sempre permitir").</summary>
     public bool JarvisScriptsAlways { get; set; }
+    /// <summary>Agent requests answered "Sempre" on the island: the same agent and exact command is allowed without asking.</summary>
+    public List<AlwaysAllowRule> AlwaysAllow { get; set; } = [];
+    /// <summary>After this many minutes at the PC without a 5-minute break the island suggests one (0 = off).</summary>
+    public int BreakAfterMinutes { get; set; } = 120;
     /// <summary>Antigravity's shell commands wait for Allow / Deny on the island (read by the hook process too).</summary>
     public bool AntigravityApprovals { get; set; }
     /// <summary>A new install offers the demo once.</summary>

@@ -493,11 +493,12 @@ public partial class IslandWindow : IJarvisHost
     }
 
     /// <param name="fromChat">From the Chat in Configurações: answered there, not spoken nor shown on the island.</param>
-    public async Task<string?> AskJarvisAsync(string message, bool fromPhone = false, bool fromChat = false)
+    /// <param name="shown">What the conversation shows for the question (an attachment's text goes to Jarvis, not to the list).</param>
+    public async Task<string?> AskJarvisAsync(string message, bool fromPhone = false, bool fromChat = false, string? shown = null)
     {
         if (JarvisState == "Pensando…") return null;
         var history = JarvisHistory.TakeLast(10).ToList();
-        JarvisHistory.Add((true, message));
+        JarvisHistory.Add((true, shown ?? message));
         SetJarvisState("Pensando…");
         if (!fromChat)
             ShowInfo(fromPhone ? "\uE8EA" : "\uE99A", fromPhone ? "Pergunta do celular" : "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);

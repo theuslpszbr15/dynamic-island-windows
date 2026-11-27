@@ -304,10 +304,22 @@ public partial class IslandWindow
         DropApprovals(a => a.SessionKey == session.Key);
         var approval = new Approval(m.RequestId!, session.Key, session.Agent, session.Project,
             string.IsNullOrEmpty(m.Detail) ? "Quer usar uma ferramenta" : m.Detail, m.Command ?? m.Detail ?? "", DateTime.Now);
+        if (AlwaysAllowed(approval))
+        {
+            _ = AgentHub.Reply(approval.Id, "allow");
+            session.Update("working", "Permitido (sempre)");
+            ShowInfo("\uE8FB", "Permitido sozinho", approval.Command, glyphColor: AgentSession.Done, seconds: 2.5);
+            PublishPhoneSessions();
+            return;
+        }
         _approvals.Add(approval);
         PublishApproval(approval);
         ShowApproval();
     }
+
+    bool AlwaysAllowed(Approval approval) =>
+        approval.Command.Length > 0 && ApprovalRules.IslandCanAllow(approval.Command) &&
+        _settings.AlwaysAllow.Any(r => r.Agent == approval.Agent && r.Command == approval.Command);
 
     void ClearApprovals(string sessionKey)
     {
@@ -339,6 +351,7 @@ public partial class IslandWindow
             : $"{approval.Detail}\nComando longo ou com várias linhas: confira e responda no terminal.";
         ApprovalAllow.IsEnabled = canAllow;
         ApprovalAllow.Opacity = canAllow ? 1 : 0.35;
+        ApprovalAlways.Visibility = Vis(canAllow && approval.Command.Length > 0);
         ApprovalAllowText.Text = canAllow ? "Permitir" : "Ver no terminal";
         UpdateApprovalElapsed();
         ApprovalPetBox.Visibility = Vis(PetOn);
@@ -427,6 +440,18 @@ public partial class IslandWindow
     {
         e.Handled = true;
         Answer("allow");
+    }
+
+    void ApprovalAlways_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_approvals.FirstOrDefault() is not { } approval || !ApprovalRules.IslandCanAllow(approval.Command) || approval.Command.Length == 0) return;
+        if (!_settings.AlwaysAllow.Any(r => r.Agent == approval.Agent && r.Command == approval.Command))
+        {
+            _settings.AlwaysAllow.Add(new AlwaysAllowRule(approval.Agent, approval.Command, DateTime.Now));
+            _settings.Save();
+        }
+        Answer(approval, "allow");
     }
 
     void ApprovalDeny_Click(object sender, RoutedEventArgs e)
@@ -680,6 +705,7 @@ public partial class IslandWindow
         try { ShowBluetooth(await BluetoothBattery.ListAsync()); }
         catch { }
         CheckWaterReminder();
+        CheckBreak();
         AgendaTick();
         OfferRecap();
         TrimWhenIdle();
@@ -832,6 +858,35 @@ public partial class IslandWindow
     {
         _weather = weather;
         _weatherAt = DateTime.Now;
+    }
+
+    // ───────────────────────── breaks ─────────────────────────
+
+    /// <summary>Five minutes away from mouse and keyboard (or a locked screen) count as a break.</summary>
+    static readonly TimeSpan BreakCounts = TimeSpan.FromMinutes(5), BreakSnooze = TimeSpan.FromMinutes(20);
+    DateTime? _activeSince;
+    DateTime _breakAskedAt;
+
+    void CheckBreak()
+    {
+        var now = DateTime.Now;
+        if (Native.IsInputDesktopLocked() || Native.IdleTime() >= BreakCounts)
+        {
+            _activeSince = null;
+            return;
+        }
+        _activeSince ??= now;
+        if (_settings.BreakAfterMinutes <= 0 || SnapshotMode || _fullscreen || FocusActive) return;
+        var active = now - _activeSince.Value;
+        if (active < TimeSpan.FromMinutes(_settings.BreakAfterMinutes) || now - _breakAskedAt < BreakSnooze) return;
+        _breakAskedAt = now;
+        var hours = active.TotalMinutes < 90 ? $"{(int)active.TotalMinutes} minutos" : $"{active.TotalHours:0.#} horas".Replace('.', ',');
+        ShowActions("Hora de uma pausa", $"Você está há {hours} no PC sem parar. Levanta, alonga, bebe uma água.",
+        [
+            new("\uE916", "Pausa de 5 min", () => { StartTimer(5); _activeSince = null; }, Primary: true),
+            new("\uE823", "Depois", () => { }),
+        ], glyph: "\uE7F8", seconds: 15);
+        if (PetOn) foreach (var p in Pets) p.React(PetView.Mood.Sleep, 3);
     }
 
     // ───────────────────────── weekly recap ─────────────────────────

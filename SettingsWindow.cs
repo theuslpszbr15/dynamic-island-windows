@@ -631,7 +631,11 @@ public sealed partial class SettingsWindow : DarkWindow
                 [(6, "6 copos"), (8, "8 copos (recomendado)"), (10, "10 copos"), (12, "12 copos")],
                 S.WaterGoal, g => { S.WaterGoal = g; S.Save(); _app.Island.UpdateTasksUi(); Render(); }),
             Toggle("Lembrar de beber água a cada 1 hora", "Mostra uma pílula discreta na ilha com botão +1 copo.",
-                S.WaterReminder, v => { S.WaterReminder = v; S.Save(); })));
+                S.WaterReminder, v => { S.WaterReminder = v; S.Save(); }),
+            Choice("Lembrar de fazer pausa", "Depois desse tempo no PC sem um intervalo de 5 minutos, a ilha sugere uma pausa " +
+                   "(não aparece em tela cheia nem no modo foco; \"Depois\" pergunta de novo em 20 minutos).",
+                [(0, "Desligado"), (60, "A cada 1 hora"), (90, "A cada 1 h 30"), (120, "A cada 2 horas"), (180, "A cada 3 horas")],
+                S.BreakAfterMinutes, m => { S.BreakAfterMinutes = m; S.Save(); })));
 
         var noteBox = new TextBox
         {
@@ -1128,6 +1132,20 @@ public sealed partial class SettingsWindow : DarkWindow
             S.QuietApprovals, _ => _app.ToggleQuietApprovals()));
         rows.Add(Row("Qualquer script", "DynamicIsland.exe agent --name \"Build\" --state working --text \"dotnet build\"", null));
         page.Children.Add(Card("Conexões", [.. rows]));
+
+        var always = new List<UIElement>
+        {
+            Note(S.AlwaysAllow.Count == 0
+                ? "Nenhum ainda. No pedido de permissão da ilha, \"Sempre\" permite e guarda o comando aqui: da próxima vez ele passa sozinho."
+                : "Estes comandos passam sem perguntar, só para o mesmo agente e exatamente o mesmo texto. Remova para voltar a perguntar."),
+        };
+        foreach (var rule in S.AlwaysAllow.ToList())
+        {
+            var remove = new Button { Content = "Remover", Style = (Style)Resources["Action"] };
+            remove.Click += (_, _) => { S.AlwaysAllow.Remove(rule); S.Save(); Render(); };
+            always.Add(Row(rule.Command, $"{rule.Agent} · desde {rule.Added:dd/MM/yyyy}", remove));
+        }
+        page.Children.Add(Card("Sempre permitidos", [.. always]));
 
         page.Children.Add(PlansCard());
         page.Children.Add(GitHubCard());
