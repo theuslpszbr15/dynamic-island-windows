@@ -479,25 +479,27 @@ public partial class IslandWindow : IJarvisHost
         _phone?.PublishJarvis(id, answer == null ? "error" : "done", answer ?? "Não deu para responder agora.");
     }
 
-    public async Task<string?> AskJarvisAsync(string message, bool fromPhone = false)
+    /// <param name="fromChat">From the Chat in Configurações: answered there, not spoken nor shown on the island.</param>
+    public async Task<string?> AskJarvisAsync(string message, bool fromPhone = false, bool fromChat = false)
     {
         if (JarvisState == "Pensando…") return null;
         var history = JarvisHistory.TakeLast(10).ToList();
         JarvisHistory.Add((true, message));
         SetJarvisState("Pensando…");
-        ShowInfo(fromPhone ? "\uE8EA" : "\uE99A", fromPhone ? "Pergunta do celular" : "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);
+        if (!fromChat)
+            ShowInfo(fromPhone ? "\uE8EA" : "\uE99A", fromPhone ? "Pergunta do celular" : "Pensando…", Preview(message), glyphColor: JarvisColor, seconds: 150);
         var reply = JarvisBrain.HasKey ? new Jarvis.Reply(await Brain.RespondAsync(message)) : await Jarvis.AskAsync(message, history);
         JarvisHistory.Add((false, reply.Text));
         if (JarvisHistory.Count > JarvisHistoryMax) JarvisHistory.RemoveRange(0, JarvisHistory.Count - JarvisHistoryMax);
         SaveJarvisConversation();
         JarvisLast = reply;
-        var speak = !fromPhone && _settings.JarvisSpeak && Jarvis.CanSpeak;
+        var speak = !fromPhone && !fromChat && _settings.JarvisSpeak && Jarvis.CanSpeak;
         SetJarvisState(speak ? "Falando…" : "Pronto");
 
         // "pesquise…", "abre o YouTube": the link opens right away (only Google and YouTube over https)
         if (reply.ActionUrl is { } url && Jarvis.SafeLink(url))
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
-        if (!JarvisOnScreen)
+        if (!JarvisOnScreen && !fromChat)
             ShowCard(null, "Jarvis", "", reply.Text, seconds: Math.Clamp(3 + reply.Text.Length / 18.0, 5, 14), glyph: "\uE99A");
 
         if (speak)

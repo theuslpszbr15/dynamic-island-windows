@@ -27,6 +27,7 @@ public sealed partial class SettingsWindow : DarkWindow
         ("media", "\uE767", "Mídia e áudio"),
         ("productivity", "\uE73A", "Produtividade"),
         ("jarvis", "\uE945", "Jarvis (IA)"),
+        (ChatPage, "\uE8BD", "Chat"),
         ("agents", "\uE99A", "Agentes"),
         ("phone", "\uE8EA", "Celular"),
         (TransferPage, "\uE724", "Enviar e receber"),
@@ -129,6 +130,7 @@ public sealed partial class SettingsWindow : DarkWindow
             case "media": Media(page); break;
             case "productivity": Productivity(page); break;
             case "jarvis": Jarvis(page); break;
+            case ChatPage: Chat(page); break;
             case "agents": Agents(page); break;
             case "phone": Phone(page); break;
             case TransferPage: Transfers(page); break;
@@ -765,6 +767,11 @@ public sealed partial class SettingsWindow : DarkWindow
 
         var open = new Button { Content = "Abrir o Jarvis", Style = (Style)Resources["Action"] };
         open.Click += (_, _) => _app.Island.OpenJarvis();
+        var chat = new Button { Content = "Abrir o chat", Style = (Style)Resources["Action"], Margin = new Thickness(8, 0, 0, 0) };
+        chat.Click += (_, _) => Navigate(ChatPage);
+        var talk = new StackPanel { Orientation = Orientation.Horizontal };
+        talk.Children.Add(open);
+        talk.Children.Add(chat);
 
         page.Children.Add(Card("Jarvis",
             Note("O seu assistente (github.com/theuslpszbr15/JARVIS) dentro da ilha: segure " + keys + " e fale, ou toque no atalho para " +
@@ -782,9 +789,8 @@ public sealed partial class SettingsWindow : DarkWindow
             Choice("Brilho da voz", "As cores que sobem da borda da ilha quando você fala e quando o Jarvis responde.",
                 [.. VoiceGlow.Variants, ("off", "Desligado")],
                 S.JarvisGlow, v => { S.JarvisGlow = v; S.Save(); _app.Island.ApplyLook(); }),
-            Row("Conversar agora", "Abre a caixa do Jarvis embaixo da ilha.", open)));
+            Row("Conversar agora", "A caixa embaixo da ilha, ou o Chat aqui nas Configurações (com a conversa inteira).", talk)));
 
-        page.Children.Add(ConversationCard());
         page.Children.Add(BrainCard());
         page.Children.Add(PluginsCard());
         page.Children.Add(ComputerCard());
@@ -824,57 +830,6 @@ public sealed partial class SettingsWindow : DarkWindow
             Engine(Services.Jarvis.Engine.Ai, "Para conversar sobre qualquer assunto, sem internet."),
             Engine(Services.Jarvis.Engine.Voice, "Para o Jarvis falar as respostas."),
             Engine(Services.Jarvis.Engine.Microphone, "Para falar com o Jarvis segurando o atalho.")));
-    }
-
-    /// <summary>The conversation with Jarvis (PC and phone), newest at the bottom, kept between restarts.</summary>
-    Border ConversationCard()
-    {
-        var island = _app.Island;
-        var list = new StackPanel();
-        var scroll = new ScrollViewer
-        {
-            MaxHeight = 440, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = list, Margin = new Thickness(0, 4, 0, 10),
-        };
-        var copy = new Button { Content = "Copiar tudo", Style = (Style)Resources["Action"], Margin = new Thickness(0, 0, 8, 0) };
-        copy.Click += (_, _) =>
-        {
-            try { Clipboard.SetText(string.Join("\n\n", island.JarvisHistory.Select(t => (t.User ? "Você: " : "Jarvis: ") + t.Text))); }
-            catch { }
-        };
-        var clear = new Button { Content = "Nova conversa", Style = (Style)Resources["Action"] };
-        clear.Click += (_, _) =>
-        {
-            if (DarkDialog.Ask(this, "Nova conversa", "A conversa some daqui e o Jarvis começa do zero. O que ele lembra sobre você fica.", "Apagar", danger: true))
-                island.ClearJarvisConversation();
-        };
-
-        void Fill()
-        {
-            list.Children.Clear();
-            var turns = island.JarvisHistory.ToList();
-            if (turns.Count == 0) list.Children.Add(Note("Nenhuma conversa ainda. O que você pedir ao Jarvis, no PC ou no celular, aparece aqui."));
-            foreach (var (user, text) in turns)
-                list.Children.Add(user
-                    ? new Border
-                    {
-                        Background = Hover, CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 7, 12, 8),
-                        Margin = new Thickness(90, 4, 0, 4), HorizontalAlignment = HorizontalAlignment.Right,
-                        Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 13.5, TextWrapping = TextWrapping.Wrap },
-                    }
-                    : new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 14, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 90, 8) });
-            copy.IsEnabled = clear.IsEnabled = turns.Count > 0;
-            scroll.ScrollToEnd();
-        }
-        Fill();
-        // JarvisChanged is raised on the UI thread
-        scroll.Loaded += (_, _) => island.JarvisChanged += Fill;
-        scroll.Unloaded += (_, _) => island.JarvisChanged -= Fill;
-
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
-        buttons.Children.Add(copy);
-        buttons.Children.Add(clear);
-        return Card("Conversa", scroll, buttons);
     }
 
     /// <summary>MCP plugins: each one's tools become Jarvis's tools. Playwright's browser comes in the list, off.</summary>

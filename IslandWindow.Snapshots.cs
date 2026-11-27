@@ -374,8 +374,15 @@ public partial class IslandWindow
         await Task.Delay(7000); // the USB bridge needs a few seconds to look for a phone
         var settingsWindow = new SettingsWindow((App)Application.Current) { Left = 40, Top = 40 };
         settingsWindow.Show();
-        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "jarvis-plugins", "agents", "phone", "phone-end", "tray", "updates", "phone-download" })
+        foreach (var section in new[] { "home", "general", "look", "island", "productivity", "jarvis", "jarvis-plugins", "chat", "agents", "phone", "phone-end", "tray", "updates", "phone-download" })
         {
+            if (section == "chat")
+            {
+                JarvisHistory.Add((true, "Escreve uma receita de bolo de cenoura no Bloco de Notas"));
+                JarvisHistory.Add((false, "Pronto, a receita de bolo de cenoura com cobertura de chocolate está no Bloco de Notas."));
+                JarvisHistory.Add((true, "Volta para a receita anterior"));
+                JarvisHistory.Add((false, "Abri de novo a Receita de Bolo Sem Glúten (Documentos\\Jarvis). Quer que eu mude algo nela?"));
+            }
             if (section == "phone-download") settingsWindow.ShowDownloadQr();
             else settingsWindow.Navigate(section switch { "phone-end" => "phone", "jarvis-plugins" => "jarvis", _ => section });
             await Task.Delay(700);
@@ -405,6 +412,7 @@ public partial class IslandWindow
             png.Save(file);
         }
         settingsWindow.Close();
+        JarvisHistory.Clear();
         _settings.PhoneLink = false;
         _settings.PhoneUsb = false;
         ApplyPhoneLink();
